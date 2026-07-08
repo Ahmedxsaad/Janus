@@ -1,0 +1,23 @@
+# CLAUDE.md - skill
+
+OSS contribution: datahub-ml-guard, intended as the first ML skill in the
+datahub-skills registry (gap verified July 2026). Built here, then PRed to
+datahub-project/datahub-skills.
+
+## Local rules
+
+1. Mirror the upstream repo format exactly: skills/<name>/SKILL.md with YAML
+   frontmatter (name, description), plus references/ and scripts/. Copy the
+   structure of skills/datahub-enrich before writing anything.
+2. Follow the upstream CONTRIBUTING.md (their commit conventions and release
+   process), not ours, for anything destined for the PR.
+3. The skill wraps the same detection logic as modelguard/; do not fork logic,
+   call the same scripts or document the same workflow.
+4. Even if the upstream merge is slow, this folder must stand alone: a judge
+   reading only skill/ should understand and be able to run it.
+
+## Change Log
+
+| Date | Author | Change |
+|---|---|---|
+| 2026-07-08 | Claude (for Ahmed Saad) | Initial version: upstream mirroring and standalone rules |
