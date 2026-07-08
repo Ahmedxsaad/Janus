@@ -78,6 +78,9 @@ Source of truth for what we build:
   personal files in git. Check git status before and after every commit.
 - Branch names: type/short-topic (example: feat/leakage-detector).
   Never commit directly to main.
+- Never add AI attribution to commits: no "Co-Authored-By: Claude" trailer,
+  no "Generated with Claude Code" lines, in commit messages or PR bodies.
+  Commits are authored by the person running the session only.
 - Do not push or open PRs unless the user asks.
 
 ## CLAUDE.md maintenance
@@ -93,3 +96,4 @@ Source of truth for what we build:
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: project map, workflow, code, formatting, git, and maintenance rules |
+| 2026-07-08 | Claude (for Ahmed Saad) | Git rules: forbid AI attribution (co-author trailers, generated-with lines) in commits and PRs |
