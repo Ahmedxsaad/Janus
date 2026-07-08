@@ -80,7 +80,8 @@ Source of truth for what we build:
   Never commit directly to main.
 - Never add AI attribution to commits: no "Co-Authored-By: Claude" trailer,
   no "Generated with Claude Code" lines, in commit messages or PR bodies.
-  Commits are authored by the person running the session only.
+  Commits are authored by the person running the session only. Enforced for
+  the whole team via the attribution setting in .claude/settings.json.
 - Do not push or open PRs unless the user asks.
 
 ## CLAUDE.md maintenance
@@ -97,3 +98,4 @@ Source of truth for what we build:
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: project map, workflow, code, formatting, git, and maintenance rules |
 | 2026-07-08 | Claude (for Ahmed Saad) | Git rules: forbid AI attribution (co-author trailers, generated-with lines) in commits and PRs |
+| 2026-07-08 | Claude (for Ahmed Saad) | Note that the no-attribution rule is enforced via .claude/settings.json |
