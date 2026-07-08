@@ -10,9 +10,9 @@
 
 ## 1. Dates and Timing
 
-- **Registration & Submission Period:** July 6, 2026 (09:00 am Eastern Time) – August 10, 2026 (05:00 pm Eastern Time).
-- **Feedback Period:** July 6, 2026 (09:00 am Eastern Time) – August 10, 2026 (05:00 pm Eastern Time).
-- **Judging Period:** August 17, 2026 (10:00 am Eastern Time) – August 31, 2026 (5:00 pm Eastern Time).
+- **Registration & Submission Period:** July 6, 2026 (09:00 am Eastern Time) - August 10, 2026 (05:00 pm Eastern Time).
+- **Feedback Period:** July 6, 2026 (09:00 am Eastern Time) - August 10, 2026 (05:00 pm Eastern Time).
+- **Judging Period:** August 17, 2026 (10:00 am Eastern Time) - August 31, 2026 (5:00 pm Eastern Time).
 - **Winners Announced:** On or around September 8, 2026 (2:00 pm Eastern Time).
 
 ## 2. Sponsor and Administrator
@@ -60,12 +60,12 @@ Entrants may enter by visiting **datahub.devpost.com** ("Hackathon Website") and
 
 **What to Create:** Entrants must create a working software application that uses DataHub to solve one of the Challenge Categories below. Projects must incorporate DataHub by using the open-source platform **together with at least one** of: the **MCP Server, Agent Context Kit, DataHub Skills, or Analytics Agent**.
 
-**Challenge Categories** (full text — see also `02-challenges.md`):
+**Challenge Categories** (full text - see also `02-challenges.md`):
 
-1. **Agents That Do Real Work:** Build AI agents that handle data problems on their own — alone or as a team. Your agent reads DataHub through the MCP Server or Agent Context Kit to understand what's connected to what, takes action, and writes results back so the next person or agent inherits the knowledge.
-2. **Metadata-Aware Code Generation & Development:** Build agents that generate production data code — transformation models, pipeline DAGs (Airflow, Prefect, Dagster), ingestion scripts, helper scripts, configurations, migration code — that works on the first try because they use DataHub Skills or the MCP Server to read DataHub for the real schemas, lineage, and rules before generating anything. The artifact lives in a Git repo, goes into a PR, and your data team would actually merge it. Strong submissions include sample generated artifacts so judges can see the quality of the output.
-3. **Production ML Agents:** Build agents for ML teams that protect models in production. Use DataHub's end-to-end ML lineage — the path from training data to feature to model to deployment — accessed via the Agent Context Kit or MCP Server to catch silent problems that can break ML systems before they cost money.
-4. **Open / Wildcard:** Build anything creative that uses DataHub as the foundation — supply chain optimization, financial forecasting, regulatory automation, knowledge capture, or anything else. Use whatever fits from DataHub's open-source stack (MCP Server, Agent Context Kit, DataHub Skills, Analytics Agent, or any other DataHub product).
+1. **Agents That Do Real Work:** Build AI agents that handle data problems on their own - alone or as a team. Your agent reads DataHub through the MCP Server or Agent Context Kit to understand what's connected to what, takes action, and writes results back so the next person or agent inherits the knowledge.
+2. **Metadata-Aware Code Generation & Development:** Build agents that generate production data code - transformation models, pipeline DAGs (Airflow, Prefect, Dagster), ingestion scripts, helper scripts, configurations, migration code - that works on the first try because they use DataHub Skills or the MCP Server to read DataHub for the real schemas, lineage, and rules before generating anything. The artifact lives in a Git repo, goes into a PR, and your data team would actually merge it. Strong submissions include sample generated artifacts so judges can see the quality of the output.
+3. **Production ML Agents:** Build agents for ML teams that protect models in production. Use DataHub's end-to-end ML lineage - the path from training data to feature to model to deployment - accessed via the Agent Context Kit or MCP Server to catch silent problems that can break ML systems before they cost money.
+4. **Open / Wildcard:** Build anything creative that uses DataHub as the foundation - supply chain optimization, financial forecasting, regulatory automation, knowledge capture, or anything else. Use whatever fits from DataHub's open-source stack (MCP Server, Agent Context Kit, DataHub Skills, Analytics Agent, or any other DataHub product).
 
 (each a "Project")
 
@@ -112,16 +112,16 @@ Submissions must meet the following:
 
 Sponsor and Administrator reserve the sole right to determine eligibility and judging methodologies. This may use expert panels, peer review, automated AI-driven analysis, or any combination. Eligible submissions are evaluated by a panel of Judges selected by the Sponsor. Judges may be employees of the sponsor or third parties, may or may not be listed individually on the Hackathon Website, and may change before or during the Judging Period. Judging may take place in one or more rounds with one or more panels.
 
-**Stage One:** Pass/fail on whether the ideas meet a baseline level of viability — the Project reasonably fits the theme and reasonably applies the required APIs/SDKs.
+**Stage One:** Pass/fail on whether the ideas meet a baseline level of viability - the Project reasonably fits the theme and reasonably applies the required APIs/SDKs.
 
 **Stage Two:** All Submissions that pass Stage One are evaluated on the following **equally weighted** criteria (the "Judging Criteria"), at the judges' sole and absolute discretion:
 
-- **Use of DataHub:** How meaningfully does the project use DataHub — its context graph (lineage, ownership, schemas, ML metadata, governance signals), the MCP Server, Agent Context Kit, DataHub Skills, or Analytics Agent? The strongest submissions go beyond reading metadata and contribute back to the graph where appropriate.
+- **Use of DataHub:** How meaningfully does the project use DataHub - its context graph (lineage, ownership, schemas, ML metadata, governance signals), the MCP Server, Agent Context Kit, DataHub Skills, or Analytics Agent? The strongest submissions go beyond reading metadata and contribute back to the graph where appropriate.
 - **Technical Execution:** Quality of implementation, robustness, and whether the project actually works end-to-end. Does the code do what the submission claims?
 - **Originality:** How creative and novel is the approach? Submissions should clearly go beyond features DataHub already provides out of the box. Building on top of, extending, or composing shipped features is welcome; rebuilding them as if from scratch isn't.
 - **Real-World Usefulness:** Would a real data, ML, or AI platform team see clear value in this? Submissions don't need to be production-ready, but should solve a problem practitioners actually face.
 - **Submission Quality:** Quality of the demo video, written description, and README. A judge should be able to understand what the project does, why it matters, and find clear setup instructions to try it themselves.
-- **Bonus:** Submissions that include meaningful open-source contributions to DataHub — new connectors, skills, fixes, RFCs, or documentation improvements — will be looked on favorably. Existing contributions extended for the hackathon also count. Optional, but encouraged.
+- **Bonus:** Submissions that include meaningful open-source contributions to DataHub - new connectors, skills, fixes, RFCs, or documentation improvements - will be looked on favorably. Existing contributions extended for the hackathon also count. Optional, but encouraged.
 
 The Judges' scores determine potential winners. Prize-eligible Entrant(s) whose Submissions earn the highest overall scores become potential winners of that prize.
 
@@ -159,7 +159,7 @@ All Submissions remain the IP of the individuals/organizations that developed th
 By entering, you (and each participating Team/Organization member) agree that:
 - The relationship between you and the Sponsor/Administrator is not a confidential, fiduciary, or other special relationship.
 - You will be bound by and comply with these Official Rules and the decisions of the Sponsor, Administrator, and/or Judges, which are binding and final.
-- You release, indemnify, defend, and hold harmless the Promotion Entities and their respective parent/subsidiary/affiliated companies, Prize suppliers, and any other organizations responsible for sponsoring/fulfilling/administering/advertising/promoting the Hackathon, and all their past and present officers, directors, employees, agents, and representatives (the "Released Parties") from any and all claims, expenses, and liabilities (including reasonable attorneys' fees) — including negligence and damages of any kind to persons and property, defamation, slander, libel, violation of right of publicity, infringement of trademark/copyright/other IP rights, property damage, death or personal injury — arising out of or relating to entry, creation/entry of a Submission, participation, acceptance/use/misuse of the Prize (including any related travel/activity), and/or the broadcast/transmission/performance/exploitation/use of the Submission as authorized by these Rules.
+- You release, indemnify, defend, and hold harmless the Promotion Entities and their respective parent/subsidiary/affiliated companies, Prize suppliers, and any other organizations responsible for sponsoring/fulfilling/administering/advertising/promoting the Hackathon, and all their past and present officers, directors, employees, agents, and representatives (the "Released Parties") from any and all claims, expenses, and liabilities (including reasonable attorneys' fees) - including negligence and damages of any kind to persons and property, defamation, slander, libel, violation of right of publicity, infringement of trademark/copyright/other IP rights, property damage, death or personal injury - arising out of or relating to entry, creation/entry of a Submission, participation, acceptance/use/misuse of the Prize (including any related travel/activity), and/or the broadcast/transmission/performance/exploitation/use of the Submission as authorized by these Rules.
 
 The Released Parties have no liability for:
 - Any incorrect or inaccurate information (whether caused by Sponsor/Administrator electronic or printing error or by equipment/programming used in the Hackathon).
@@ -168,7 +168,7 @@ The Released Parties have no liability for:
 - Technical or human error in administration or processing of Submissions.
 - Any injury or damage to persons/property caused directly or indirectly from participation or receipt/use/misuse of any Prize.
 
-The Released Parties are not responsible for incomplete, late, misdirected, damaged, lost, illegible, or incomprehensible Submissions or for address/email changes. Proof of sending/submitting is not proof of receipt. If a Submission is determined not received or erroneously deleted/lost/destroyed/corrupted, the Entrant's sole remedy is to request the opportunity to resubmit — requested promptly after the Entrant knows or should have known of a problem, and determined at Sponsor's sole discretion.
+The Released Parties are not responsible for incomplete, late, misdirected, damaged, lost, illegible, or incomprehensible Submissions or for address/email changes. Proof of sending/submitting is not proof of receipt. If a Submission is determined not received or erroneously deleted/lost/destroyed/corrupted, the Entrant's sole remedy is to request the opportunity to resubmit - requested promptly after the Entrant knows or should have known of a problem, and determined at Sponsor's sole discretion.
 
 ## 10. Publicity
 

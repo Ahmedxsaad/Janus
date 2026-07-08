@@ -6,10 +6,10 @@
 
 | Phase | Start | End |
 |---|---|---|
-| **Registration & Submission Period** | July 6, 2026 — 09:00am ET | August 10, 2026 — 05:00pm ET |
-| **Feedback Period** | July 6, 2026 — 09:00am ET | August 10, 2026 — 05:00pm ET |
-| **Judging Period** | August 17, 2026 — 10:00am ET | August 31, 2026 — 05:00pm ET |
-| **Winners Announced** | — | On or around **September 8, 2026 — 2:00pm ET** |
+| **Registration & Submission Period** | July 6, 2026 - 09:00am ET | August 10, 2026 - 05:00pm ET |
+| **Feedback Period** | July 6, 2026 - 09:00am ET | August 10, 2026 - 05:00pm ET |
+| **Judging Period** | August 17, 2026 - 10:00am ET | August 31, 2026 - 05:00pm ET |
+| **Winners Announced** | - | On or around **September 8, 2026 - 2:00pm ET** |
 
 ## As Shown on the Overview Page
 
@@ -20,7 +20,7 @@
 
 - You have from **July 6** to **August 10, 2026** to register, build, and submit.
 - Feedback survey (for the bonus prize) must also be completed **by Aug 10, 2026 (5:00pm ET)**.
-- Nothing you build before the Submission Period counts — **Projects must be newly created during the Submission Period** (standard dev tools, libraries, templates, and AI assistants are allowed; other pre-existing code must be disclosed).
+- Nothing you build before the Submission Period counts - **Projects must be newly created during the Submission Period** (standard dev tools, libraries, templates, and AI assistants are allowed; other pre-existing code must be disclosed).
 - Office hours will be hosted **mid-hackathon** for live Q&A (see `08-resources.md`).
 
 ## Submission Modifications

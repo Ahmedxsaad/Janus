@@ -1,4 +1,4 @@
-# Build with DataHub: The Agent Hackathon — Context Files
+# Build with DataHub: The Agent Hackathon - Context Files
 
 > Build AI agents with DataHub's open-source Context Platform.
 
@@ -36,11 +36,11 @@ Build a **working software application that uses DataHub** to solve **one** of f
 
 ## File Index
 
-- `01-overview.md` — Intro, what DataHub is, the theme.
-- `02-challenges.md` — The 4 challenge categories in full detail.
-- `03-submission-requirements.md` — Exactly what to submit (checklist).
-- `04-prizes.md` — Full prize breakdown.
-- `05-judging.md` — Judges, judging criteria, judging process, tie-breaking.
-- `06-timeline.md` — All dates and timing (both timezones as listed).
-- `07-official-rules.md` — Full Official Rules (eligibility, IP, liability, etc.).
-- `08-resources.md` — Docs, repos, sample datasets, community links.
+- `01-overview.md` - Intro, what DataHub is, the theme.
+- `02-challenges.md` - The 4 challenge categories in full detail.
+- `03-submission-requirements.md` - Exactly what to submit (checklist).
+- `04-prizes.md` - Full prize breakdown.
+- `05-judging.md` - Judges, judging criteria, judging process, tie-breaking.
+- `06-timeline.md` - All dates and timing (both timezones as listed).
+- `07-official-rules.md` - Full Official Rules (eligibility, IP, liability, etc.).
+- `08-resources.md` - Docs, repos, sample datasets, community links.

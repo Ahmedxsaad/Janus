@@ -1,15 +1,15 @@
-# What to Submit — Submission Requirements
+# What to Submit - Submission Requirements
 
 A checklist of everything a valid submission must include. (Combines the "What to Submit" section and the Official Rules "Submission Requirements.")
 
 ## Required Items
 
-- [ ] **Project URL** — a URL that gives judges easy access to test the functionality: a live demo, hosted app, or your repo with clear setup instructions.
-- [ ] **Public code repository URL** — for judging and testing. It must:
+- [ ] **Project URL** - a URL that gives judges easy access to test the functionality: a live demo, hosted app, or your repo with clear setup instructions.
+- [ ] **Public code repository URL** - for judging and testing. It must:
   - Contain **all necessary source code, assets, and full instructions** required for the project to be functional.
   - Be **public and open source** by including an **Apache 2.0 open source license file**.
   - Have that license **detectable and visible at the top of the repository page (in the About section).**
-- [ ] **Text description** — summarizes your Project; may describe features, functionality, technologies, and data used.
+- [ ] **Text description** - summarizes your Project; may describe features, functionality, technologies, and data used.
 - [ ] **Demonstration video** that:
   - Is **under three (3) minutes** (judges are not required to watch beyond 3 minutes).
   - Includes footage showing the **Project functioning and in action** on the device it was built for.
@@ -20,7 +20,7 @@ A checklist of everything a valid submission must include. (Combines the "What t
 
 - [ ] **Sample outputs (recommended):** If your Project generates artifacts (code files, queries, reports, transformations), include examples in your repository (e.g., an `examples/` folder) so judges can evaluate output quality without running the code.
 
-## 💰 Bonus Prize — Most Valuable Feedback Survey
+## Bonus Prize - Most Valuable Feedback Survey
 
 - **Opt in** and complete the feedback section during submission to be considered.
 - Prize: **$50 × 10 awards.**
