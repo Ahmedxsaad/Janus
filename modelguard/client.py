@@ -14,6 +14,15 @@ Two handles are needed because the SDK splits the surface:
 
 Both wrap the same underlying HTTP session, so constructing the client from the
 graph keeps a single connection and a single token.
+
+No defaults, on purpose
+-----------------------
+Nothing here falls back to a hardcoded server URL. A default such as
+``http://localhost:8080`` is a machine-specific value living in tracked code, and
+it turns a missing ``.env`` into a silent connection to the wrong place rather
+than a loud failure. Every connection value comes from the environment, loaded
+from the git-ignored ``.env``; the shipped ``.env.example`` documents each one.
+Secrets are never logged, echoed, or embedded in an exception message.
 """
 
 from __future__ import annotations
@@ -23,12 +32,10 @@ from dataclasses import dataclass
 
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.sdk.main_client import DataHubClient
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 ENV_GMS_URL = "DATAHUB_GMS_URL"
 ENV_GMS_TOKEN = "DATAHUB_GMS_TOKEN"
-
-DEFAULT_GMS_URL = "http://localhost:8080"
 
 
 class DataHubConnectionError(RuntimeError):
@@ -46,8 +53,19 @@ class DataHubConnection:
 
 
 def _gms_url() -> str:
-    """Return the configured GMS URL, falling back to the Quickstart default."""
-    return os.environ.get(ENV_GMS_URL, DEFAULT_GMS_URL).rstrip("/")
+    """Return the configured GMS URL.
+
+    Raises:
+        DataHubConnectionError: The variable is unset or blank. There is no
+            default: see the module docstring.
+    """
+    url = os.environ.get(ENV_GMS_URL, "").strip()
+    if not url:
+        raise DataHubConnectionError(
+            f"{ENV_GMS_URL} is not set. Copy .env.example to .env and fill it in. "
+            "For a local Quickstart the value is http://localhost:8080"
+        )
+    return url.rstrip("/")
 
 
 def _gms_token() -> str | None:
@@ -73,10 +91,12 @@ def connect(*, require_token: bool = False, validate: bool = True) -> DataHubCon
         A connection carrying both the SDK client and the low-level graph handle.
 
     Raises:
-        DataHubConnectionError: The token is required but absent, or the server
-            did not answer.
+        DataHubConnectionError: A required variable is unset, the token is
+            required but absent, or the server did not answer.
     """
-    load_dotenv(override=False)
+    # override=False: a variable already exported in the shell or set by CI wins
+    # over .env, which is the developer's local default.
+    load_dotenv(find_dotenv(usecwd=True), override=False)
 
     url = _gms_url()
     token = _gms_token()

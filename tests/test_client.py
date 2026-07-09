@@ -6,7 +6,6 @@ import pytest
 
 from modelguard import client as client_module
 from modelguard.client import (
-    DEFAULT_GMS_URL,
     ENV_GMS_TOKEN,
     ENV_GMS_URL,
     DataHubConnectionError,
@@ -17,12 +16,34 @@ from modelguard.client import (
 @pytest.fixture(autouse=True)
 def _no_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep a developer's real .env out of the unit tests."""
-    monkeypatch.setattr(client_module, "load_dotenv", lambda **_: False)
+    monkeypatch.setattr(client_module, "load_dotenv", lambda *_, **__: False)
+    monkeypatch.setattr(client_module, "find_dotenv", lambda **_: "")
 
 
-def test_gms_url_defaults_to_quickstart(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_missing_gms_url_fails_loudly_rather_than_defaulting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A hardcoded fallback would turn a missing .env into a silent connection to
+    # someone else's machine-specific default.
     monkeypatch.delenv(ENV_GMS_URL, raising=False)
-    assert client_module._gms_url() == DEFAULT_GMS_URL
+    with pytest.raises(DataHubConnectionError, match="is not set"):
+        client_module._gms_url()
+
+
+def test_a_blank_gms_url_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ENV_GMS_URL, "   ")
+    with pytest.raises(DataHubConnectionError, match="is not set"):
+        client_module._gms_url()
+
+
+def test_the_package_declares_no_default_server_url() -> None:
+    # Guards against a fallback creeping back in under any name.
+    hardcoded = [
+        name
+        for name, value in vars(client_module).items()
+        if isinstance(value, str) and value.startswith(("http://", "https://"))
+    ]
+    assert hardcoded == []
 
 
 def test_gms_url_strips_trailing_slash(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -42,9 +63,35 @@ def test_token_is_read_and_stripped(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_write_path_without_token_fails_before_connecting(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ENV_GMS_URL, "http://gms.example:8080")
     monkeypatch.delenv(ENV_GMS_TOKEN, raising=False)
     with pytest.raises(DataHubConnectionError, match="writes to DataHub"):
         connect(require_token=True, validate=False)
+
+
+def test_an_unreachable_server_is_reported_without_the_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A stack trace or message that echoes the PAT would leak it into CI logs.
+    secret = "super-secret-pat-value"
+    monkeypatch.setenv(ENV_GMS_URL, "http://gms.example:8080")
+    monkeypatch.setenv(ENV_GMS_TOKEN, secret)
+
+    class UnreachableGraph:
+        def __init__(self, config: object) -> None:
+            self.config = config
+
+        def test_connection(self) -> None:
+            raise OSError("connection refused")
+
+    monkeypatch.setattr(client_module, "DataHubGraph", UnreachableGraph)
+
+    with pytest.raises(DataHubConnectionError) as caught:
+        connect(validate=True)
+
+    message = str(caught.value)
+    assert secret not in message
+    assert "Could not reach DataHub" in message
 
 
 def test_read_path_without_token_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:

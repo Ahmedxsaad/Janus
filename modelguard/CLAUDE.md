@@ -12,6 +12,10 @@ security and observability cross-cutting.
 - seed/ exists only to build demo/benchmark graphs; production code never imports it.
 - client.py is the single factory for DataHubClient / DataHubGraph; nothing else
   reads env vars for connections. It hands both handles out as a DataHubConnection.
+  It applies no defaults: a hardcoded fallback (a server URL, a username) is a
+  machine-specific value in tracked code and turns a missing .env into a silent
+  connection to the wrong place. Missing config fails loudly. Secrets are never
+  logged, echoed, or placed in an exception message.
 
 ## Local rules
 
