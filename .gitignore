@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets and personal environment (never commit these)
+.env
+*.pem
+*.key
+
+# Personal Claude Code settings (machine-specific, per person)
+.claude/settings.local.json
+
+# Editors and OS (personal, do not force on teammates)
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Runtime artifacts
+*.log
+*.sqlite
+*.db
