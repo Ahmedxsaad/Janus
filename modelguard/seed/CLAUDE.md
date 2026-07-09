@@ -1,24 +1,34 @@
 # CLAUDE.md - seed
 
 Builds the ML graph the datapacks lack: model group, model, features, training
-run, deployment, plus column-level lineage from real datapack tables into the
-feature table. This is the Week 1 kill-criterion (docs/plan/02-implementation-plan.md
+run, deployment, plus column-level lineage between the warehouse tables it also
+creates. This is the Week 1 kill-criterion (docs/plan/02-implementation-plan.md
 section 3): if seeding stalls, we pivot to the fallback.
+
+The seeder creates the two warehouse tables itself, at the URNs the
+showcase-ecommerce datapack uses. Loading the datapack is therefore optional
+realism, not a prerequisite (D-014).
 
 ## Local rules
 
 1. Seeding is idempotent and deterministic: fixed URNs, fixed values, fixed
    scenario seeds. Running it twice converges to the same graph.
-2. Mirror the official DataHub AI/ML tutorial scripts exactly for feature,
-   feature table, and deployment creation; the exact SDK module paths are
-   [confirm] and must be verified against the installed acryl-datahub first.
+2. There are no SDK entity classes for MLFeature, MLPrimaryKey, MLFeatureTable,
+   or MLModelDeployment in acryl-datahub 1.6.0.13; emit their aspects as MCPs.
+   Only MLModel and MLModelGroup have classes (D-012).
 3. Column-level lineage is Dataset to Dataset only. Feature-to-dataset lineage
-   goes through the ML sources aspect, never add_lineage.
-4. scenarios.py plants failures for the demo and benchmark; keep each scenario
-   labeled, reversible, and shared with benchmarks/inject.py.
+   goes through the ML sources aspect, never add_lineage. That aspect is
+   dataset-granular, so a feature's exact column lives in customProperties
+   under modelguard.source_column; detectors start their traversal there.
+4. graph_spec.py is the single source of truth for every seeded URN and value.
+   Nothing hardcodes a URN string; tests assert the spec is self-consistent.
+5. scenarios.py plants failures for the demo and benchmark; keep each scenario
+   labeled, reversible, and shared with benchmarks/inject.py. Not written yet:
+   it lands in Phase 1 with the blast-radius detector that consumes it.
 
 ## Change Log
 
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: seeding rules and Week 1 gate context |
+| 2026-07-09 | Claude (for Ghassen Naouar) | Record the missing SDK ML entity classes, the dataset-granular sources aspect, and graph_spec as source of truth |

@@ -127,7 +127,7 @@ territory (`resources.md §10`). Controls:
      supplies validated arguments; it cannot compose arbitrary mutations (defends LLM05 improper output handling).
 3. **LLM05 - Improper output handling.** Validate every LLM-produced argument before the write: URNs must
    resolve in the graph; enum values (incident `type`) checked against the allowed set; numeric scores clamped.
-4. **LLM03 - Supply chain.** Pin dependencies (`requirements.txt` with hashes); verify the MCP server /
+4. **LLM03 - Supply chain.** Pin dependencies (`pyproject.toml`, hashes via a lockfile); verify the MCP server /
    Agent Context Kit versions; note DataHub datapacks are Apache-2.0 and safe to publish.
 5. **Data privacy (finance/healthcare framing).** ModelGuard operates on the **metadata graph, not row-level
    data** - a strong, quotable privacy property: **no PHI/PII is ever sent to the LLM.** Profiling uses
