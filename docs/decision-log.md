@@ -16,6 +16,42 @@ Entry template:
 
 ---
 
+## D-016: Mutation-test the suite rather than trust green checkmarks (2026-07-10)
+- Decided by: Ghassen Naouar (requested), applied by Claude
+- Decision: Before accepting a test suite, inject deliberate faults into the code
+  under test and confirm the suite goes red. Faults tried: feature sources made
+  column-granular, the source_column bridge dropped, incident dedup made
+  title-blind, the property merge made destructive, and the GMS URL given a
+  silent fallback.
+- Options considered: (a) trust that a passing suite implies coverage, (b) add a
+  mutation-testing dependency such as mutmut, (c) hand-inject a fault per
+  behavior the tests claim to protect.
+- Why: (a) is exactly what failed here. Four of five injected faults were caught,
+  but "incident dedup ignores the title" passed the whole suite: the only
+  distinct-finding test varied the incident type, so a type-only dedup satisfied
+  it. That is the bug that would silently swallow a second leakage finding on
+  one model. (b) is worth doing later; (c) costs minutes and found the gap now.
+- Result: Added a same-type, different-title dedup test. The mutant now dies.
+  The integration test test_seeding_twice_converges was also rewritten: it
+  compared a SeedResult built from constants, so it passed even if the seeder
+  wrote nothing. It now diffs real aspects (mlFeatures, upstreams, schema
+  fields, fine-grained edges) before and after a second seed.
+
+## D-015: No default values for environment configuration (2026-07-10)
+- Decided by: Ghassen Naouar
+- Decision: client.py applies no fallback for any environment variable.
+  DATAHUB_GMS_URL is required and raises DataHubConnectionError when unset or
+  blank. The previous DEFAULT_GMS_URL = "http://localhost:8080" was removed. A
+  unit test asserts no module-level string in client.py starts with http.
+- Options considered: (a) keep the Quickstart URL as a convenience default,
+  (b) require every variable, documenting values only in .env.example.
+- Why: A hardcoded fallback is a machine-specific value living in tracked code,
+  which the repo rules forbid. It also converts a missing .env from a loud
+  failure into a silent connection to whatever happens to listen on that port.
+- Result: .env is now genuinely required. .env.example documents each variable,
+  including how to mint a DATAHUB_GMS_TOKEN and the fact that the OSS Quickstart
+  runs with authentication disabled so the token may be left blank.
+
 ## D-014: Seed the warehouse tables instead of depending on a datapack (2026-07-09)
 - Decided by: Claude (for Ghassen Naouar)
 - Decision: seed_ml_graph.py creates loans_raw and customer_features with

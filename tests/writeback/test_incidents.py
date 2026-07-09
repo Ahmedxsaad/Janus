@@ -143,7 +143,7 @@ def test_a_different_run_id_does_not_create_a_second_incident():
     assert graph.graphql_calls == []
 
 
-def test_a_different_finding_on_the_same_resource_still_raises():
+def test_a_different_finding_type_on_the_same_resource_still_raises():
     graph = _graph_with_active_incident(TITLE)
     result = raise_incident(
         make_connection(graph),
@@ -154,6 +154,22 @@ def test_a_different_finding_on_the_same_resource_still_raises():
         run_id="run-2",
     )
     assert result.created is True
+
+
+def test_a_second_finding_of_the_same_type_still_raises():
+    # Two features can leak on the same model. Deduplicating on type alone would
+    # silently swallow the second finding, so the title must be part of the key.
+    graph = _graph_with_active_incident(TITLE, incident_type="FIELD")
+    result = raise_incident(
+        make_connection(graph),
+        resource_urn=MODEL,
+        incident_type="FIELD",
+        title="Target leakage in feature applicant_income",
+        description="body",
+        run_id="run-2",
+    )
+    assert result.created is True
+    assert graph.graphql_calls, "a distinct finding must reach the raiseIncident mutation"
 
 
 def test_a_resolved_incident_does_not_suppress_a_new_one():

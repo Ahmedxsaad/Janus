@@ -47,11 +47,52 @@ class FakeGraph:
         return self.graphql_response
 
 
-def make_connection(graph: FakeGraph) -> DataHubConnection:
-    """Wrap a FakeGraph in the connection object the write-back layer expects."""
+class FakeEntities:
+    """Records entities handed to client.entities.upsert."""
+
+    def __init__(self) -> None:
+        self.upserted: list[Any] = []
+
+    def upsert(self, entity: Any, **_: Any) -> None:
+        self.upserted.append(entity)
+
+
+class FakeLineage:
+    """Records calls to client.lineage.add_lineage."""
+
+    def __init__(self) -> None:
+        self.edges: list[dict[str, Any]] = []
+
+    def add_lineage(
+        self,
+        *,
+        upstream: Any,
+        downstream: Any,
+        column_lineage: Any = None,
+        **_: Any,
+    ) -> None:
+        self.edges.append(
+            {
+                "upstream": str(upstream),
+                "downstream": str(downstream),
+                "column_lineage": column_lineage,
+            }
+        )
+
+
+class FakeClient:
+    """A stand-in for DataHubClient exposing only the two sub-clients seed/ uses."""
+
+    def __init__(self) -> None:
+        self.entities = FakeEntities()
+        self.lineage = FakeLineage()
+
+
+def make_connection(graph: FakeGraph, client: FakeClient | None = None) -> DataHubConnection:
+    """Wrap the fakes in the connection object the package expects."""
     return DataHubConnection(
         graph=graph,  # type: ignore[arg-type]
-        client=None,  # type: ignore[arg-type]
+        client=client,  # type: ignore[arg-type]
         gms_url="http://fake-gms:8080",
         has_token=True,
     )

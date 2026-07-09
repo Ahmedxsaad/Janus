@@ -27,7 +27,10 @@ from typing import TypeVar
 import pytest
 from datahub.metadata.schema_classes import (
     MLFeaturePropertiesClass,
+    MLFeatureTablePropertiesClass,
     MLModelPropertiesClass,
+    SchemaMetadataClass,
+    UpstreamLineageClass,
 )
 
 from modelguard.client import DataHubConnection, DataHubConnectionError, connect
@@ -196,8 +199,63 @@ def test_an_incident_is_raised_on_the_model(
 # --------------------------------------------------------------------------
 
 
-def test_seeding_twice_converges(conn: DataHubConnection, seeded: SeedResult):
-    assert seed_ml_graph(conn) == seeded
+def _graph_fingerprint(conn: DataHubConnection, seeded: SeedResult) -> dict[str, object]:
+    """Capture the seeded graph's mutable state, so a rerun can be compared to it.
+
+    Comparing the returned SeedResult would prove nothing: it is built from fixed
+    constants and would match even if the seeder wrote nothing at all. These are
+    the aspects a non-convergent seeder would actually corrupt, by appending a
+    duplicate feature, a second upstream edge, or a repeated schema field.
+    """
+    model = conn.graph.get_aspect(seeded.model, MLModelPropertiesClass)
+    feature_table = conn.graph.get_aspect(seeded.feature_table, MLFeatureTablePropertiesClass)
+    schema = conn.graph.get_aspect(seeded.feature_table_dataset, SchemaMetadataClass)
+    lineage = conn.graph.get_aspect(seeded.feature_table_dataset, UpstreamLineageClass)
+    assert model is not None and feature_table is not None
+    assert schema is not None and lineage is not None
+
+    return {
+        "ml_features": sorted(model.mlFeatures or []),
+        "training_jobs": sorted(model.trainingJobs or []),
+        "deployments": sorted(model.deployments or []),
+        "groups": sorted(model.groups or []),
+        "table_features": sorted(feature_table.mlFeatures or []),
+        "table_keys": sorted(feature_table.mlPrimaryKeys or []),
+        "schema_fields": sorted(f.fieldPath for f in schema.fields),
+        "upstreams": sorted(u.dataset for u in lineage.upstreams),
+        "column_edges": sorted(
+            str(fg.downstreams) + "<-" + str(sorted(fg.upstreams or []))
+            for fg in (lineage.fineGrainedLineages or [])
+        ),
+    }
+
+
+def test_seeding_twice_leaves_the_graph_byte_for_byte_identical(
+    conn: DataHubConnection, seeded: SeedResult
+):
+    """The seeder must converge, not accumulate.
+
+    An UPSERT that appends rather than replaces shows up here as a duplicated
+    feature, upstream, or schema field on the second run.
+    """
+    before = _graph_fingerprint(conn, seeded)
+    seed_ml_graph(conn)
+    after = _graph_fingerprint(conn, seeded)
+
+    assert after == before
+
+    # Guard the specific failure mode: list-valued aspects growing on each run.
+    assert len(after["ml_features"]) == len(spec.MODEL_FEATURES)
+    assert len(after["upstreams"]) == 1
+    assert len(after["column_edges"]) == len(spec.COLUMN_LINEAGE)
+    assert len(after["schema_fields"]) == len(spec.FEATURE_COLUMNS)
+
+
+def test_the_seeder_reports_exactly_what_it_wrote(conn: DataHubConnection, seeded: SeedResult):
+    """SeedResult must describe the graph, not just restate its own constants."""
+    model = conn.graph.get_aspect(seeded.model, MLModelPropertiesClass)
+    assert model is not None
+    assert sorted(model.mlFeatures or []) == sorted(seeded.features)
 
 
 def test_raising_the_same_finding_twice_reuses_the_incident(
