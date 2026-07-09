@@ -26,6 +26,7 @@ from typing import TypeVar
 
 import pytest
 from datahub.metadata.schema_classes import (
+    IncidentsSummaryClass,
     MLFeaturePropertiesClass,
     MLFeatureTablePropertiesClass,
     MLModelPropertiesClass,
@@ -36,7 +37,7 @@ from datahub.metadata.schema_classes import (
 from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.seed import graph_spec as spec
 from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.incidents import IncidentWrite, raise_incident
+from modelguard.writeback.incidents import IncidentWrite, find_active_incident, raise_incident
 from modelguard.writeback.properties import (
     RISK_FLAGS,
     RUN_ID,
@@ -113,7 +114,7 @@ def test_column_level_lineage_reaches_the_label_column(conn: DataHubConnection, 
     detector will perform.
     """
 
-    def probe() -> list[str]:
+    def upstream_urns() -> list[str]:
         results = conn.client.lineage.get_lineage(
             source_urn=seeded.feature_table_dataset,
             source_column=spec.LEAKAGE_FEATURE,
@@ -122,11 +123,14 @@ def test_column_level_lineage_reaches_the_label_column(conn: DataHubConnection, 
         )
         return [r.urn for r in results]
 
-    upstream = _eventually(probe, "column-level lineage to be indexed")
-    assert seeded.source_table in upstream, (
-        f"upstream cone of {spec.LEAKAGE_FEATURE} did not reach "
-        f"{seeded.source_table}; got {upstream}"
+    # Wait for the label's table specifically. A partially indexed cone can be
+    # non-empty while still missing the edge under test, so polling until the
+    # list is merely non-empty would pass on an incomplete graph.
+    _eventually(
+        lambda: seeded.source_table in upstream_urns(),
+        f"the upstream cone of {spec.LEAKAGE_FEATURE} to reach {seeded.source_table}",
     )
+    assert seeded.source_table in upstream_urns()
 
 
 def test_the_model_resolves_to_its_features_run_and_deployment(
@@ -280,14 +284,25 @@ def test_raising_the_same_finding_twice_reuses_the_incident(
         )
 
     first = raise_again(run_id)
+
+    # Poll with the read-only lookup, never by raising again: a raise-based probe
+    # would itself create the duplicates this test exists to rule out.
     _eventually(
-        lambda: not raise_again(f"{run_id}-probe").created,
+        lambda: find_active_incident(conn, seeded.model, "FIELD", title) is not None,
         "the incidents summary to index the first incident",
     )
 
     second = raise_again(f"{run_id}-second")
     assert second.created is False, "a second identical finding created a duplicate incident"
     assert second.urn == first.urn
+
+    # And the graph itself must hold exactly one active incident for this finding.
+    summary = conn.graph.get_aspect(seeded.model, IncidentsSummaryClass)
+    assert summary is not None
+    matching = [
+        detail.urn for detail in (summary.activeIncidentDetails or []) if detail.urn == first.urn
+    ]
+    assert len(matching) == 1
 
 
 def test_assigning_the_same_properties_twice_is_stable(
