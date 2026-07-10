@@ -20,19 +20,20 @@ No defaults, on purpose
 Nothing here falls back to a hardcoded server URL. A default such as
 ``http://localhost:8080`` is a machine-specific value living in tracked code, and
 it turns a missing ``.env`` into a silent connection to the wrong place rather
-than a loud failure. Every connection value comes from the environment, loaded
-from the git-ignored ``.env``; the shipped ``.env.example`` documents each one.
-Secrets are never logged, echoed, or embedded in an exception message.
+than a loud failure. Every connection value comes from the environment through
+:mod:`modelguard.env`, which is the only module that loads the git-ignored
+``.env``; the shipped ``.env.example`` documents each key. Secrets are never
+logged, echoed, or embedded in an exception message.
 """
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.sdk.main_client import DataHubClient
-from dotenv import find_dotenv, load_dotenv
+
+from modelguard.env import optional_value
 
 ENV_GMS_URL = "DATAHUB_GMS_URL"
 ENV_GMS_TOKEN = "DATAHUB_GMS_TOKEN"
@@ -59,8 +60,8 @@ def _gms_url() -> str:
         DataHubConnectionError: The variable is unset or blank. There is no
             default: see the module docstring.
     """
-    url = os.environ.get(ENV_GMS_URL, "").strip()
-    if not url:
+    url = optional_value(ENV_GMS_URL)
+    if url is None:
         raise DataHubConnectionError(
             f"{ENV_GMS_URL} is not set. Copy .env.example to .env and fill it in. "
             "For a local Quickstart the value is http://localhost:8080"
@@ -74,8 +75,7 @@ def _gms_token() -> str | None:
     ``.env.example`` ships ``DATAHUB_GMS_TOKEN=`` with an empty value, so an
     empty string means "not configured" rather than "the empty token".
     """
-    token = os.environ.get(ENV_GMS_TOKEN, "").strip()
-    return token or None
+    return optional_value(ENV_GMS_TOKEN)
 
 
 def connect(*, require_token: bool = False, validate: bool = True) -> DataHubConnection:
@@ -94,10 +94,6 @@ def connect(*, require_token: bool = False, validate: bool = True) -> DataHubCon
         DataHubConnectionError: A required variable is unset, the token is
             required but absent, or the server did not answer.
     """
-    # override=False: a variable already exported in the shell or set by CI wins
-    # over .env, which is the developer's local default.
-    load_dotenv(find_dotenv(usecwd=True), override=False)
-
     url = _gms_url()
     token = _gms_token()
 

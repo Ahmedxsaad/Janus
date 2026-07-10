@@ -53,10 +53,30 @@ Source of truth for what we build:
    never composes raw GraphQL (docs/plan/architecture.md section 2).
 5. Every DataHub write is idempotent, keyed by (resourceUrn, finding_type,
    run_id), with read-before-write. Reruns must never duplicate.
-6. Secrets only via environment (.env). Never hardcode tokens, keys, or URLs.
+6. Configuration enters the process in exactly one module: modelguard/env.py.
+   It is the only place that calls load_dotenv and the only place that touches
+   os.environ. Two tests enforce this; do not weaken them.
+   a. Anything that identifies a system, an account, or a vendor gets NO default
+      and NO fallback: server URLs, tokens, API keys, LLM provider names, model
+      ids. A fallback is a machine-specific value in tracked code. It turns a
+      missing .env into a silent connection to the wrong place, or a silent call
+      to the wrong vendor billed to whatever key is in the ambient environment.
+      Missing means missing, and it fails loudly, naming the variable.
+   b. Algorithm parameters (thresholds, hop caps, score weights) are not
+      identity. They may keep a documented default in modelguard/config.py.
+   c. A group of related settings is all-or-nothing: set every one or none.
+      A half-configured feature fails loudly, it never downgrades in silence.
+   d. Secrets never appear in a log line, an exception message, a repr, or a CLI
+      flag. Carry them as pydantic SecretStr. Text that came back from someone
+      else's SDK goes through env.scrub() before it reaches a log.
+   e. .env and .env.example carry the identical key set, in the same order.
+      Copying .env.example to .env must produce a working run. Add a key to one,
+      add it to the other with an empty value and a comment.
 7. Verify every SDK symbol against the installed package before using it
    (pip show <pkg>, then introspect). Plan snippets marked [confirm] are
    unverified; never trust a doc snippet over the installed signature.
+8. The agent is provider-agnostic. Never import a vendor's SDK outside
+   modelguard/llm.py, and never name a vendor's model anywhere else.
 
 ## Formatting rules (strict, apply everywhere)
 
@@ -99,3 +119,4 @@ Source of truth for what we build:
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: project map, workflow, code, formatting, git, and maintenance rules |
 | 2026-07-08 | Claude (for Ahmed Saad) | Git rules: forbid AI attribution (co-author trailers, generated-with lines) in commits and PRs |
 | 2026-07-08 | Claude (for Ahmed Saad) | Note that the no-attribution rule is enforced via .claude/settings.json |
+| 2026-07-10 | Claude (for Ghassen Naouar) | Code rule 6 rewritten: env.py is the sole config entry point, no fallbacks for identity values, all-or-nothing groups, secret hygiene, .env/.env.example parity. Add rule 8: provider-agnostic LLM |
