@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
 from modelguard.client import DataHubConnection
+
+
+@dataclass(frozen=True)
+class _RelatedEntity:
+    """Mirrors the shape DataHubGraph.get_related_entities yields."""
+
+    urn: str
 
 
 class FakeGraph:
@@ -22,9 +30,11 @@ class FakeGraph:
         *,
         exists: bool = True,
         graphql_response: dict[str, Any] | None = None,
+        related: dict[str, list[str]] | None = None,
     ) -> None:
         self._aspects = aspects or {}
         self._exists = exists
+        self._related = related or {}
         self.graphql_response = graphql_response or {}
         self.emitted: list[Any] = []
         self.graphql_calls: list[tuple[str, dict[str, Any] | None]] = []
@@ -45,6 +55,11 @@ class FakeGraph:
     def execute_graphql(self, query: str, variables: dict[str, Any] | None = None, **_: Any) -> Any:
         self.graphql_calls.append((query, variables))
         return self.graphql_response
+
+    def get_related_entities(
+        self, entity_urn: str, relationship_types: list[str], direction: Any
+    ) -> Any:
+        return [_RelatedEntity(urn) for urn in self._related.get(entity_urn, [])]
 
 
 class FakeEntities:

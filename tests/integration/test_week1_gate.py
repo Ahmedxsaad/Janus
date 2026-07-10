@@ -25,8 +25,10 @@ from collections.abc import Callable
 from typing import TypeVar
 
 import pytest
+from datahub.ingestion.graph.openapi import RelationshipDirection
 from datahub.metadata.schema_classes import (
-    IncidentsSummaryClass,
+    IncidentInfoClass,
+    IncidentStateClass,
     MLFeaturePropertiesClass,
     MLFeatureTablePropertiesClass,
     MLModelPropertiesClass,
@@ -37,7 +39,12 @@ from datahub.metadata.schema_classes import (
 from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.seed import graph_spec as spec
 from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.incidents import IncidentWrite, find_active_incident, raise_incident
+from modelguard.writeback.incidents import (
+    INCIDENT_ON_RELATIONSHIP,
+    IncidentWrite,
+    find_active_incident,
+    raise_incident,
+)
 from modelguard.writeback.properties import (
     RISK_FLAGS,
     RUN_ID,
@@ -86,6 +93,37 @@ def seeded(conn: DataHubConnection) -> SeedResult:
 def run_id() -> str:
     """A fresh run id, as a real scan would generate."""
     return f"gate-{uuid.uuid4().hex[:8]}"
+
+
+def _leakage_column_urn() -> str:
+    """The column that leaks the label: where a leakage incident belongs."""
+    return str(spec.feature_column_urn(spec.LEAKAGE_FEATURE))
+
+
+def _incidents_on(conn: DataHubConnection, resource_urn: str) -> list[str]:
+    """Every incident URN attached to a resource, via the IncidentOn relationship."""
+    return [
+        entity.urn
+        for entity in conn.graph.get_related_entities(
+            entity_urn=resource_urn,
+            relationship_types=[INCIDENT_ON_RELATIONSHIP],
+            direction=RelationshipDirection.INCOMING,
+        )
+    ]
+
+
+def _is_active_incident(
+    conn: DataHubConnection, incident_urn: str, incident_type: str, title: str
+) -> bool:
+    """Whether the incident is open and describes exactly this finding."""
+    info = conn.graph.get_aspect(incident_urn, IncidentInfoClass)
+    if info is None:
+        return False
+    return (
+        info.status.state == IncidentStateClass.ACTIVE
+        and info.type == incident_type
+        and info.title == title
+    )
 
 
 # --------------------------------------------------------------------------
@@ -180,22 +218,52 @@ def test_structured_properties_are_defined_and_assigned(
     assert stored[RUN_ID] == [run_id]
 
 
-def test_an_incident_is_raised_on_the_model(
+def test_datahub_refuses_an_incident_on_a_model(conn: DataHubConnection, seeded: SeedResult):
+    """The plan targeted the model. The metadata model forbids it.
+
+    incidentInfo.entities accepts only dataset, chart, dashboard, dataFlow,
+    dataJob, and schemaField. We reject it before the call rather than let GMS
+    return a 500.
+    """
+    with pytest.raises(ValueError, match="cannot raise an incident on a mlModel"):
+        raise_incident(
+            conn,
+            resource_urn=seeded.model,
+            incident_type="FIELD",
+            title="never written",
+            description="never written",
+            run_id="unused",
+        )
+
+
+def test_an_incident_is_raised_on_the_leaking_column(
     conn: DataHubConnection, seeded: SeedResult, run_id: str
 ):
+    """A leakage finding attaches to the column that leaks, which DataHub allows.
+
+    The title carries the run id so this test always exercises the create path.
+    Dedup of a stable title is covered separately, below.
+    """
     result = raise_incident(
         conn,
-        resource_urn=seeded.model,
+        resource_urn=_leakage_column_urn(),
         incident_type="FIELD",
-        title=f"Target leakage in feature {spec.LEAKAGE_FEATURE}",
+        title=f"Target leakage in feature {spec.LEAKAGE_FEATURE} [{run_id}]",
         description=(
             f"Feature {spec.LEAKAGE_FEATURE} derives from "
             f"{spec.SOURCE_TABLE}.{spec.LABEL_SOURCE_COLUMN}, which is the model's label."
         ),
         run_id=run_id,
     )
+    assert result.created is True
     assert result.urn.startswith("urn:li:incident:")
-    assert conn.graph.exists(result.urn)
+
+    # The incident must carry the run id, and point back at the column.
+    info = conn.graph.get_aspect(result.urn, IncidentInfoClass)
+    assert info is not None
+    assert info.type == "FIELD"
+    assert _leakage_column_urn() in info.entities
+    assert run_id in (info.description or "")
 
 
 # --------------------------------------------------------------------------
@@ -272,11 +340,12 @@ def test_raising_the_same_finding_twice_reuses_the_incident(
     before asserting that the second call reuses it.
     """
     title = f"Target leakage in feature {spec.LEAKAGE_FEATURE}"
+    column = _leakage_column_urn()
 
     def raise_again(new_run_id: str) -> IncidentWrite:
         return raise_incident(
             conn,
-            resource_urn=seeded.model,
+            resource_urn=column,
             incident_type="FIELD",
             title=title,
             description="body",
@@ -288,7 +357,7 @@ def test_raising_the_same_finding_twice_reuses_the_incident(
     # Poll with the read-only lookup, never by raising again: a raise-based probe
     # would itself create the duplicates this test exists to rule out.
     _eventually(
-        lambda: find_active_incident(conn, seeded.model, "FIELD", title) is not None,
+        lambda: find_active_incident(conn, column, "FIELD", title) is not None,
         "the incidents summary to index the first incident",
     )
 
@@ -297,12 +366,10 @@ def test_raising_the_same_finding_twice_reuses_the_incident(
     assert second.urn == first.urn
 
     # And the graph itself must hold exactly one active incident for this finding.
-    summary = conn.graph.get_aspect(seeded.model, IncidentsSummaryClass)
-    assert summary is not None
     matching = [
-        detail.urn for detail in (summary.activeIncidentDetails or []) if detail.urn == first.urn
+        urn for urn in _incidents_on(conn, column) if _is_active_incident(conn, urn, "FIELD", title)
     ]
-    assert len(matching) == 1
+    assert matching == [first.urn], f"expected one active incident, found {matching}"
 
 
 def test_assigning_the_same_properties_twice_is_stable(
