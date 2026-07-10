@@ -16,6 +16,65 @@ Entry template:
 
 ---
 
+## D-019: Week 1 gate PASSED; no pivot to MigrationCopilot (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar), per the plan's kill-criterion
+- Decision: ModelGuard clears the Week 1 gate. The project continues. The
+  MigrationCopilot fallback is not triggered.
+- Evidence, against DataHub Quickstart v1.5.0.6 with acryl-datahub 1.6.0.13:
+  (a) READ: `get_lineage(source_column="prior_default_flag", direction="upstream")`
+      resolves one hop to loans_raw, the table holding the label column; the
+      model resolves to its two features, its training run, and its live
+      deployment.
+  (b) WRITE: three structured properties land on the mlModel
+      (trust_score=62.0, risk_flags=[target-leakage], run_id), and a FIELD
+      incident lands on the leaking column.
+  (c) IDEMPOTENT: the gate ran three times in three separate processes; the
+      stable-title finding still has exactly one incident, and a second seed
+      leaves every aspect byte-for-byte identical.
+- Result: 11 integration tests, 57 unit tests, ruff and mypy strict clean.
+  Phase 0 is complete. Phase 1 (blast-radius loop, scenarios.py) is unblocked.
+
+## D-018: Dedup incidents via the IncidentOn relationship (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: Read a resource's incidents by traversing the `IncidentOn`
+  relationship inbound (`graph.get_related_entities`), then filter on each
+  incident's own status. Do not read the resource's `incidentsSummary` aspect.
+- Options considered: (a) `incidentsSummary` on the resource, as the plan and
+  the aspect model imply, (b) search incidents filtered by their `entities`
+  field, (c) the `IncidentOn` relationship index.
+- Why: (a) silently returns nothing. On a Quickstart GMS the `incidentsSummary`
+  aspect is never written, not for a dataset and not for a schemaField; the
+  entity carries only its key aspect. A summary-based dedup therefore finds no
+  existing incident and duplicates every finding on every scan. This actually
+  happened: a gate run left two identical active incidents on one column.
+  (b) fails with a GraphQL non-null violation from GMS
+  ("field ... declared as a non null type, but the code ... wrongly returned").
+  (c) is populated and correct.
+- Result: Idempotency verified across three consecutive gate runs. Two GMS bugs
+  worth reporting in the Most Valuable Feedback survey: the unwritten
+  `incidentsSummary`, and the incident search non-null violation.
+
+## D-017: Incidents attach to data, not to models (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar), forced by the metadata model
+- Decision: A finding becomes an incident on the `dataset` or `schemaField` it
+  concerns. Model-level risk is expressed with structured properties on the
+  mlModel. `raise_incident` validates the target's entity type up front.
+- Options considered: (a) raise the incident on the mlModel as the plan says,
+  (b) raise it on the offending dataset or column and carry model risk as
+  structured properties, (c) create a proxy dataset per model.
+- Why: (a) is impossible. `incidentInfo.entities` declares
+  `entityTypes: [dataset, chart, dashboard, dataFlow, dataJob, schemaField]`,
+  and GMS rejects an mlModel URN with a 500 and a Java stack trace. The plan
+  assumed the model was the target throughout sections 4.2, 5.1, and 5.3.
+  (c) invents entities to work around the model rather than following it.
+  (b) is also the better design: an incident is about a broken data asset,
+  while a trust score is a property of a model. A leakage finding on
+  `customer_features.prior_default_flag` points precisely at the leaking column.
+- Result: `INCIDENT_ENTITY_TYPES` is derived from the aspect schema so it cannot
+  drift. Column targets are resolved through the parent dataset's
+  `schemaMetadata`, because `graph.exists()` is False for every schemaField;
+  that check also catches a misspelled column, which `exists` never would.
+
 ## D-016: Mutation-test the suite rather than trust green checkmarks (2026-07-10)
 - Decided by: Ghassen Naouar (requested), applied by Claude
 - Decision: Before accepting a test suite, inject deliberate faults into the code
