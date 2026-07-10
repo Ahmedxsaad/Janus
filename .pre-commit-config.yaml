@@ -8,14 +8,23 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.2.0
+  # mypy runs from the project environment, not an isolated one. The isolated
+  # env cannot see acryl-datahub, so every datahub.* symbol degraded to Any, the
+  # follow_untyped_imports override in pyproject.toml never applied, and the hook
+  # reported errors that a local `mypy modelguard/` does not. Installing the SDK
+  # into the hook env instead would download it a second time. Running the
+  # project's own mypy makes the hook agree with the local run by construction.
+  #
+  # Requires the dev extra: pip install -e ".[dev]"
+  - repo: local
     hooks:
       - id: mypy
+        name: mypy
+        entry: mypy
+        language: system
         files: ^modelguard/
-        additional_dependencies:
-          - pydantic==2.13.4
-          - types-PyYAML==6.0.12.20260518
+        pass_filenames: false
+        args: ["modelguard/"]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -33,8 +42,13 @@ repos:
     hooks:
       # The formatting rules ban em dashes and emojis everywhere, including in
       # code, comments, docs, and commit messages. Nothing else enforces this.
+      #
+      # This file is excluded because the pattern below IS an em dash: the hook
+      # cannot state what it forbids without containing it, so it would flag
+      # itself and `pre-commit run --all-files` could never pass.
       - id: no-em-dash
         name: no em dashes
         entry: '—'
         language: pygrep
         types: [text]
+        exclude: ^\.pre-commit-config\.yaml$
