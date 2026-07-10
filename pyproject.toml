@@ -23,13 +23,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The LangGraph orchestrator and its Claude binding land in Phase 3. They are
-# declared but unpinned: the project rule is to pin at first real install, and
-# nothing has installed them yet. Pin them exactly when agent/ is implemented.
+# The narrator drafts incident and report prose. It is bring-your-own-LLM and
+# provider-agnostic: install exactly the binding for the provider you configure
+# in MODELGUARD_LLM_PROVIDER. None of them is a core dependency, because
+# `modelguard scan` falls back to deterministic template prose when no LLM is
+# configured, and that is the judge's out-of-the-box path.
+anthropic = ["langchain-anthropic==1.4.8"]
+openai = ["langchain-openai==1.3.4"]
+google = ["langchain-google-genai==4.2.7"]
+
+# LangGraph lands in Phase 3 with the state machine; unpinned until installed.
 agent = [
     "langgraph",
     "langchain",
-    "langchain-anthropic",
 ]
 dev = [
     "mypy==2.2.0",
@@ -40,9 +46,11 @@ dev = [
 ]
 
 [project.scripts]
-# Only commands that are implemented get an entry point. `modelguard scan` and
-# `modelguard watch` arrive with cli.py in a later phase.
+# Only commands that are implemented get an entry point. `modelguard watch`
+# arrives with the Actions framework in a later phase.
+modelguard = "modelguard.cli:main"
 modelguard-seed = "modelguard.seed.seed_ml_graph:main"
+modelguard-scenario = "modelguard.seed.scenarios:main"
 
 [tool.setuptools.packages.find]
 include = ["modelguard*"]
