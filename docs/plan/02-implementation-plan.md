@@ -47,7 +47,9 @@ prose, and gates every write behind human approval.* This is what makes it robus
 ## 1. Environment & prerequisites
 
 ```bash
-# Python 3.10+ (Agent Context Kit requires 3.10+)               [verified]
+# Python 3.11 exactly. acryl-datahub's classifiers advertise 3.12, but its CLI
+# warns at runtime: "Python versions above 3.11 are not actively tested with
+# yet." Pinned in .python-version and pyproject.toml (see D-011).   [verified]
 python3 -m pip install --upgrade pip wheel setuptools
 python3 -m pip install --upgrade acryl-datahub                  # CLI + Python SDK   [verified]
 datahub version
@@ -66,14 +68,16 @@ datahub datapack load showcase-ecommerce                        # ~1,050 cross-p
 datahub docker quickstart --stop      #   or full wipe:  datahub docker nuke     [verified]
 ```
 
-**Project Python deps** (`requirements.txt`):
+**Project Python deps** (`pyproject.toml`, exact pins; `requirements.txt` was
+retired in D-010):
 ```
-acryl-datahub[datahub-rest]        # SDK + REST emitter          [verified]
-datahub-agent-context              # Agent Context Kit toolset   [verified] (PyPI 1.5.x)
-langgraph                          # orchestration
-langchain  langchain-anthropic     # agent + Claude LLM (BYO LLM)
-pydantic  pyyaml  rich  typer      # models, YAML artifacts, CLI/TUI output
-pytest                             # tests
+acryl-datahub[datahub-rest]==1.6.0.13   # SDK + REST emitter               [verified]
+pydantic  python-dotenv  pyyaml  rich  typer   # models, env, YAML, CLI    [verified]
+# optional extra "agent" (unpinned until Phase 3 installs them):
+langgraph  langchain  langchain-anthropic      # orchestration + Claude
+datahub-agent-context                          # Agent Context Kit toolset  [confirm]
+# optional extra "dev":
+pytest  ruff  mypy  pre-commit                                             [verified]
 ```
 
 **LLM:** BYO. Default to **Claude `claude-opus-4-8`** via `langchain-anthropic` (`ANTHROPIC_API_KEY`).
@@ -96,13 +100,14 @@ modelguard/
 ├── LICENSE                      # Apache 2.0 - set repo License in GitHub "About" (judging requirement) [verified]
 ├── README.md                    # architecture diagram + "reads AND writes" table + "what we did NOT rebuild"
 ├── quickstart.sh                # one command: boot DataHub → load datapack → seed ML graph → run agent
-├── requirements.txt
+├── pyproject.toml               # pinned deps + ruff/mypy/pytest config (replaced requirements.txt)
 ├── .env.example
 ├── modelguard/
 │   ├── client.py                # DataHubClient / DataHubGraph factory, env config
 │   ├── seed/                    # THE DE-RISKER - builds the ML graph the datapacks lack
+│   │   ├── graph_spec.py        # fixed URNs + values: the single source of truth for the seeded graph
 │   │   ├── seed_ml_graph.py     # models, features, training runs, deployments, col-level lineage
-│   │   └── scenarios.py         # inject the planted failure(s) for the demo
+│   │   └── scenarios.py         # inject the planted failure(s) for the demo (Phase 1)
 │   ├── detect/                  # deterministic detectors (one per Problem 1-4)
 │   │   ├── leakage.py           # P1 target leakage (column-cone intersection)
 │   │   ├── blast_radius.py      # P2 upstream failure → models/deployments at risk
@@ -151,52 +156,54 @@ modelguard/
 The datapacks are warehouse/BI-centric; they contain **no** ML entities. We seed a small but complete ML
 supply chain **on top of an existing datapack table** so real column-level lineage exists into the model.
 
-Verified SDK surface (from DataHub AI/ML tutorial [verified]):
+Actual SDK surface, introspected from **acryl-datahub 1.6.0.13** [verified]. The snippet this section
+originally carried was wrong on four symbols; see D-012. Implemented in `modelguard/seed/seed_ml_graph.py`.
 
 ```python
-from datahub.sdk import DataHubClient
-from datahub.sdk.ml_entities import MLModelGroup, MLModel          # [confirm] confirm exact module path
+from datahub.sdk.main_client import DataHubClient
+from datahub.sdk.mlmodel import MLModel                 # NOT datahub.sdk.ml_entities
+from datahub.sdk.mlmodelgroup import MLModelGroup
 from datahub.metadata.urns import DatasetUrn, DataProcessInstanceUrn
-from datahub.metadata.schema_classes import (
-    MLTrainingRunPropertiesClass, MLMetricClass, MLHyperParamClass,
-)
 
-client = DataHubClient.from_env()   # reads DATAHUB_GMS_URL / DATAHUB_GMS_TOKEN
+client = DataHubClient(graph=graph)   # or DataHubClient.from_env()
 
-# 1) Model group + model  [verified]
-group = MLModelGroup(id="credit_risk_models", platform="mlflow",
-                     name="Credit Risk Models",
-                     description="Models scoring live loan applications")
-client._emit_mcps(group.as_mcps())
+# 1) Model group + model. There is no MLModel.add_group and no client._emit_mcps.
+group = MLModelGroup(id="credit_risk_models", platform="mlflow", name="Credit Risk Models")
+client.entities.upsert(group)                                        # [verified] idempotent
 
 model = MLModel(id="credit_risk_v3", platform="mlflow", name="Credit Risk v3",
                 version="3", aliases=["champion"],
-                hyper_params={"max_depth": "6"},
-                training_metrics={"auc": "0.88"})
-model.add_group(group.urn)                                          # [verified]
+                hyper_params={"max_depth": "6"},                     # dict or [MLHyperParamClass]
+                training_metrics={"auc": "0.88"},
+                model_group=group.urn,                               # [verified] constructor arg
+                training_jobs=[DataProcessInstanceUrn("credit_risk_v3_run")])
+model.add_deployment(str(deployment_urn))                            # [verified]
+client.entities.upsert(model)
 
-# 2) Training run (DataProcessInstance, MLFLOW_TRAINING_RUN subtype)  [verified]
-client.create_training_run(
-    run_id="credit_risk_v3_run",
-    training_run_properties=MLTrainingRunPropertiesClass(
-        trainingMetrics=[MLMetricClass(name="auc", value="0.88")],
-        hyperParams=[MLHyperParamClass(name="max_depth", value="6")],
-    ),
-)
-model.add_training_job(DataProcessInstanceUrn("credit_risk_v3_run"))  # [verified]
-client._emit_mcps(model.as_mcps())
-
-# 3) Wire training run to REAL datapack tables (this is what makes lineage meaningful) [verified]
-train_tbl = DatasetUrn(platform="snowflake", name="ecommerce.public.customer_features")
-client.add_input_datasets_to_run(run_id="credit_risk_v3_run", datasets=[str(train_tbl)])
+# 2) Training run. client.create_training_run does not exist. Emit a
+#    DataProcessInstance carrying mlTrainingRunProperties + dataProcessInstanceInput.
+graph.emit_mcps([
+    MetadataChangeProposalWrapper(entityUrn=run_urn, aspect=DataProcessInstancePropertiesClass(...)),
+    MetadataChangeProposalWrapper(entityUrn=run_urn, aspect=SubTypesClass(["MLFLOW_TRAINING_RUN"])),
+    MetadataChangeProposalWrapper(entityUrn=run_urn, aspect=MLTrainingRunPropertiesClass(...)),
+    # client.add_input_datasets_to_run does not exist either:
+    MetadataChangeProposalWrapper(entityUrn=run_urn,
+        aspect=DataProcessInstanceInputClass(inputs=[str(train_tbl)])),
+])
 ```
 
-**Features + feature table + primary key + deployment** - the tutorial ships copy-paste example scripts;
-mirror them exactly (they build the `sources` column-level upstream from feature → source columns, which is
-the backbone of Problem 1):
-- `mlfeature_create.py` - `MLFeature(... sources=[<dataset/column urns>])`  [confirm] copy verbatim
-- `mlprimarykey_create.py`, `mlfeature_table_create.py` (`mlFeatures=`, `mlPrimaryKeys=`)
-- `mlfeature_add_to_mlmodel.py` (feature → model `Consumes`), `mlmodeldeployment` create + attach to model
+**Features + feature table + primary key + deployment.** The SDK has **no entity classes** for these
+[verified]. Emit their aspects directly: `MLFeaturePropertiesClass`, `MLPrimaryKeyPropertiesClass`,
+`MLFeatureTablePropertiesClass(mlFeatures=, mlPrimaryKeys=)`, `MLModelDeploymentPropertiesClass(status=)`.
+
+> **`MLFeatureProperties.sources` is dataset-granular, not column-granular** [verified]. Its relationship
+> declares `entityTypes: [dataset]`, so a feature may point at the dataset it derives from but **not** at a
+> `schemaField`. Pointing it at a column URN creates a dangling edge. ModelGuard therefore records the exact
+> source column in the feature's `customProperties` under `modelguard.source_column`. Problem 1's traversal
+> starts from that column, not from `sources`.
+
+**Attaching features to the model:** `MLModel` exposes no `mlFeatures` API. Upsert the model first, then read
+`mlModelProperties` back, set `mlFeatures`, and re-emit. Order matters: an upsert replaces the whole aspect.
 
 > **Column-level lineage is Dataset→Dataset only** [verified]. Feature→dataset lineage is expressed via the ML
 > `sources` aspect, not `add_lineage`. So model-boundary traversal mixes: `add_lineage` (dataset↔dataset,
@@ -224,20 +231,24 @@ client.lineage.add_lineage(
 
 ```python
 # INCIDENT (OSS-native, via GraphQL; Python SDK "coming soon") [verified]
+# The resourceUrn must be a dataset/schemaField/chart/dashboard/dataFlow/dataJob.
+# An mlModel URN here returns a 500 (see §6.1 and D-017).
 from datahub.ingestion.graph.client import DataHubGraph, DatahubClientConfig
-graph = DataHubGraph(DatahubClientConfig(server="http://localhost:8080", token=TOKEN))
+graph = DataHubGraph(DatahubClientConfig(server=GMS_URL, token=TOKEN))
 graph.execute_graphql("""
 mutation { raiseIncident(input:{
-  resourceUrn:"urn:li:mlModel:(urn:li:dataPlatform:mlflow,credit_risk_v3,PROD)",
-  type: OPERATIONAL, title:"ModelGuard smoke test",
+  resourceUrn:"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.customer_features,PROD),prior_default_flag)",
+  type: FIELD, title:"ModelGuard smoke test",
   description:"If you can read this in the UI, write-back works." }) }
 """)   # returns the new incident URN
 ```
-```bash
-# STRUCTURED PROPERTY definition (CLI) [verified] - then assign via GraphQL/OpenAPI (§6.2)
-datahub properties upsert -f modelguard/writeback/props/modelguard_props.yaml
-```
-Open `http://localhost:9002`, find the model → **the incident + property must be visible.** That's the gate.
+Structured properties are emitted as aspects, not via the CLI (§6.2): the definition on the property URN, the
+assignment on the mlModel.
+
+**The gate is executable, not a UI inspection:** `pytest -m integration` seeds the graph, reads column-level
+lineage from the leaking feature up to the label's table, writes the incident and the properties, then reruns
+to prove nothing duplicates. Status: **PASSED 2026-07-10** (D-019), so the MigrationCopilot pivot is off.
+The UI at `http://localhost:9002` shows the same result for the demo.
 
 ---
 
@@ -270,8 +281,10 @@ Detection triggers (any of, deterministic):
 
 ### 4.2 Write-back (`writeback/incidents.py`, `labels.py`, `assertions.py`, `documents.py`)
 
-- **Incident** on each at-risk model/deployment - `raiseIncident` (`type` ∈ `OPERATIONAL, FRESHNESS,
-  VOLUME, COLUMN, SQL, DATA_SCHEMA, CUSTOM` [verified]), title/description generated by the LLM from the traversal.
+- **Incident** on the **offending upstream dataset** (not on the model, which DataHub forbids: section 6.1) -
+  `raiseIncident` (`type` in `OPERATIONAL, FRESHNESS, VOLUME, FIELD, SQL, DATA_SCHEMA, CUSTOM` [verified]),
+  title/description generated by the LLM from the traversal. Each at-risk model is marked instead with the
+  `model-at-risk` tag and its trust-score structured properties.
 - **Tag** `model-at-risk` + **glossary term** on the model (MCP `add_tags`/`add_terms` [verified], or SDK).
 - **Guarding assertion** on the offending upstream table as **open-assertions YAML** (verified format [verified]):
   ```yaml
@@ -301,22 +314,24 @@ every run. Use the `/verify` skill / drive it end-to-end before moving on.
 ### 5.1 P1 - Target-leakage detector (`detect/leakage.py`) - the most original piece
 ```python
 def leakage_findings(client, model_urn, label_source_column_urn):
-    features = model_features(client, model_urn)                 # ML Consumes edges
+    features = model_features(client, model_urn)                 # mlModelProperties.mlFeatures
     findings = []
     for feat in features:
-        # upstream COLUMN cone of each feature's source columns
-        for col in feature_source_columns(client, feat):         # via ML `sources` aspect
-            cone = client.lineage.get_lineage(                    # [verified] column-level, upstream
-                source_urn=col.dataset, source_column=col.field,
-                direction="upstream", max_hops=6)
-            if intersects(cone, label_source_column_urn):
-                findings.append((feat, col, "derives from label source"))
+        # The feature's exact source column comes from customProperties, NOT from
+        # `sources`, which is dataset-granular (see section 3.1).
+        col = feature_source_column(client, feat)                # modelguard.source_column
+        cone = client.lineage.get_lineage(                        # [verified] column-level, upstream
+            source_urn=col.dataset, source_column=col.field,
+            direction="upstream", max_hops=6)
+        if intersects(cone, label_source_column_urn):
+            findings.append((feat, col, "derives from label source"))
     return findings
 ```
 - **Label column** is declared once (glossary term `label` or a structured property on the training dataset).
 - Also flag **temporal leakage**: feature derived from a column produced *after* the prediction timestamp.
-- **Write-back:** `leakage-risk` term on the feature + structured property on the model + a `COLUMN` incident
-  quoting the exact `feature → … → label` column path. Deterministic, no training required.
+- **Write-back:** `leakage-risk` term on the feature + structured property on the model + a `FIELD` incident
+  **on the leaking `schemaField`** (not on the model: see section 6.1) quoting the exact
+  `feature -> ... -> label` column path. Deterministic, no training required.
 - **Cite** Kaufman et al. 2012 in the report prose.
 
 ### 5.2 P3 - Training/serving schema drift (`detect/schema_drift.py`)
@@ -351,9 +366,24 @@ score ∈ [0,100] → band: healthy / watch / at-risk
 ```graphql
 mutation { raiseIncident(input:{ resourceUrn:"<urn>", type: FRESHNESS,
   title:"...", description:"..." }) }                       # → returns new incident urn
-mutation { updateIncidentStatus(input:{ state: RESOLVED, message:"..." }) }  # → true
+mutation { updateIncidentStatus(urn:"<incident urn>", input:{ state: RESOLVED, message:"..." }) }  # → true
 ```
-Types: `OPERATIONAL, FRESHNESS, VOLUME, COLUMN, SQL, DATA_SCHEMA, CUSTOM`.
+Types (from `IncidentTypeClass` in the installed model [verified]):
+`OPERATIONAL, FRESHNESS, VOLUME, FIELD, SQL, DATA_SCHEMA, CUSTOM`.
+There is **no `COLUMN` type**; the column-scoped one is **`FIELD`** (D-012).
+
+> **An incident cannot be raised on an `mlModel`** [verified]. `incidentInfo.entities` declares
+> `entityTypes: [dataset, chart, dashboard, dataFlow, dataJob, schemaField]`; GMS answers a 500 for anything
+> else. Findings therefore attach to the **dataset or column** they concern (a leakage finding goes on the
+> leaking `schemaField`), and **model-level risk is carried by structured properties** on the mlModel, which
+> it does accept. See D-017. `graph.exists()` is also always False for a `schemaField`: resolve a column
+> through its parent dataset's `schemaMetadata` instead.
+
+**Dedup:** an incident is keyed by `(resourceUrn, type, title)` over the resource's *active* incidents, found
+by traversing the **`IncidentOn` relationship inbound** (`graph.get_related_entities`). Do **not** read the
+resource's `incidentsSummary` aspect: a Quickstart GMS never writes it, so a summary-based dedup finds nothing
+and duplicates every finding on every scan (D-018). `run_id` is provenance in the description, not part of the
+key: it changes every run, so including it would duplicate every finding too (D-013).
 
 ### 6.2 Structured properties [verified]
 Define (YAML → `datahub properties upsert -f props.yaml`):
@@ -473,8 +503,24 @@ well-documented standalone skill repo linked from the README **still counts** as
 The MCP server (v0.6.0) has **no** assertion/incident/lineage-write tools. A thin `raise_incident` /
 `create_assertion` mutation tool (annotated `readOnlyHint: false`, gated by `TOOLS_IS_MUTATION_ENABLED`) is a
 small, on-roadmap PR to `acryldata/mcp-server-datahub` - or file it as an **RFC** for a first-class "ML
-incident" workflow. Also complete the **Most Valuable Feedback survey** ($50 pool + goodwill) with the real
-bugs/gaps found (e.g., "MCP lacks incident/assertion mutations", "no ML skill", Python SDK incident wrapper).
+incident" workflow.
+
+### 8.3 Most Valuable Feedback survey - real bugs found while building [verified]
+Concrete, reproducible findings from Phase 0, worth far more than generic praise:
+1. **`datahub datapack --help` crashes** (acryl-datahub 1.6.0.13): `FileNotFoundError` for
+   `datahub/cli/datapack/resources/DATAPACK_AGENT_CONTEXT.md`. The `resources/` directory ships with only
+   `__init__.py`; the markdown files are missing from the wheel. `datapack load` itself works.
+2. **`incidentsSummary` is never written** by GMS v1.5.0.6. After `raiseIncident` succeeds, neither the
+   dataset nor the schemaField carries the aspect, so the documented way to list a resource's incidents
+   returns nothing. Workaround: traverse the `IncidentOn` relationship.
+3. **Searching incidents by their `entities` field 500s**: "The field at path
+   `/scrollAcrossEntities/searchResults[0]/entity` was declared as a non null type, but the code involved in
+   retrieving data has wrongly returned a null value."
+4. **Incidents cannot attach to `mlModel`**, which makes the ML-incident story impossible today. This is the
+   RFC to file: ML entities are first-class in the graph but second-class in the incident model.
+5. **No Python SDK wrapper for incidents**, and **no SDK entity classes** for MLFeature, MLPrimaryKey,
+   MLFeatureTable, or MLModelDeployment.
+6. **`graph.exists()` returns False for every `schemaField`**, with no documented alternative.
 
 ---
 
@@ -515,11 +561,15 @@ detects the leakage feature, computes the trust score. (1:40) **cut to the DataH
 
 ## 11. Risk register & fallback
 
+> **Week 1 gate PASSED on 2026-07-10** (D-019). The first two risks below are **retired**. The pivot to
+> MigrationCopilot is off the table.
+
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| **ML-graph seeding harder than expected** | Med | Week-1 kill-criterion; if unmet by end of W1 → **pivot to MigrationCopilot** (Category 2): PR-ready dbt/DAG artifacts from real schemas + column-level lineage, same write-back philosophy, **no ML seeding**. |
-| `get_lineage` won't cross into ML entities | Med | Fall back to GraphQL `scrollAcrossLineage` / `relationships` to traverse feature/model edges. Test in W1. |
-| Exact SDK/agent import symbols differ | Med | [confirm]-flagged everywhere; `pip show` + introspect; pin versions in `requirements.txt`. |
+| ~~**ML-graph seeding harder than expected**~~ | RETIRED | Seeder works and is idempotent; gate passed. |
+| ~~`get_lineage` won't cross into ML entities~~ | RETIRED | Column lineage is dataset-to-dataset and resolves; ML entities are reached through `mlModelProperties` and the feature `sources` aspect plus the `modelguard.source_column` bridge. |
+| **Incidents cannot attach to mlModel** | REALIZED | Findings go on the dataset/schemaField; model risk goes on structured properties (D-017). Reframed as an OSS RFC (section 8.3). |
+| Exact SDK/agent import symbols differ | Med | [confirm]-flagged everywhere; `pip show` + introspect; pin versions in `pyproject.toml`. |
 | Actions/Kafka setup eats time | Med | Ship `scan` first; `watch` is optional polish with a polling fallback. |
 | Cloud-only features assumed OSS | Low | Smart assertions + monitoring UI are Cloud - disclosed; we provide detection logic + open-assertions YAML. |
 | Over-scoping 4 problems | Med | P2 loop first and bulletproof; add P1/P3/P4 only as each hardens. A reliable single loop that mutates the graph beats a flaky swarm. |
@@ -548,40 +598,66 @@ detects the leakage feature, computes the trust score. (1:40) **cut to the DataH
 
 ## 13. API cheat-sheet (verified signatures, one place)
 
+All signatures below were introspected from **acryl-datahub 1.6.0.13** on 2026-07-09, not copied from docs.
+
 ```python
 # --- client ---
-DataHubClient.from_env()                                             # env: DATAHUB_GMS_URL/_TOKEN     [verified]
-DataHubGraph(DatahubClientConfig(server=..., token=...))            # for execute_graphql             [verified]
+DataHubClient.from_env()                                            # env: DATAHUB_GMS_URL/_TOKEN     [verified]
+DataHubClient(graph=DataHubGraph(...))                              # share one session               [verified]
+DataHubGraph(DatahubClientConfig(server=..., token=...))            # execute_graphql / get_aspect    [verified]
+graph.execute_graphql(query, variables=) · graph.exists(urn)                                          [verified]
+graph.get_aspect(urn, AspectClass) · graph.emit_mcp(s)([MCPW(...)])                                   [verified]
 
-# --- lineage (Dataset↔Dataset; column-level here) ---
-client.lineage.add_lineage(upstream=, downstream=,
+# --- entities (idempotent) ---
+client.entities.upsert(entity) / .create / .get / .update / .delete                                   [verified]
+# NOTE: client._emit_mcps does NOT exist.
+
+# --- lineage (Dataset to Dataset; column-level here) ---
+client.lineage.add_lineage(upstream=, downstream=,                  # keyword-only
     column_lineage={"dst_col":["src_col"]} | True | "auto_strict",
     transformation_text=...)                                        # [verified]
 client.lineage.get_lineage(source_urn=, direction="upstream|downstream",
-    max_hops=, source_column=, filter=FilterDsl...)                 # [verified]
-client.lineage.infer_lineage_from_sql(query_text=, platform=,
-    default_db=, default_schema=)                                   # [verified]
+    max_hops=, source_column=, filter=, count=) -> [LineageResult]  # [verified]
+#   LineageResult(urn, type, hops, direction, platform, name, description, paths)
+client.lineage.infer_lineage_from_sql(query_text=, platform=, default_db=, default_schema=)  # [verified]
 
-# --- ML entities ---
-MLModelGroup(id=, platform=, name=, description=); .as_mcps()        # [verified]
-MLModel(id=, platform=, name=, version=, aliases=, hyper_params=, training_metrics=)
-    .add_group(urn); .add_training_job(DataProcessInstanceUrn(run_id))   # [verified]
-client.create_training_run(run_id=, training_run_properties=MLTrainingRunPropertiesClass(...))  # [verified]
-client.add_input_datasets_to_run(run_id=, datasets=[...])           # [verified]
-client.add_output_datasets_to_run(run_id=, datasets=[...])          # [verified]
-# MLFeature(sources=[...]) / MLFeatureTable(mlFeatures=,mlPrimaryKeys=) / MLModelDeployment
-#   → copy mlfeature_create.py, mlfeature_table_create.py, mlfeature_add_to_mlmodel.py  [confirm]
+# --- ML entities: only MLModel and MLModelGroup have SDK classes ---
+MLModelGroup(id=, platform=, name=, description=)                                                     [verified]
+MLModel(id=, platform=, name=, version=, aliases=, hyper_params=, training_metrics=,
+        model_group=, training_jobs=); .add_deployment(urn); .add_training_job(urn)                   [verified]
+#   NO MLModel.add_group           -> use the model_group constructor argument
+#   NO client.create_training_run  -> emit DataProcessInstance + MLTrainingRunPropertiesClass
+#   NO client.add_input_datasets_to_run -> emit DataProcessInstanceInputClass(inputs=[...])
+#   NO SDK class for MLFeature / MLPrimaryKey / MLFeatureTable / MLModelDeployment
+#      -> emit MLFeaturePropertiesClass(sources=[DATASET urns], customProperties={...}),
+#         MLPrimaryKeyPropertiesClass(sources=), MLFeatureTablePropertiesClass(mlFeatures=,mlPrimaryKeys=),
+#         MLModelDeploymentPropertiesClass(status=DeploymentStatusClass.IN_SERVICE)
+#   MLModel has no mlFeatures API -> upsert, then read mlModelProperties back, set mlFeatures, re-emit.
+
+# --- urns (all verified) ---
+DatasetUrn(platform=, name=, env="PROD") · SchemaFieldUrn(parent=, field_path=)
+MlModelUrn(platform=, name=, env=) · MlModelGroupUrn(platform=, name=, env=)
+MlFeatureUrn(feature_namespace=, name=) · MlPrimaryKeyUrn(feature_namespace=, name=)
+MlFeatureTableUrn(platform=, name=) · MlModelDeploymentUrn(platform=, name=, env=)
+DataProcessInstanceUrn(id) · StructuredPropertyUrn(id) · DataTypeUrn(id) · EntityTypeUrn(id)
 
 # --- write-back ---
-graph.execute_graphql(RAISE_INCIDENT | UPDATE_INCIDENT_STATUS | UPSERT_STRUCTURED_PROPERTIES)  # [verified]
-# CLI:  datahub properties upsert -f props.yaml                     # define structured props     [verified]
-# CLI:  datahub datapack load {showcase-ecommerce|nyc-taxi|healthcare}                           # [verified]
-# CLI:  datahub timeline --urn "<urn>" --category TECHNICAL_SCHEMA  # schema history for P3       [verified]
+graph.execute_graphql(RAISE_INCIDENT | UPDATE_INCIDENT_STATUS)                                        [verified]
+#   raiseIncident resourceUrn MUST be dataset|schemaField|chart|dashboard|dataFlow|dataJob (NOT mlModel)
+graph.get_related_entities(entity_urn, ["IncidentOn"], RelationshipDirection.INCOMING)  # dedup read  [verified]
+#   from datahub.ingestion.graph.openapi import RelationshipDirection
+#   incidentsSummary is NEVER written by GMS; searching incidents by `entities` 500s. Use the relationship.
+# Structured properties: emit StructuredPropertyDefinitionClass on the property urn, then
+#   StructuredPropertiesClass on the entity. No CLI subprocess, no hand-built GraphQL needed.         [verified]
+# CLI:  datahub datapack load {showcase-ecommerce|nyc-taxi|healthcare}                                [verified]
+#       (`datahub datapack --help` crashes in 1.6.0.13: resources/*.md are not packaged. `load` works.)
+# CLI:  datahub timeline --urn "<urn>" --category TECHNICAL_SCHEMA  # schema history for P3           [verified]
 # MCP write tools (TOOLS_IS_MUTATION_ENABLED=true): add_tags, add_terms, add_owners,
-#   set_domains, add_structured_properties, update_description, save_document                     [verified]
+#   set_domains, add_structured_properties, update_description, save_document                         [verified]
 ```
 
-**Incident types:** `OPERATIONAL, FRESHNESS, VOLUME, COLUMN, SQL, DATA_SCHEMA, CUSTOM` [verified]
+**Incident types:** `OPERATIONAL, FRESHNESS, VOLUME, FIELD, SQL, DATA_SCHEMA, CUSTOM` [verified]
+(no `COLUMN`; the column-scoped type is `FIELD`)
 **MCP server:** v0.6.0 (May 18 2026); read tools `search, get_lineage, get_lineage_paths_between,
 get_dataset_queries, get_entities, list_schema_fields` [verified]
 

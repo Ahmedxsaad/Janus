@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modelguard"
+version = "0.1.0"
+description = "A data-to-model reliability agent built on DataHub"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11,<3.12"
+
+# Pins are exact. acryl-datahub's CLI emits a runtime warning on Python above
+# 3.11 ("not actively tested with yet"), so requires-python caps at 3.11 even
+# though the package classifiers advertise 3.12. See .python-version.
+dependencies = [
+    "acryl-datahub[datahub-rest]==1.6.0.13",
+    "pydantic==2.13.4",
+    "python-dotenv==1.2.2",
+    "PyYAML==6.0.3",
+    "rich==15.0.0",
+    "typer==0.26.8",
+]
+
+[project.optional-dependencies]
+# The LangGraph orchestrator and its Claude binding land in Phase 3. They are
+# declared but unpinned: the project rule is to pin at first real install, and
+# nothing has installed them yet. Pin them exactly when agent/ is implemented.
+agent = [
+    "langgraph",
+    "langchain",
+    "langchain-anthropic",
+]
+dev = [
+    "mypy==2.2.0",
+    "pre-commit==4.6.0",
+    "pytest==9.1.1",
+    "ruff==0.15.21",
+    "types-PyYAML==6.0.12.20260518",
+]
+
+[project.scripts]
+# Only commands that are implemented get an entry point. `modelguard scan` and
+# `modelguard watch` arrive with cli.py in a later phase.
+modelguard-seed = "modelguard.seed.seed_ml_graph:main"
+
+[tool.setuptools.packages.find]
+include = ["modelguard*"]
+
+[tool.setuptools.package-data]
+modelguard = ["writeback/props/*.yaml"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF", "D", "ANN", "BLE"]
+# D203/D213 conflict with D211/D212; pick the one-blank-line-before-class and
+# summary-on-first-line style. ANN401 would ban typing.Any in **kwargs.
+ignore = ["D203", "D213", "ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests document themselves through their names; docstrings on every assert
+# helper add noise without adding information.
+"tests/*" = ["D100", "D101", "D102", "D103", "D107", "ANN201", "ANN001"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+# acryl-datahub ships partial annotations; its generated schema classes are not
+# typed strictly enough to follow into.
+[[tool.mypy.overrides]]
+module = ["datahub.*"]
+follow_untyped_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: needs a live DataHub Quickstart plus the seeded ML graph",
+]
+# Unit runs stay offline and fast; integration is opt-in.
+addopts = "-m 'not integration'"

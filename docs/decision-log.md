@@ -16,6 +16,192 @@ Entry template:
 
 ---
 
+## D-019: Week 1 gate PASSED; no pivot to MigrationCopilot (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar), per the plan's kill-criterion
+- Decision: ModelGuard clears the Week 1 gate. The project continues. The
+  MigrationCopilot fallback is not triggered.
+- Evidence, against DataHub Quickstart v1.5.0.6 with acryl-datahub 1.6.0.13:
+  (a) READ: `get_lineage(source_column="prior_default_flag", direction="upstream")`
+      resolves one hop to loans_raw, the table holding the label column; the
+      model resolves to its two features, its training run, and its live
+      deployment.
+  (b) WRITE: three structured properties land on the mlModel
+      (trust_score=62.0, risk_flags=[target-leakage], run_id), and a FIELD
+      incident lands on the leaking column.
+  (c) IDEMPOTENT: the gate ran three times in three separate processes; the
+      stable-title finding still has exactly one incident, and a second seed
+      leaves every aspect byte-for-byte identical.
+- Result: 11 integration tests, 57 unit tests, ruff and mypy strict clean.
+  Phase 0 is complete. Phase 1 (blast-radius loop, scenarios.py) is unblocked.
+
+## D-018: Dedup incidents via the IncidentOn relationship (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: Read a resource's incidents by traversing the `IncidentOn`
+  relationship inbound (`graph.get_related_entities`), then filter on each
+  incident's own status. Do not read the resource's `incidentsSummary` aspect.
+- Options considered: (a) `incidentsSummary` on the resource, as the plan and
+  the aspect model imply, (b) search incidents filtered by their `entities`
+  field, (c) the `IncidentOn` relationship index.
+- Why: (a) silently returns nothing. On a Quickstart GMS the `incidentsSummary`
+  aspect is never written, not for a dataset and not for a schemaField; the
+  entity carries only its key aspect. A summary-based dedup therefore finds no
+  existing incident and duplicates every finding on every scan. This actually
+  happened: a gate run left two identical active incidents on one column.
+  (b) fails with a GraphQL non-null violation from GMS
+  ("field ... declared as a non null type, but the code ... wrongly returned").
+  (c) is populated and correct.
+- Result: Idempotency verified across three consecutive gate runs. Two GMS bugs
+  worth reporting in the Most Valuable Feedback survey: the unwritten
+  `incidentsSummary`, and the incident search non-null violation.
+
+## D-017: Incidents attach to data, not to models (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar), forced by the metadata model
+- Decision: A finding becomes an incident on the `dataset` or `schemaField` it
+  concerns. Model-level risk is expressed with structured properties on the
+  mlModel. `raise_incident` validates the target's entity type up front.
+- Options considered: (a) raise the incident on the mlModel as the plan says,
+  (b) raise it on the offending dataset or column and carry model risk as
+  structured properties, (c) create a proxy dataset per model.
+- Why: (a) is impossible. `incidentInfo.entities` declares
+  `entityTypes: [dataset, chart, dashboard, dataFlow, dataJob, schemaField]`,
+  and GMS rejects an mlModel URN with a 500 and a Java stack trace. The plan
+  assumed the model was the target throughout sections 4.2, 5.1, and 5.3.
+  (c) invents entities to work around the model rather than following it.
+  (b) is also the better design: an incident is about a broken data asset,
+  while a trust score is a property of a model. A leakage finding on
+  `customer_features.prior_default_flag` points precisely at the leaking column.
+- Result: `INCIDENT_ENTITY_TYPES` is derived from the aspect schema so it cannot
+  drift. Column targets are resolved through the parent dataset's
+  `schemaMetadata`, because `graph.exists()` is False for every schemaField;
+  that check also catches a misspelled column, which `exists` never would.
+
+## D-016: Mutation-test the suite rather than trust green checkmarks (2026-07-10)
+- Decided by: Ghassen Naouar (requested), applied by Claude
+- Decision: Before accepting a test suite, inject deliberate faults into the code
+  under test and confirm the suite goes red. Faults tried: feature sources made
+  column-granular, the source_column bridge dropped, incident dedup made
+  title-blind, the property merge made destructive, and the GMS URL given a
+  silent fallback.
+- Options considered: (a) trust that a passing suite implies coverage, (b) add a
+  mutation-testing dependency such as mutmut, (c) hand-inject a fault per
+  behavior the tests claim to protect.
+- Why: (a) is exactly what failed here. Four of five injected faults were caught,
+  but "incident dedup ignores the title" passed the whole suite: the only
+  distinct-finding test varied the incident type, so a type-only dedup satisfied
+  it. That is the bug that would silently swallow a second leakage finding on
+  one model. (b) is worth doing later; (c) costs minutes and found the gap now.
+- Result: Added a same-type, different-title dedup test. The mutant now dies.
+  The integration test test_seeding_twice_converges was also rewritten: it
+  compared a SeedResult built from constants, so it passed even if the seeder
+  wrote nothing. It now diffs real aspects (mlFeatures, upstreams, schema
+  fields, fine-grained edges) before and after a second seed.
+
+## D-015: No default values for environment configuration (2026-07-10)
+- Decided by: Ghassen Naouar
+- Decision: client.py applies no fallback for any environment variable.
+  DATAHUB_GMS_URL is required and raises DataHubConnectionError when unset or
+  blank. The previous DEFAULT_GMS_URL = "http://localhost:8080" was removed. A
+  unit test asserts no module-level string in client.py starts with http.
+- Options considered: (a) keep the Quickstart URL as a convenience default,
+  (b) require every variable, documenting values only in .env.example.
+- Why: A hardcoded fallback is a machine-specific value living in tracked code,
+  which the repo rules forbid. It also converts a missing .env from a loud
+  failure into a silent connection to whatever happens to listen on that port.
+- Result: .env is now genuinely required. .env.example documents each variable,
+  including how to mint a DATAHUB_GMS_TOKEN and the fact that the OSS Quickstart
+  runs with authentication disabled so the token may be left blank.
+
+## D-014: Seed the warehouse tables instead of depending on a datapack (2026-07-09)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: seed_ml_graph.py creates loans_raw and customer_features with
+  explicit schemas, using the same URNs the showcase-ecommerce datapack would
+  use, rather than assuming the datapack is loaded.
+- Options considered: (a) require `datahub datapack load showcase-ecommerce`
+  first and seed only ML entities on top, (b) create both warehouse tables
+  ourselves at the datapack's URNs, (c) invent our own URNs.
+- Why: Column-level lineage needs schemaField URNs, which need a schema. Option
+  (b) is a no-op enrichment when the datapack is present and still works when it
+  is not, so the gate and the judge's path never depend on datapack contents we
+  cannot verify offline. Option (c) would forfeit the "lineage into a real
+  warehouse table" story.
+- Result: The seeder is self-contained. Loading the datapack remains optional
+  realism for the demo, not a prerequisite for the gate.
+
+## D-013: Dedup incidents on (resource, type, title), not on run_id (2026-07-09)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: The incident dedup key is (resourceUrn, incident_type, title) over
+  the resource's active incidents. run_id is stamped into the description as
+  provenance and is deliberately excluded from the key.
+- Options considered: (a) the literal key from writeback/CLAUDE.md rule 2,
+  (resourceUrn, finding_type, run_id), (b) drop run_id from the key,
+  (c) emit incidents on a deterministic URN derived from a hash of the finding.
+- Why: run_id changes every run by definition, so (a) makes every scan raise a
+  fresh duplicate, contradicting the plan's own idempotency test in section 9
+  ("run scan twice, exactly one incident per finding"). (c) is more strictly
+  idempotent but bypasses the raiseIncident mutation the plan and the demo rely
+  on. (b) keeps the mutation and satisfies the test.
+- Result: Implemented and unit-tested. writeback/CLAUDE.md rule 2 corrected.
+
+## D-012: Correct the plan's verified SDK symbols against 1.6.0.13 (2026-07-09)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: Trust the installed package over the plan. Four symbols the plan
+  marked [verified] are wrong for acryl-datahub 1.6.0.13:
+  MLModel.add_group (use the model_group constructor argument),
+  client.create_training_run and client.add_input_datasets_to_run (do not exist;
+  emit a DataProcessInstance with mlTrainingRunProperties and
+  dataProcessInstanceInput), client._emit_mcps (use client.entities.upsert or
+  graph.emit_mcps). There are no SDK entity classes for MLFeature,
+  MLPrimaryKey, MLFeatureTable, or MLModelDeployment; those are aspect MCPs.
+  The incident type COLUMN does not exist; the column-scoped type is FIELD.
+  MLFeatureProperties.sources declares entityTypes [dataset], so a feature
+  cannot point at a column; the exact column is carried in customProperties.
+- Options considered: none. Root CLAUDE.md rule 7 already mandates verifying
+  every SDK symbol against the installed package.
+- Why: Building on the plan's snippets would have failed at the first write, and
+  the leakage detector's whole design assumed column-granular feature sources.
+- Result: 02-implementation-plan.md sections 3, 5.1, 6.1, and 13 corrected, and
+  writeback/CLAUDE.md rule 4 corrected. Code cites the verified signatures.
+
+## D-011: Pin Python to 3.11 (2026-07-09)
+- Decided by: Claude (for Ghassen Naouar), per improvement P1-3
+- Decision: .python-version pins 3.11; pyproject requires >=3.11,<3.12.
+- Options considered: (a) 3.12, which the acryl-datahub classifiers advertise,
+  (b) 3.11, which the acryl-datahub CLI asks for at runtime, (c) leave unpinned.
+- Why: On 3.12 the CLI prints "Python versions above 3.11 are not actively
+  tested with yet. Please use Python 3.11 for now." A runtime warning from the
+  package itself outranks its own classifier metadata.
+- Result: Warning gone on 3.11.12. This is the drift P1-3 predicted.
+
+## D-010: Adopt improvements P1-2, P1-3, P1-4; defer P2-3, P2-4, P2-5 (2026-07-09)
+- Decided by: Ghassen Naouar
+- Decision: Adopt pyproject.toml (P1-2), the Python pin (P1-3), and
+  ruff/mypy/pre-commit (P1-4) before Phase 0 code lands. The shared pydantic
+  models (P2-3), the central config module (P2-4), and structured logging
+  (P2-5) stay open proposals. P1-1 (repo rename) and P2-1 (CI) not yet decided.
+- Options considered: (a) Phase 0 exactly as the plan writes it, ignoring
+  04-improvements, (b) foundation plus Phase 0, (c) foundation only.
+- Why: 04-improvements argues migrating before any code lands is free and later
+  is churn. The deferred three describe contracts between layers that do not
+  exist yet: Phase 0 produces no detector findings, no tunable thresholds, and
+  no multi-node run to correlate.
+- Result: Foundation and Phase 0 landed together on feat/phase-0-de-risker.
+  Revisit P2-3 and P2-4 when the first detector lands in Phase 1.
+
+## D-009: Make the Week 1 gate an executable integration test (2026-07-09)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: The kill-criterion lives in tests/integration/test_week1_gate.py,
+  run with `pytest -m integration`, rather than staying prose in the plan.
+- Options considered: (a) leave it prose and verify by eye in the UI, (b) a
+  standalone gate script printing PASS or FAIL (improvement P2-2), (c) a marked
+  pytest module.
+- Why: The pivot decision must not rest on wishful thinking. (c) reuses the
+  existing runner and the skip-when-unreachable convention from tests/CLAUDE.md
+  rule 2, and doubles as the judge's smoke test, so it beats a second bespoke
+  entry point.
+- Result: Nine integration tests cover both halves of the gate plus idempotency.
+  scenarios.py deliberately not written: the Week 1 schedule does not call for
+  it and no detector consumes it yet, so it would be dead code.
+
 ## D-008: Move hackathon specs into docs/hackathon-specs/ (2026-07-08)
 - Decided by: Ahmed Saad
 - Decision: The eight captured Devpost spec files (01 to 08) plus their README

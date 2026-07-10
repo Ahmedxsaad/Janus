@@ -1,0 +1,40 @@
+# Enforces the clean-code and formatting rules from CLAUDE.md with tools rather
+# than review comments. Install once per clone: pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.21
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.2.0
+    hooks:
+      - id: mypy
+        files: ^modelguard/
+        additional_dependencies:
+          - pydantic==2.13.4
+          - types-PyYAML==6.0.12.20260518
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      # .env holds tokens and must never be committed (CLAUDE.md git rules).
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      # The formatting rules ban em dashes and emojis everywhere, including in
+      # code, comments, docs, and commit messages. Nothing else enforces this.
+      - id: no-em-dash
+        name: no em dashes
+        entry: '—'
+        language: pygrep
+        types: [text]

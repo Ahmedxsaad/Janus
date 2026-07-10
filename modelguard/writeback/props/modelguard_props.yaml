@@ -1,0 +1,35 @@
+# Declarations of every structured property ModelGuard writes onto the graph.
+# This file is the single source of truth: writeback/properties.py loads it and
+# emits the definitions. Keep qualified names prefixed with "modelguard." so a
+# reader can tell at a glance which properties this agent owns.
+#
+# value_type is a DataHub built-in data type name (number, string, date, urn).
+# entity_types are DataHub entity type names as they appear in URNs (mlModel).
+version: 1
+properties:
+  - qualified_name: modelguard.trust_score
+    display_name: ModelGuard Trust Score
+    description: >-
+      Model reliability score from 0 to 100, derived from upstream assertion
+      failures, target leakage, input schema drift, freshness lag, and ownership.
+    value_type: number
+    cardinality: SINGLE
+    entity_types: [mlModel]
+
+  - qualified_name: modelguard.risk_flags
+    display_name: ModelGuard Risk Flags
+    description: >-
+      The named risks that reduced the trust score, one value per finding type.
+    value_type: string
+    cardinality: MULTIPLE
+    entity_types: [mlModel]
+
+  - qualified_name: modelguard.run_id
+    display_name: ModelGuard Run ID
+    description: >-
+      Identifier of the ModelGuard run that last wrote to this entity. Every
+      write in a run carries the same value, which makes the audit trail
+      reconstructable and the writes idempotent.
+    value_type: string
+    cardinality: SINGLE
+    entity_types: [mlModel]

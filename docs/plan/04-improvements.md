@@ -5,6 +5,13 @@ a proposal, not a decision: pick the ones you want, then log the choice in
 docs/decision-log.md. Priority: P1 = do before Week 1 coding starts,
 P2 = do during Weeks 1-2, P3 = nice to have.
 
+Status as of 2026-07-09 (D-010):
+- Adopted and done: P1-2 (pyproject), P1-3 (Python pin, landed as 3.11 not 3.12),
+  P1-4 (ruff, mypy, pre-commit).
+- Adopted in spirit: P2-2, as a marked integration test rather than a separate
+  script (D-009).
+- Still open: P1-1, P2-1, P2-3, P2-4, P2-5, P3-1 through P3-4.
+
 ## P1-1. Rename the repository from DataHub to modelguard
 The repo is named DataHub but the project is ModelGuard. Judges land on the
 repo page first; a repo named after the sponsor's product is confusing and
