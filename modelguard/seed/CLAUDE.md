@@ -23,8 +23,13 @@ realism, not a prerequisite (D-014).
 4. graph_spec.py is the single source of truth for every seeded URN and value.
    Nothing hardcodes a URN string; tests assert the spec is self-consistent.
 5. scenarios.py plants failures for the demo and benchmark; keep each scenario
-   labeled, reversible, and shared with benchmarks/inject.py. Not written yet:
-   it lands in Phase 1 with the blast-radius detector that consumes it.
+   labeled, reversible, and shared with benchmarks/inject.py. Every scenario
+   stamps modelguard.scenario into the aspect's customProperties so a reader can
+   tell a planted failure from a real one.
+6. Scenarios take the current instant as an argument so tests can fix it.
+   The stale-source scenario backdates the operation aspect's
+   lastUpdatedTimestamp; because operation is a timeseries aspect, reverting
+   emits a newer event announcing a refresh rather than deleting anything.
 
 ## Change Log
 
@@ -32,3 +37,4 @@ realism, not a prerequisite (D-014).
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: seeding rules and Week 1 gate context |
 | 2026-07-09 | Claude (for Ghassen Naouar) | Record the missing SDK ML entity classes, the dataset-granular sources aspect, and graph_spec as source of truth |
+| 2026-07-10 | Claude (for Ghassen Naouar) | scenarios.py lands: labeled, reversible, injectable clock |
