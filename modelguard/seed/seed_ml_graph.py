@@ -352,7 +352,8 @@ def main() -> None:
 
     from modelguard.client import DataHubConnectionError, connect
 
-    console = Console()
+    # soft_wrap: URNs are long and must stay on one line to be copy-pasteable.
+    console = Console(soft_wrap=True)
     try:
         # A token is not required: the OSS Quickstart ships with metadata service
         # authentication disabled and accepts unauthenticated writes. Demanding one
