@@ -28,12 +28,13 @@ rendered as a quoted narrative section, never as a fact table.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import singledispatch
 
 from datahub.metadata.urns import MlModelUrn
 from datahub.sdk.document import Document
 
 from modelguard.client import DataHubConnection
-from modelguard.models import Finding, ModelAtRisk
+from modelguard.models import Finding, FreshnessFinding, LeakageFinding, ModelAtRisk
 
 #: Renders under the document's title in the UI, and groups ModelGuard's reports.
 REPORT_SUBTYPE = "Model Impact Report"
@@ -81,31 +82,37 @@ def _model_section(model: ModelAtRisk) -> str:
     )
 
 
-def render_impact_report(finding: Finding, narrative: str, run_id: str) -> str:
-    """Render the Model Impact Report as markdown.
+@singledispatch
+def report_subject(finding: Finding) -> str:
+    """Return the thing the report is about, used in its title and heading."""
+    raise NotImplementedError(f"no report subject for {type(finding).__name__}")
 
-    Args:
-        finding: The deterministic finding. Every number below comes from here.
-        narrative: Prose explaining the finding. May be LLM-written or templated;
-            it is quoted as narrative and never used as a source of fact.
-        run_id: The scan that produced the report.
 
-    Returns:
-        The markdown body.
-    """
+@report_subject.register
+def _freshness_subject(finding: FreshnessFinding) -> str:
+    return finding.blast_radius.failing_table_name
+
+
+@report_subject.register
+def _leakage_subject(finding: LeakageFinding) -> str:
+    return finding.model.name
+
+
+@singledispatch
+def _report_body(finding: Finding) -> str:
+    """Return the sections that only this kind of finding can fill in."""
+    raise NotImplementedError(f"no report body for {type(finding).__name__}")
+
+
+@_report_body.register
+def _freshness_body(finding: FreshnessFinding) -> str:
     radius = finding.blast_radius
     signal = radius.signal
-
     models = "\n".join(_model_section(model) for model in radius.models) or (
         "No model consumes this table within the configured hop cap.\n"
     )
 
-    return f"""# Model Impact Report: {radius.failing_table_name}
-
-**Severity: {finding.severity}** | Models at risk: {len(radius.models)} \
-(live: {len(radius.live_models)}) | Run: `{run_id}`
-
-## What happened
+    return f"""## What happened
 
 `{radius.failing_table_name}` last changed {signal.lag_hours:.1f} hours ago, \
 against a freshness SLA of {signal.sla_hours:.1f} hours. Freshness was measured \
@@ -114,7 +121,7 @@ table last changed.
 
 ## Assessment
 
-{narrative}
+{{narrative}}
 
 ## Blast radius
 
@@ -142,6 +149,107 @@ DataHub Cloud features; the check logic above is ModelGuard's own.
 """
 
 
+@_report_body.register
+def _leakage_body(finding: LeakageFinding) -> str:
+    leak = finding.leak
+    model = finding.model
+    serving = (
+        f"**Live**, serving through {len(model.live_deployments)} deployment(s)."
+        if model.is_live
+        else "Not currently serving."
+    )
+    owner = "Owned." if model.has_owner else "**Unowned**: nobody is on the hook to fix this."
+
+    return f"""## What happened
+
+The model **{model.name}** consumes the feature `{leak.feature_name}`. Column-level \
+lineage shows it derives from `{leak.label_dataset_name}.{leak.label_column_name}`, \
+the label the model is trained to predict.
+
+The model is learning from the answer.
+
+## The leak path
+
+```
+{leak.path_text}
+```
+
+Every edge above is a declared column-level lineage edge in DataHub. ModelGuard \
+read the lineage, not the data.
+
+## Assessment
+
+{{narrative}}
+
+## Why this matters
+
+Target leakage does not fail loudly. The model's offline metrics are inflated by \
+construction, because the feature encodes the outcome, and a held-out split \
+validates the contamination rather than catching it. In production, \
+`{leak.label_column_name}` is not known at the moment a prediction is made, so the \
+accuracy reported at review time was never real.
+
+Kaufman, Rosset and Perlich (KDD 2011) formalize this and prescribe exactly this \
+remedy: inspect how each feature was constructed rather than trusting a held-out \
+score.
+
+## Model at risk
+
+### {model.name}
+
+- URN: `{model.urn}`
+- Severity: **{finding.severity}**
+- Serving status: {serving}
+- Ownership: {owner}
+- Leaking feature: `{leak.feature_urn}`
+
+## What ModelGuard did
+
+1. Raised a `{finding.incident_type}` incident on the leaking column, \
+`{leak.source_column_name}`.
+2. Marked the feature with the leakage-risk glossary term.
+3. Tagged the model and recorded the risk flag as a structured property on it.
+
+## What to do
+
+Drop `{leak.feature_name}`, or rebuild it from data observable *before* the \
+outcome is known, then retrain and revalidate. Until then, treat this model's \
+reported performance as unverified.
+
+## Caveats
+
+ModelGuard proves the derivation from lineage, not from the data. If the lineage \
+is wrong, this finding is wrong: correct the lineage and rescan.
+"""
+
+
+def render_impact_report(finding: Finding, narrative: str, run_id: str) -> str:
+    """Render the Model Impact Report as markdown.
+
+    The skeleton is shared; the sections that depend on what actually went wrong
+    are dispatched per finding type. The narrative is substituted last, so prose
+    an LLM wrote can never collide with a brace in the template.
+
+    Args:
+        finding: The deterministic finding. Every number below comes from here.
+        narrative: Prose explaining the finding. May be LLM-written or templated;
+            it is quoted as narrative and never used as a source of fact.
+        run_id: The scan that produced the report.
+
+    Returns:
+        The markdown body.
+    """
+    models = finding.models_at_risk
+    live = sum(1 for model in models if model.is_live)
+
+    header = (
+        f"# Model Impact Report: {report_subject(finding)}\n\n"
+        f"**Severity: {finding.severity}** | Models at risk: {len(models)} "
+        f"(live: {live}) | Run: `{run_id}`\n\n"
+    )
+    return header + _report_body(finding).replace("{narrative}", narrative)
+
+
 def publish_impact_report(
     conn: DataHubConnection,
     *,
@@ -164,7 +272,7 @@ def publish_impact_report(
         The document URN and the markdown that was published.
     """
     markdown = render_impact_report(finding, narrative, run_id)
-    title = f"ModelGuard impact report: {finding.blast_radius.failing_table_name}"
+    title = f"ModelGuard impact report: {report_subject(finding)}"
 
     document = Document.create_document(
         id=_document_id(model_urn),

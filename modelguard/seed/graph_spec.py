@@ -46,6 +46,8 @@ from datahub.metadata.urns import (
     SchemaFieldUrn,
 )
 
+from modelguard.config import ScanConfig
+
 WAREHOUSE_PLATFORM = "snowflake"
 ML_PLATFORM = "mlflow"
 
@@ -68,6 +70,19 @@ LABEL_SOURCE_COLUMN = "default_status"
 
 #: The feature that (deliberately) derives from the label source column.
 LEAKAGE_FEATURE = "prior_default_flag"
+
+#: The glossary term that declares a column to be a label. Owned by
+#: modelguard.config, because the *detector* is what gives it meaning and
+#: production code may never import this package. The seeder attaches the very
+#: term the detector goes looking for, so the two cannot drift apart.
+LABEL_TERM_URN = ScanConfig().label_term_urn
+
+LABEL_TERM_NAME = "label"
+LABEL_TERM_DEFINITION = (
+    "The ground truth a model is trained to predict, known only after the fact. "
+    "Any feature whose upstream column lineage reaches a column bearing this term "
+    "is target leakage: the model is being trained on the answer."
+)
 
 
 @dataclass(frozen=True)

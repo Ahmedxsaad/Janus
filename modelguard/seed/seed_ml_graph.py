@@ -56,6 +56,7 @@ from datahub.sdk.mlmodelgroup import MLModelGroup
 
 from modelguard.client import DataHubConnection
 from modelguard.seed import graph_spec as spec
+from modelguard.writeback.terms import add_term, ensure_term
 
 #: A fixed instant (2026-07-01T00:00:00Z) stamped on every seeded entity. Using
 #: wall-clock time here would make each run emit a different aspect, so reruns
@@ -81,6 +82,8 @@ class SeedResult:
 
     source_table: str
     feature_table_dataset: str
+    label_column: str
+    """The column declared to be the label. What the leakage detector hunts for."""
     features: tuple[str, ...]
     feature_table: str
     training_run: str
@@ -93,6 +96,7 @@ class SeedResult:
         lines = [
             f"source table      {self.source_table}",
             f"feature table     {self.feature_table_dataset}",
+            f"label column      {self.label_column}",
         ]
         lines += [f"ml feature        {urn}" for urn in self.features]
         lines += [
@@ -160,6 +164,33 @@ def seed_column_lineage(conn: DataHubConnection) -> None:
         downstream=spec.feature_table_dataset_urn(),
         column_lineage=spec.COLUMN_LINEAGE,
     )
+
+
+def seed_label_declaration(conn: DataHubConnection) -> str:
+    """Declare which column is the label, the way a data team would.
+
+    The leakage detector does not take the label as a parameter. It reads it from
+    the graph, as a glossary term on a column, because that is where the knowledge
+    actually belongs: the label is a property of the data, not of a scan. A team
+    that tags its own label column in the DataHub UI gets leakage detection with no
+    ModelGuard configuration at all.
+
+    The seeder writes the term onto the schemaField. The detector also reads
+    ``editableSchemaMetadata``, which is what the UI writes, so both routes count.
+
+    Returns:
+        The URN of the column now declared to be the label.
+    """
+    ensure_term(
+        conn,
+        spec.LABEL_TERM_URN,
+        spec.LABEL_TERM_NAME,
+        spec.LABEL_TERM_DEFINITION,
+    )
+
+    column_urn = str(spec.label_column_urn())
+    add_term(conn, column_urn, spec.LABEL_TERM_URN)
+    return column_urn
 
 
 def seed_features(conn: DataHubConnection) -> tuple[str, ...]:
@@ -329,6 +360,7 @@ def seed_ml_graph(conn: DataHubConnection) -> SeedResult:
     """
     seed_warehouse_tables(conn)
     seed_column_lineage(conn)
+    label_column = seed_label_declaration(conn)
     feature_urns = seed_features(conn)
     training_run = seed_training_run(conn)
     deployment = seed_deployment(conn)
@@ -337,6 +369,7 @@ def seed_ml_graph(conn: DataHubConnection) -> SeedResult:
     return SeedResult(
         source_table=str(spec.source_table_urn()),
         feature_table_dataset=str(spec.feature_table_dataset_urn()),
+        label_column=label_column,
         features=feature_urns,
         feature_table=str(spec.feature_table_urn()),
         training_run=training_run,
