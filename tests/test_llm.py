@@ -6,6 +6,7 @@ from pydantic import SecretStr
 from modelguard import env as env_module
 from modelguard.env import ConfigError
 from modelguard.llm import (
+    _PROVIDERS,
     ENV_LLM_API_KEY,
     ENV_LLM_MODEL,
     ENV_LLM_PROVIDER,
@@ -111,7 +112,19 @@ def test_the_supported_providers_are_the_ones_we_verified():
     ],
 )
 def test_every_provider_builds_its_own_chat_model(provider: str, model: str, expected_class: str):
-    """One uniform call reaches three vendors whose field names all differ."""
+    """One uniform call reaches three vendors whose field names all differ.
+
+    Each binding is an optional extra, and pyproject tells the reader to install
+    only the one they configure. This test therefore skips the providers whose
+    package is absent rather than failing: following the project's own install
+    instructions must not produce a red suite. The module name comes from the
+    registry, so it cannot drift from the code under test.
+    """
+    pytest.importorskip(
+        _PROVIDERS[provider][0],
+        reason=f"the {provider} binding is an optional extra: pip install -e '.[{provider}]'",
+    )
+
     chat_model = build_chat_model(
         LLMConfig(provider=provider, model=model, api_key=SecretStr(SECRET))
     )
