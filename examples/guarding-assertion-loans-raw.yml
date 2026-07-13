@@ -1,0 +1,12 @@
+version: 1
+assertions:
+- entity: urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.loans_raw,PROD)
+  type: freshness
+  id_raw: modelguard.freshness.ecommerce.public.loans_raw
+  description: 'ModelGuard guarding assertion: ecommerce.public.loans_raw must change
+    at least every 6 hours. Raised after a stale load reached a live model.'
+  lookback_interval: 6 hours
+  last_modified_field: updated_at
+  schedule:
+    type: interval
+    interval: 6 hours

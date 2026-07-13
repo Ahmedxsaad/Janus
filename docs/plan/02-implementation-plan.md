@@ -35,7 +35,8 @@
                      └───────────────────────────────────────────────┘
 
 WRITE-BACK PRIMITIVES (all OSS): raiseIncident [verified] · structured properties [verified] · tags/terms/owners [verified]
-· knowledge documents (save_document) [verified] · guarding assertions as open-assertions YAML + entities [verified]
+· knowledge documents (sdk Document entity, NOT only MCP save_document) [verified] · guarding assertions as
+open-assertions YAML + assertionInfo entity + assertionRunEvent [verified]
 ```
 
 **Design law:** *detection is deterministic Python; the LLM does reasoning, ranking narrative, report
@@ -73,22 +74,36 @@ retired in D-010):
 ```
 acryl-datahub[datahub-rest]==1.6.0.13   # SDK + REST emitter               [verified]
 pydantic  python-dotenv  pyyaml  rich  typer   # models, env, YAML, CLI    [verified]
-# optional extra "agent" (unpinned until Phase 3 installs them):
-langgraph  langchain  langchain-anthropic      # orchestration + Claude
+# optional per-provider extras: install exactly the one you configure   [verified]
+langchain-anthropic==1.4.8  |  langchain-openai==1.3.4  |  langchain-google-genai==4.2.7
+# optional extra "agent":
+langgraph  langchain                    # Phase 3 orchestration, unpinned until installed
 datahub-agent-context                          # Agent Context Kit toolset  [confirm]
 # optional extra "dev":
 pytest  ruff  mypy  pre-commit                                             [verified]
 ```
 
-**LLM:** BYO. Default to **Claude `claude-opus-4-8`** via `langchain-anthropic` (`ANTHROPIC_API_KEY`).
-DataHub's own examples use `ChatOpenAI`, but any tool-calling model works - Claude is the strongest default.
+**LLM:** BYO, **optional**, and **provider-agnostic** (D-030). Three variables, set together or not at all:
+`MODELGUARD_LLM_PROVIDER` (`anthropic` | `openai` | `google`), `MODELGUARD_LLM_MODEL` (the provider's model id
+verbatim), `MODELGUARD_LLM_API_KEY`. `modelguard/llm.py` is the only module that may import a vendor SDK or
+name a vendor's model; nothing is hardcoded, including the default provider. With no LLM configured, `scan`
+writes deterministic template prose and everything else behaves identically: detection, severity, and the
+incident title never depend on the LLM (D-027). All three chat classes were introspected: they accept the same
+`model` / `api_key` / `temperature` / `max_tokens` keywords despite differing field names [verified].
 
-**Secrets** (`.env`, git-ignored):
+**Configuration** (`.env`, git-ignored; `.env.example` carries the identical key set). Read only through
+`modelguard/env.py`, the one module that calls `load_dotenv` or touches `os.environ`. Values that identify a
+system, an account, or a vendor have **no defaults**; thresholds do (D-029).
 ```
 DATAHUB_GMS_URL=http://localhost:8080
-DATAHUB_GMS_TOKEN=            # generate in UI: Settings → Access Tokens (needed for write ops)
-ANTHROPIC_API_KEY=
-TOOLS_IS_MUTATION_ENABLED=true   # required to expose MCP write tools
+DATAHUB_GMS_TOKEN=            # generate in UI: Settings → Access Tokens (only if auth is enabled)
+MODELGUARD_LLM_PROVIDER=      # anthropic | openai | google. All three LLM vars, or none.
+MODELGUARD_LLM_MODEL=         # the provider's model id, verbatim
+MODELGUARD_LLM_API_KEY=       # never passed as a CLI flag: argv leaks into shell history
+MODELGUARD_FRESHNESS_SLA_HOURS=   # blank -> 6, the documented default in config.py
+MODELGUARD_MAX_HOPS=              # blank -> 3
+MODELGUARD_LINEAGE_RESULT_CAP=    # blank -> 500
+TOOLS_IS_MUTATION_ENABLED=true    # required to expose MCP write tools
 ```
 
 ---
@@ -254,58 +269,103 @@ The UI at `http://localhost:9002` shows the same result for the demo.
 
 ## 4. Phase 1 - Week 2: the core loop (Problem 2, end to end)
 
+> **Phase 1 gate PASSED on 2026-07-10** (D-028). `tests/integration/test_phase1_loop.py`
+> is the executable criterion: 14 tests, green, repeatable back to back.
+
 Build ONE bulletproof path first: **detect upstream failure → blast radius → write incident + tag +
 guarding assertion → impact report.**
 
 ### 4.1 Detector - blast radius (`detect/blast_radius.py`)
 
-```python
-from datahub.sdk import DataHubClient
-from datahub.sdk.search_filters import FilterDsl as F    # [verified]
+**Lineage does cross into ML entities** [verified]. The `[confirm]` above is resolved: both
+`MLFeatureProperties.sources` (`DerivedFrom`) and `MLModelProperties.mlFeatures` (`Consumes`) declare
+`isLineage: true`, so **one** downstream call spans the whole supply chain (D-020):
 
-def models_at_risk(client, failing_table_urn):
-    """Everything downstream of a failing table that is (or feeds) a live model/deployment."""
-    dl = client.lineage.get_lineage(                       # [verified] traverse downstream
-        source_urn=failing_table_urn, direction="downstream", max_hops=5,
-        filter=F.entity_type("mlModel"),                   # [confirm] confirm ML entity_type filter names
-    )
-    # rank: live deployment > staging; more downstream fan-out = higher severity; owner presence
-    return rank_by_severity(dl)
+```
+loans_raw --(UpstreamLineage)--> customer_features   hop 1, dataset
+          --(DerivedFrom)------> mlFeature           hop 2
+          --(Consumes)---------> mlModel             hop 3
 ```
 
+```python
+results = client.lineage.get_lineage(                    # [verified]
+    source_urn=failing_table_urn, direction="downstream",
+    max_hops=3, count=500)                               # F.entity_type("mlModel") also works
+# Two gotchas, both verified against a live GMS:
+#  1. above 2 hops DataHub does a full-graph search and returns results BEYOND
+#     max_hops (a model group came back at hop 4 for a cap of 3) -> filter on r.hops
+#  2. LineageResult.type is a display string -> take the entity type from the URN
+within_cap = [r for r in results if r.hops <= max_hops]
+```
+
+**Deployments are not lineage** [verified]. `MLModelProperties.deployments` declares `DeployedTo`
+*without* `isLineage`, so read it from the aspect and check
+`MLModelDeploymentProperties.status == IN_SERVICE`. That single fact decides severity: live → CRITICAL,
+deployed but idle → HIGH, undeployed → MEDIUM. Fan-out and ownership order models *within* a band.
+
 Detection triggers (any of, deterministic):
-- **assertion result = FAIL** (read via GraphQL / assertion entity),
-- **freshness lag** > threshold (dataset `operation`/`lastModified` vs now),
-- **null-rate / volume spike** from dataset profile (`datasetProfile` aspect),
-- **planted issue** from `seed/scenarios.py` for the demo.
+- **freshness lag** > threshold. Implemented. Read from the dataset's `operation` aspect
+  (`lastUpdatedTimestamp`), which is a **timeseries** aspect: use
+  `graph.get_latest_timeseries_value(urn, OperationClass, {})`; `get_aspect` raises a TypeError (D-021).
+- **planted issue** from `seed/scenarios.py`. Implemented, reversible.
+- **assertion result = FAIL**, **null-rate / volume spike** from `datasetProfile`: later phases. The
+  assertion trigger is circular in Phase 1, since the assertion is what we write.
+
+A detector fires only on **positive evidence**: a table that never reported an `operation` is not stale,
+and a deployment with no properties aspect is not live.
 
 ### 4.2 Write-back (`writeback/incidents.py`, `labels.py`, `assertions.py`, `documents.py`)
 
 - **Incident** on the **offending upstream dataset** (not on the model, which DataHub forbids: section 6.1) -
-  `raiseIncident` (`type` in `OPERATIONAL, FRESHNESS, VOLUME, FIELD, SQL, DATA_SCHEMA, CUSTOM` [verified]),
-  title/description generated by the LLM from the traversal. Each at-risk model is marked instead with the
-  `model-at-risk` tag and its trust-score structured properties.
-- **Tag** `model-at-risk` + **glossary term** on the model (MCP `add_tags`/`add_terms` [verified], or SDK).
-- **Guarding assertion** on the offending upstream table as **open-assertions YAML** (verified format [verified]):
+  `raiseIncident` (`type` in `OPERATIONAL, FRESHNESS, VOLUME, FIELD, SQL, DATA_SCHEMA, CUSTOM` [verified]).
+  The **title is deterministic** and carries no measurement: it is part of the dedup key, so an LLM-reworded
+  title would raise a duplicate incident every scan (D-027). The **description** is a deterministic fact block
+  with the LLM's assessment appended after it. Each at-risk model is marked instead with the `model-at-risk`
+  tag and structured properties.
+- **Tag** `model-at-risk` on the model. There is **no mlModel patch builder** in `datahub.specific`
+  [verified], so tagging is read-merge-emit on `globalTags`; a blind write drops other people's tags.
+  Glossary terms are deferred to P1, where `leakage-risk` on the leaking feature is the natural term.
+- **Structured properties** on the model: `modelguard.risk_flags` and `modelguard.run_id`. **Not**
+  `trust_score`: no detector computes it yet, and writing a number nothing measured is fabrication.
+- **Guarding assertion** on the offending upstream table as **open-assertions YAML** (verified format):
   ```yaml
   version: 1
   assertions:
     - entity: urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.loans_raw,PROD)
       type: freshness
+      id_raw: modelguard.freshness.ecommerce.public.loans_raw   # stable -> stable assertion guid
       lookback_interval: "6 hours"
       last_modified_field: updated_at
       schedule: { type: interval, interval: "6 hours" }
   ```
-  Emit it as an artifact in `examples/` **and** create the assertion entity via the SDK so it appears in the
-  Quality tab. (Smart/anomaly *monitoring* is Cloud - say so; we provide the check logic ourselves.)
-- **Model Impact Report** → knowledge **document** (`save_document` [verified]) linked to the model.
+  Emit it as an artifact in `examples/` **and** create the assertion entity so it appears in the Quality tab,
+  **plus** an `assertionRunEvent` carrying the result ModelGuard actually measured on this scan (D-026). The
+  assertion's declared type is `DATASET_CHANGE` and the detector reads the `operation` aspect, so the declared
+  check and the executed check are the same check: a fresh table writes SUCCESS. Three traps, all verified:
+  - `DataHubClient.assertions` is **Cloud only** (it imports `acryl_datahub_cloud`). On OSS, parse the YAML
+    back through `AssertionsConfigSpec` and emit `assertionInfo` yourself.
+  - Never call `get_assertion_info_aspect()`: it restamps `source.created` with *now*, so the aspect never
+    converges. Call `get_assertion_info()` and set the source yourself, preserving any existing stamp (D-025).
+  - `FixedIntervalFreshnessAssertion` reads `timedelta.seconds`, not `total_seconds()`, so a **30 hour**
+    lookback silently emits as **6 hours**. Refuse any SLA of a day or more (D-024).
 
-**Idempotency:** stamp every write with a `modelguard.run_id` structured property and upsert by
-`(resourceUrn, run_id)` so reruns don't duplicate incidents. Judges notice this; it reads as production-grade.
+  (Smart/anomaly *monitoring* and scheduled evaluation are Cloud - say so; we provide the check logic.)
+- **Model Impact Report** → a first-class `datahub.sdk.document.Document` entity, linked to the model through
+  `related_assets` [verified on an OSS Quickstart]. The plan assumed MCP `save_document` was the only route;
+  the SDK entity works on OSS, so no fallback ships (D-022).
+
+**Idempotency:** dedup incidents on `(resourceUrn, type, title)`, never on `run_id` (D-013). `run_id` is a
+structured property and a description footer: provenance, not a key. The assertion URN is a guid over the
+declaration and the document id derives from the model, so both update in place. Judges notice this; it reads
+as production-grade.
 
 ### 4.3 Verify the loop
-`modelguard scan --table loans_raw` → incident + tag + assertion + report all visible in the UI, same result
-every run. Use the `/verify` skill / drive it end-to-end before moving on.
+`modelguard scan --table loans_raw` → incident + tag + properties + assertion + run event + report, all visible
+in the UI, same result every run. The gate is executable, not a UI inspection:
+`pytest -m integration tests/integration/test_phase1_loop.py` seeds, plants the failure, scans, asserts every
+write landed, rescans to prove nothing duplicates, then reverts and asserts a clean scan writes nothing. It
+resolves any incident an earlier run left open first, so it exercises the create path and passes twice in a
+row against a dirty graph. Status: **PASSED 2026-07-10** (D-028).
 
 ---
 
@@ -521,6 +581,26 @@ Concrete, reproducible findings from Phase 0, worth far more than generic praise
 5. **No Python SDK wrapper for incidents**, and **no SDK entity classes** for MLFeature, MLPrimaryKey,
    MLFeatureTable, or MLModelDeployment.
 6. **`graph.exists()` returns False for every `schemaField`**, with no documented alternative.
+7. **`updateIncidentStatus` takes `IncidentStatusInput`, not `UpdateIncidentStatusInput`** as the docs and
+   the GraphQL mutation reference state. GMS 1.5.0.6 answers
+   `Validation error (VariableTypeMismatch@[updateIncidentStatus])`. Introspecting `Mutation` on a live
+   server is the only way to find the right name (D-023).
+8. **`FixedIntervalFreshnessAssertion` truncates any lookback of a day or more.**
+   `get_assertion_info()` builds `FixedIntervalSchedule(multiple=self.lookback_interval.seconds)`; it must be
+   `total_seconds()`. `lookback_interval: "30 hours"` therefore emits an assertion of **6 hours**, silently
+   (`timedelta(hours=30).seconds == 21600`). A one-word fix, and a silently wrong data-quality check today.
+9. **`BaseEntityAssertion.get_assertion_info_aspect()` cannot be used idempotently.** It calls
+   `_ensure_source_created` → `make_assertion_source()`, which stamps `source.created` with the current time,
+   so re-upserting an unchanged assertion rewrites the aspect on every run. There is no way to pass a
+   creation stamp in. Callers who need convergence must bypass it and build `AssertionSource` themselves.
+10. **`DataHubClient.assertions` is Cloud-only but is not documented as such**, and it is discoverable as a
+    plain property on the OSS client. It raises `SdkUsageError` telling you to `pip install
+    acryl-datahub-cloud`, which is a paid product. The OSS path (parse `AssertionsConfigSpec`, emit
+    `assertionInfo`) is undocumented.
+11. **`operation` is a timeseries aspect but reads like a versioned one.** `graph.get_aspect(urn,
+    OperationClass)` raises `TypeError: Cannot get a timeseries aspect using "get_aspect"`. The required
+    `get_latest_timeseries_value(urn, aspect, filter_criteria_map)` has a mandatory third positional
+    argument that is almost always `{}`, which is undiscoverable without reading the source.
 
 ---
 
@@ -581,8 +661,9 @@ detects the leakage feature, computes the trust score. (1:40) **cut to the DataH
 
 - **W1 - Foundation & de-risk.** Quickstart + datapack; build `seed_ml_graph.py`; render ML lineage in UI;
   prove incident + structured-property write-back. **Gate:** read col-level ML lineage + write both. Else pivot.
-- **W2 - Core loop (P2).** detect → blast radius → incident + tag + guarding assertion + impact report,
-  end-to-end on one planted issue. Idempotent write-back. Verify in UI.
+- **W2 - Core loop (P2). DONE 2026-07-10 (D-028).** detect → blast radius → incident + tag + properties +
+  guarding assertion + run event + impact report, end-to-end on one planted issue. Idempotent write-back,
+  proven by an executable integration gate that reruns and asserts nothing duplicates.
 - **W3 - Differentiators.** P1 leakage detector (flagship), P3 schema drift, P4 trust score. Draft the
   `datahub-ml-guard` SKILL.md and test it in Claude Code/Cursor. Add finance/healthcare framing toggle.
   Stand up **ModelGuard-Bench** (Jenga injection + precision/recall) so detectors are measured, not asserted

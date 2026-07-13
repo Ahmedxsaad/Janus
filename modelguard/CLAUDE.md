@@ -10,22 +10,34 @@ security and observability cross-cutting.
 - writeback/ mutates the graph: fixed parameterized functions, idempotent. No LLM.
 - agent/ orchestrates and is the only place the LLM runs, gated by human approval.
 - seed/ exists only to build demo/benchmark graphs; production code never imports it.
-- client.py is the single factory for DataHubClient / DataHubGraph; nothing else
-  reads env vars for connections. It hands both handles out as a DataHubConnection.
-  It applies no defaults: a hardcoded fallback (a server URL, a username) is a
-  machine-specific value in tracked code and turns a missing .env into a silent
-  connection to the wrong place. Missing config fails loudly. Secrets are never
-  logged, echoed, or placed in an exception message.
+- env.py is the single entry point for configuration: the only module that calls
+  load_dotenv and the only one that reads os.environ. Everything else asks it.
+- client.py is the single factory for DataHubClient / DataHubGraph. It hands both
+  handles out as a DataHubConnection and applies no defaults: a hardcoded fallback
+  (a server URL, a username) is a machine-specific value in tracked code and turns
+  a missing .env into a silent connection to the wrong place. Missing config fails
+  loudly. Secrets are never logged, echoed, or placed in an exception message.
+- llm.py is the single factory for the language model, and the only module allowed
+  to import a vendor SDK or name a vendor's model. Provider, model, and key come
+  from the environment together, with no defaults; all three or none.
 
 ## Local rules
 
-1. Findings passed between layers are typed models, not dicts. The shared models
-   module (improvement P2-3) is not written yet: no detector exists to produce a
-   finding. It lands with the first detector, before a second one can diverge.
+1. Findings passed between layers are typed models (models.py), not dicts.
 2. cli.py exposes exactly two entry points: scan (batch) and watch (event-driven).
-   Both share the identical detect -> reason -> write core.
-3. Keep hop caps, thresholds, and score weights in config, never hardcoded.
-4. Every run gets a run_id; every log line and write carries it.
+   Both share the identical detect -> reason -> write core, which lives in
+   agent/pipeline.py, not in cli.py. Only scan exists; watch lands with the
+   Actions framework. Never stub the other.
+3. Keep hop caps, thresholds, and score weights in config.py, never hardcoded.
+   Overrides come from MODELGUARD_* env vars and fail loudly when unusable.
+4. Every run gets a run_id; every log line and write carries it. It is
+   provenance, never part of a dedup key (D-013).
+5. Nothing an LLM produces may reach a dedup key, a severity, a URN, or an enum.
+   The LLM writes prose and only prose (D-027). Any number a human reads comes
+   from a finding's evidence mapping.
+6. A scan must complete with no LLM configured and no network beyond DataHub.
+   The narrator is handed an LLMConfig or None; it degrades to a template on any
+   failure and never raises. It reads no environment variable and names no vendor.
 
 ## Change Log
 
@@ -33,3 +45,5 @@ security and observability cross-cutting.
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: layer boundaries and package rules |
 | 2026-07-09 | Claude (for Ghassen Naouar) | client.py exists; note that the shared findings model lands with the first detector |
+| 2026-07-10 | Claude (for Ghassen Naouar) | Phase 1: models.py and config.py exist; core loop lives in agent/pipeline.py; add the LLM-containment and offline-scan rules |
+| 2026-07-10 | Claude (for Ghassen Naouar) | env.py is the sole config entry point; llm.py is the sole vendor boundary; the narrator takes an injected LLMConfig |

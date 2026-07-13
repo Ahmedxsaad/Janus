@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from modelguard import client as client_module
+from modelguard import env as env_module
 from modelguard.client import (
     ENV_GMS_TOKEN,
     ENV_GMS_URL,
@@ -15,9 +16,12 @@ from modelguard.client import (
 
 @pytest.fixture(autouse=True)
 def _no_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep a developer's real .env out of the unit tests."""
-    monkeypatch.setattr(client_module, "load_dotenv", lambda *_, **__: False)
-    monkeypatch.setattr(client_module, "find_dotenv", lambda **_: "")
+    """Keep a developer's real .env out of the unit tests.
+
+    client.py no longer loads .env itself; modelguard.env does, once. Marking it
+    already loaded is what stops these tests from reading the real file.
+    """
+    monkeypatch.setattr(env_module, "_loaded", True)
 
 
 def test_a_missing_gms_url_fails_loudly_rather_than_defaulting(

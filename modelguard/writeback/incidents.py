@@ -91,8 +91,12 @@ mutation raiseIncident($input: RaiseIncidentInput!) {
 }
 """
 
+# The input type is IncidentStatusInput, not UpdateIncidentStatusInput: the name
+# in the plan and in DataHub's own mutation docs does not exist in the schema, and
+# GMS answers a VariableTypeMismatch validation error. Introspected from a live
+# GMS 1.5.0.6; see docs/decision-log.md D-021.
 _UPDATE_INCIDENT_STATUS = """
-mutation updateIncidentStatus($urn: String!, $input: UpdateIncidentStatusInput!) {
+mutation updateIncidentStatus($urn: String!, $input: IncidentStatusInput!) {
   updateIncidentStatus(urn: $urn, input: $input)
 }
 """

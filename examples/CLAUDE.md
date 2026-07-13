@@ -15,9 +15,21 @@ incident payload JSON.
    from the seeded demo graph only.
 4. Name files by content, kebab-case, for example
    impact-report-credit-risk-model.md.
+5. Regenerate the Phase 1 artifacts with a real scan against a seeded Quickstart:
+
+       modelguard-seed
+       modelguard-scenario --lag-hours 30
+       modelguard scan --table loans_raw --no-llm \
+         --report-out examples/impact-report-credit-risk-model.md \
+         --assertion-out examples/guarding-assertion-loans-raw.yml
+
+   Use --no-llm so the committed report is reproducible by anyone, with or
+   without an API key. The run_id changes on every regeneration; that is real
+   output, not churn to suppress.
 
 ## Change Log
 
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: real-output-only and validation rules |
+| 2026-07-10 | Claude (for Ghassen Naouar) | Record the exact command that regenerates the Phase 1 artifacts |

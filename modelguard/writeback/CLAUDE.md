@@ -26,8 +26,23 @@ docs/plan/02-implementation-plan.md section 6; use those exact forms.
    asset; model risk goes on the model as structured properties (D-017).
    graph.exists() is always False for a schemaField; resolve a column through
    its parent dataset's schemaMetadata.
-6. Smart/anomaly assertions are DataHub Cloud only. We emit open-assertions
-   YAML plus the assertion entity, and we disclose that boundary in any doc.
+6. Smart/anomaly assertions and scheduled evaluation are DataHub Cloud only, and
+   DataHubClient.assertions is Cloud-only too (it imports acryl_datahub_cloud).
+   We render open-assertions YAML, validate it by parsing it back through
+   DataHub's AssertionsConfigSpec, and emit assertionInfo ourselves. Never call
+   get_assertion_info_aspect(): it restamps source.created with now and the
+   aspect stops converging (D-025). Disclose the Cloud boundary in any doc.
+7. An assertion run event reports what a detector actually measured on that run,
+   never a fabricated pass or fail, and nativeResults names the source of the
+   number. A fresh table writes SUCCESS.
+8. An aspect with a timestampMillis field is a timeseries aspect: emitting it
+   appends an event. That is right for run events, and it means "undo" is a
+   newer event, not a delete.
+9. There is no mlModel patch builder in datahub.specific, so tags on a model go
+   through read-merge-emit on globalTags. Never blind-write the aspect: it is an
+   upsert of the whole list and would drop tags somebody else applied.
+10. Never write a value no detector computed. Phase 1 writes risk_flags and
+    run_id; trust_score waits for the detector that computes it.
 
 ## Change Log
 
@@ -36,3 +51,4 @@ docs/plan/02-implementation-plan.md section 6; use those exact forms.
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: parameterized writes, idempotency, Cloud boundary |
 | 2026-07-09 | Claude (for Ghassen Naouar) | Correct the dedup key (title, not run_id) and the incident types (FIELD, not COLUMN) |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Incidents cannot attach to mlModel; dedup via IncidentOn, never incidentsSummary |
+| 2026-07-10 | Claude (for Ghassen Naouar) | Phase 1: labels, assertions, documents land; Cloud-only assertions client, no source restamping, no mlModel patch builder, no fabricated values |

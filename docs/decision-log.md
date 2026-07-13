@@ -16,6 +16,226 @@ Entry template:
 
 ---
 
+## D-030: The LLM is provider-agnostic (2026-07-10)
+- Decided by: Ghassen Naouar
+- Decision: ModelGuard names no vendor. `MODELGUARD_LLM_PROVIDER` selects one of
+  anthropic, openai, or google; `MODELGUARD_LLM_MODEL` is the provider's model id
+  verbatim; `MODELGUARD_LLM_API_KEY` is the credential. `modelguard/llm.py` is the
+  only module allowed to import a vendor SDK or name a vendor's model, and it is
+  the only place a new provider is added. `--llm-provider` and `--llm-model`
+  override the first two; the key is deliberately not a flag, because a credential
+  in argv lands in the shell history and the process table.
+- Options considered: (a) hardcode Claude as the plan proposed, (b) a provider
+  registry with lazy imports, (c) `langchain.chat_models.init_chat_model`.
+- Why: (a) makes a vendor choice on the reader's behalf and bakes a model id into
+  tracked code. (c) would pull the whole `langchain` package in as a hard
+  dependency for a two-line dispatch. (b) keeps each binding an optional extra
+  (`pip install -e ".[openai]"`) and fails with an actionable message when the
+  package is absent.
+- Result: All three chat classes were introspected before the registry was
+  written: `ChatAnthropic`, `ChatOpenAI`, and `ChatGoogleGenerativeAI` accept the
+  same four keyword arguments (`model`, `api_key`, `temperature`, `max_tokens`)
+  even though their underlying field names all differ, so one uniform call reaches
+  every vendor. A missing binding degrades to template prose rather than failing
+  the scan. `agent/narrate.py` now reads no environment and knows no vendor: it is
+  handed an `LLMConfig` or None.
+
+## D-029: One module reads the environment, and identity values have no defaults (2026-07-10)
+- Decided by: Ghassen Naouar (rule), implemented by Claude
+- Decision: `modelguard/env.py` is the single entry point for configuration. It is
+  the only module that calls `load_dotenv` and the only one that touches
+  `os.environ`. Values that identify a system, an account, or a vendor (server
+  URLs, tokens, API keys, provider names, model ids) get no default and no
+  fallback. Algorithm parameters (a 6 hour SLA, a 3 hop cap) keep documented
+  defaults in `config.py`: they are reproducible on every machine and identify
+  nothing. Related settings are all-or-nothing. Secrets never reach a log line, an
+  exception message, a repr, or a CLI flag. Now root CLAUDE.md code rule 6.
+- Options considered: (a) let each module read what it needs, (b) centralize in
+  env.py, (c) centralize and additionally forbid defaults for identity values.
+- Why: this was not hypothetical. `load_dotenv` ran only inside
+  `client.connect()`, and `modelguard scan` builds its `ScanConfig` *before* it
+  connects, so `MODELGUARD_FRESHNESS_SLA_HOURS=99` in `.env` was silently ignored
+  and the built-in 6 hour default was used instead. Whether a configured value was
+  honored depended on whether something had already opened a DataHub connection.
+  Configuration that depends on call order is configuration that lies. Separately,
+  `narrate.py` had hardcoded `DEFAULT_LLM_MODEL = "claude-opus-4-8"` and read
+  `ANTHROPIC_API_KEY` directly: a vendor decision and a machine-specific value
+  compiled into tracked code, the exact thing D-015 forbade for the server URL.
+- Result: Fixed and verified. Four unit tests enforce the rule rather than trusting
+  anyone to remember it: no module but `env.py` may read `os.environ`, none but
+  `env.py` may load `.env`, no module may name a vendor key variable, and
+  `env.scrub()` strips a credential out of any third-party exception text before it
+  is logged. A provider SDK that echoes the failing request, key included, into its
+  exception message can no longer put that key in our logs. `.env` and
+  `.env.example` now carry an identical key set, so copying the example produces a
+  working run; the retired `ANTHROPIC_API_KEY` migrates to
+  `MODELGUARD_LLM_API_KEY`.
+
+## D-028: Phase 1 gate PASSED; the core loop is closed (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar), per the plan's section 4.3
+- Decision: Phase 1 (Problem 2, end to end) is complete. `modelguard scan
+  --table loans_raw` detects the planted stale load, traverses the blast radius
+  into the live model, and writes back an incident, a tag, structured
+  properties, a guarding assertion plus its measured result, and a Model Impact
+  Report document. `tests/integration/test_phase1_loop.py` is that criterion,
+  executable: 14 tests, passing, and repeatable back to back.
+- Options considered: (a) declare the loop done from a manual UI inspection,
+  (b) make the criterion an executable, hermetic integration test.
+- Why: The same reason the Week 1 gate was executable (D-016). The gate resolves
+  any incident an earlier run left open before scanning, so it exercises the
+  create path rather than silently reusing an old incident, and so it passes
+  twice in a row against a dirty graph.
+- Result: Verified on a live OSS Quickstart. Both directions hold: the planted
+  failure is caught at CRITICAL, and a reverted table produces a clean scan that
+  writes nothing. Phase 2 (leakage, schema drift, trust score) may start.
+
+## D-027: The LLM writes prose, never the incident title (2026-07-10)
+- Decided by: Ghassen Naouar (chose LLM prose in Phase 1), design by Claude
+- Decision: `agent/narrate.py` drafts the incident description and the report's
+  assessment with Claude at temperature 0. The incident **title** stays a pure
+  function of the failing table's name, with no lag, no timestamp, and no model
+  output in it. Every number in the incident body and the report comes from the
+  finding's `evidence` mapping, rendered by a deterministic `fact_block`; the
+  narrative is appended after the facts, never in place of them.
+- Options considered: (a) deterministic templates only, (b) LLM prose with a
+  deterministic title, (c) LLM prose everywhere including the title.
+- Why: (c) is unsound, not merely risky. The incident dedup key is
+  `(resource_urn, type, title)` (D-013), so a reworded title on a rerun raises a
+  duplicate incident on every scan. (b) buys better prose without touching the
+  key. Facts stay deterministic so an incident is fully trustworthy even when
+  the narrative degraded to the template.
+- Result: `narrate()` never raises. A missing `ANTHROPIC_API_KEY`, a network
+  error, a rate limit, an empty reply, or a reply over 1200 characters all fall
+  back to the deterministic template and record `source=template`. `scan` and
+  the whole unit suite therefore run offline and with no API key, which is the
+  judge's out-of-the-box path. Graph metadata reaches the model only inside a
+  delimited `<evidence>` block the system prompt names as untrusted data
+  (OWASP LLM01, agent/CLAUDE.md rule 3).
+
+## D-026: Emit the assertion entity and a real evaluation result (2026-07-10)
+- Decided by: Ghassen Naouar (chose YAML + entity + run event), design by Claude
+- Decision: The guarding assertion is written three ways: as open-assertions
+  YAML in `examples/`, as an `assertionInfo` aspect so it appears on the
+  dataset's Quality tab, and as an `assertionRunEvent` carrying the freshness
+  result ModelGuard actually computed during that scan.
+- Options considered: (a) YAML artifact only, (b) YAML plus the assertion
+  entity, (c) YAML plus entity plus a run event.
+- Why: (c) is the strongest demo and, importantly, it is honest here. The
+  assertion's declared type is `DATASET_CHANGE`, and the detector's freshness
+  measurement reads the dataset's `operation` aspect, which is exactly what
+  "the dataset changed" means. The declared check and the executed check are the
+  same check, so the result is measured, not fabricated. A fresh table writes
+  SUCCESS. `nativeResults` records `evaluated_from` so nobody mistakes it for a
+  warehouse query, and the report repeats the caveat.
+- Result: `DataHubClient.assertions` turned out to be **DataHub Cloud only**: it
+  imports `acryl_datahub_cloud` and raises `SdkUsageError` on OSS. The OSS path
+  is to render the YAML, validate it by parsing it back through DataHub's own
+  `AssertionsConfigSpec`, and emit the aspects directly. Validating through
+  DataHub's parser means the committed artifact and the graph entity cannot
+  drift. Scheduled evaluation and anomaly detection remain Cloud features, and
+  every report says so.
+
+## D-025: Do not restamp the assertion source on every run (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: `upsert_guarding_assertion` calls `get_assertion_info()` and sets
+  `AssertionSource` itself, reading `source.created` back from any existing
+  assertion instead of restamping it.
+- Options considered: (a) call `get_assertion_info_aspect()`, the obvious API,
+  (b) call `get_assertion_info()` and own the source stamp.
+- Why: `get_assertion_info_aspect()` runs `_ensure_source_created`, which calls
+  `make_assertion_source()` and stamps the current time. The aspect would then
+  differ on every scan, so a rerun would rewrite it forever and the graph would
+  never converge. Idempotency is not optional (root CLAUDE.md code rule 5).
+- Result: The assertion URN is a guid over `(entity, type, id_raw)`, so it is
+  stable per table, and the aspect is now byte-identical across reruns. The
+  source type is `INFERRED`: ModelGuard derived this check from an observed
+  failure rather than a human authoring it.
+
+## D-024: Refuse a freshness SLA of a day or more (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: `build_assertion` raises when `sla_hours >= 24` instead of emitting
+  the assertion.
+- Options considered: (a) emit whatever the caller asks for, (b) refuse the
+  range where the SDK is wrong, (c) hand-build the aspect and bypass DataHub's
+  entity model.
+- Why: `FixedIntervalFreshnessAssertion.get_assertion_info` builds its schedule
+  from `timedelta.seconds` rather than `timedelta.total_seconds()`. A lookback
+  of 30 hours therefore emits an assertion of 6 hours
+  (`timedelta(hours=30).seconds == 21600`), silently. Emitting a wrong assertion
+  is worse than emitting none, and (c) would give up the validation that keeps
+  the YAML artifact and the graph entity in step.
+- Result: Guarded, with a unit test on both sides of the boundary and an
+  integration assertion that 6 hours arrives as 21600 seconds. Added to the
+  Most Valuable Feedback list (plan section 8.3) as a reproducible upstream bug.
+
+## D-023: updateIncidentStatus takes IncidentStatusInput (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: The `updateIncidentStatus` mutation declares
+  `$input: IncidentStatusInput!`, not `UpdateIncidentStatusInput!`.
+- Options considered: None. The plan's snippet and DataHub's mutation docs both
+  name a type the schema does not have.
+- Why: GMS 1.5.0.6 answers `Validation error (VariableTypeMismatch)`. Confirmed
+  by introspecting `Mutation.updateIncidentStatus` on the live server.
+- Result: Fixed in `writeback/incidents.py`. The bug shipped in Phase 0 and was
+  invisible because nothing called `resolve_incident`, and the unit test drove a
+  fake graph that cannot validate a schema. The Phase 1 integration gate calls
+  it for real, which is what caught it. A reminder that a fake-backed unit test
+  cannot verify a wire contract.
+
+## D-022: Impact reports are Document entities, not institutionalMemory links (2026-07-10)
+- Decided by: Ghassen Naouar (chose "try Document, fall back"), probe by Claude
+- Decision: The Model Impact Report is written as a first-class
+  `datahub.sdk.document.Document`, linked to the model through `related_assets`.
+  No fallback path is shipped.
+- Options considered: (a) Document entity with an `institutionalMemory`
+  fallback, (b) `institutionalMemory` link only, (c) a markdown file only.
+- Why: The plan assumed the report could only be written through the MCP
+  server's `save_document` write tool. The installed SDK has a real `Document`
+  entity, and a probe against the local OSS Quickstart accepted it. Since the
+  entity works, the fallback would be code that never executes, which the repo
+  rules forbid (root CLAUDE.md code rule 3).
+- Result: The report is a searchable graph entity with a stable id derived from
+  the model, so reruns update one document rather than accumulating one per
+  scan. If a future GMS rejects the entity, the fallback lands then, with a test.
+
+## D-021: Freshness is read from the operation aspect (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: The blast-radius detector measures staleness from the dataset's
+  `operation` aspect (`lastUpdatedTimestamp`), and `seed/scenarios.py` plants
+  the failure by emitting that aspect with a backdated value.
+- Options considered: (a) read a failing assertion result, (b) read the
+  `operation` aspect, (c) profile the table and compare row counts.
+- Why: (b) is DataHub's own record of when a dataset last changed, it needs no
+  warehouse connection, and it makes the guarding assertion's `DATASET_CHANGE`
+  type describe exactly what we measured (D-026). (a) is circular in Phase 1:
+  the assertion is the thing we are writing.
+- Result: `operation` is a **timeseries** aspect. It must be read with
+  `graph.get_latest_timeseries_value(urn, OperationClass, {})`; `get_aspect`
+  raises a TypeError for it. Emitting it appends an event rather than replacing
+  one, so reverting the scenario means emitting a newer event announcing a
+  refresh, which is what a recovered pipeline would do anyway.
+
+## D-020: Downstream lineage crosses into ML entities (2026-07-10)
+- Decided by: Claude (for Ghassen Naouar), verified against a live GMS
+- Decision: The blast-radius detector uses a single
+  `client.lineage.get_lineage(direction="downstream")` call to span the whole
+  supply chain, and reads deployments from `mlModelProperties` separately.
+- Options considered: (a) one lineage call, (b) a lineage call for the dataset
+  cone plus a manual relationship bridge (`DerivedFrom`, `Consumes`) into ML
+  entities, in case lineage stopped at the dataset boundary.
+- Why: The plan flagged this as unconfirmed and D-019 implied the boundary was
+  real. It is not. `MLFeatureProperties.sources` (`DerivedFrom`) and
+  `MLModelProperties.mlFeatures` (`Consumes`) both declare `isLineage: true`, so
+  the traversal reaches `loans_raw -> customer_features` (hop 1) `-> mlFeature`
+  (hop 2) `-> mlModel` (hop 3) in one call. The bridge in (b) is unnecessary.
+- Result: Two behaviors to know. `MLModelProperties.deployments` (`DeployedTo`)
+  is **not** a lineage edge, so deployments come from the aspect, and that is
+  what decides severity. And once `max_hops` exceeds 2, DataHub switches to a
+  full-graph search and returns entities **beyond** the cap (a model group came
+  back at hop 4 for a cap of 3), so the detector filters on `hops` rather than
+  trusting the server. `LineageResult.type` is a display string; the entity type
+  is taken from the URN, which is authoritative.
+
 ## D-019: Week 1 gate PASSED; no pivot to MigrationCopilot (2026-07-10)
 - Decided by: Claude (for Ghassen Naouar), per the plan's kill-criterion
 - Decision: ModelGuard clears the Week 1 gate. The project continues. The
