@@ -16,6 +16,77 @@ Entry template:
 
 ---
 
+## D-034: Phase 1 merged to main; Phase 2 branches from a clean base (2026-07-13)
+- Decided by: Ahmed Saad
+- Decision: feat/phase-1-core-loop, gated and passing since D-028, merged to main
+  as PR #3. feat/phase-2-leakage branches from main, not from the old branch.
+- Options considered: (a) stack Phase 2 on the unmerged branch, (b) merge first.
+- Why: A week of gated work sitting unmerged blocks every later branch from
+  starting clean, and the repo's own git rules expect one logical change per
+  branch merged in sequence.
+- Result: main is at the Phase 1 gate. 201 unit tests and 25 integration tests
+  reproduced on a second machine, confirming the gate is not laptop-specific.
+
+## D-033: Finding becomes an abstract base, one subclass per detector (2026-07-13)
+- Decided by: Ahmed Saad (chose the ABC over plain fields), design by Claude
+- Decision: Finding is an ABC declaring finding_type, resource_urn, incident_type,
+  severity, title, evidence, and models_at_risk. FreshnessFinding wraps a
+  BlastRadius; LeakageFinding wraps a LeakingFeature. narrate.py and
+  documents.py dispatch on the concrete type via functools.singledispatch.
+- Options considered: (a) plain title: str and evidence: Mapping fields any
+  caller could set, (b) an ABC with abstract properties per subclass.
+- Why: (a) drops the guarantee that a title is a pure function of graph facts,
+  which is the whole invariant D-027 exists to protect: any caller could pass
+  any string as a title and the dedup key would stop meaning anything. (b) keeps
+  that guarantee at the type level and costs nothing extra once a third detector
+  (schema drift) lands, since it subclasses the same contract.
+- Result: ModelAtRisk split into ModelRef (identity, liveness, ownership; shared
+  by every detector) and ModelAtRisk (adds hops and features_at_risk; freshness
+  only). ScanReport.writes is a tuple of FindingWrites, so one scan can now run
+  both detectors and report on both targets independently.
+
+## D-032: A label is a glossary term, read from two aspects and unioned (2026-07-13)
+- Decided by: Ahmed Saad (chose the glossary term over a structured property or
+  config value), verified against a live GMS by Claude
+- Decision: A column is a model's label when it carries the
+  urn:li:glossaryTerm:modelguard.label term, checked two ways: the term aspect
+  directly on the schemaField (what ModelGuard and the seeder write), and
+  editableSchemaMetadata on the parent dataset (what the DataHub UI writes when
+  a human tags a column by hand). Both were emitted and read back against a live
+  Quickstart before this was decided.
+- Options considered: (a) a structured property on the dataset naming the label
+  column, (b) a glossary term on the column, checked on both routes, (c) a
+  MODELGUARD_LABEL_COLUMN config value.
+- Why: (c) is a property of one scan's config, not of the data, and does not
+  scale past one model. (a) works but is invisible in the UI's own vocabulary.
+  (b) is what a data team already reaches for, and reading both write paths
+  means a human declaring a label in the UI, touching no ModelGuard config,
+  makes leakage detection start working on their model.
+- Result: modelguard/writeback/terms.py (ensure_term, add_term, read_terms),
+  read-merge-emit like labels.py. modelguard/seed/seed_ml_graph.py declares the
+  seeded label. config.py holds the term URN with a default, because it is a
+  name, not a credential (D-029's distinction).
+
+## D-031: Column-level lineage returns the dataset in urn; the column is in paths (2026-07-13)
+- Decided by: Claude (for Ahmed Saad), verified against a live GMS before any
+  detector code was written
+- Decision: detect/leakage.py reads LineageResult.paths, a list of LineagePath
+  with a schemaField urn and a column_name, and never compares
+  LineageResult.urn against a label column.
+- Options considered: none; this is a measured fact about the installed SDK,
+  not a design choice.
+- Why: get_lineage(source_column=..., direction="upstream") on the seeded graph
+  returns LineageResult.urn == loans_raw, the table, even though the query was
+  column-scoped. A detector that compared urn against the label column's
+  schemaField URN would find nothing on a graph that leaks, and would report it
+  clean: a silent false negative on the exact failure this detector exists to
+  catch. The column identity survives only in paths.
+- Result: tests/detect/test_leakage.py::test_the_detector_reads_paths_and_not_the_result_urn
+  reproduces the exact shape and would fail if the bug were reintroduced;
+  confirmed by mutation-testing the detector (reverting to a urn comparison
+  kills 10 of 14 tests). Worth a Most Valuable Feedback entry: LineageResult.urn
+  for a column-level query is the dataset, and this is not documented.
+
 ## D-030: The LLM is provider-agnostic (2026-07-10)
 - Decided by: Ghassen Naouar
 - Decision: ModelGuard names no vendor. `MODELGUARD_LLM_PROVIDER` selects one of
