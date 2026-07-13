@@ -102,10 +102,22 @@ def test_within_a_band_a_wider_blast_sorts_first():
 def test_an_unowned_model_sorts_ahead_of_an_owned_one():
     """Nobody is on the hook for the unowned one, so it needs a human first."""
     owned = ModelAtRisk(
-        "urn:li:mlModel:(urn:li:dataPlatform:mlflow,a,PROD)", "a", 3, (), (), (), True
+        urn="urn:li:mlModel:(urn:li:dataPlatform:mlflow,a,PROD)",
+        name="a",
+        deployments=(),
+        live_deployments=(),
+        has_owner=True,
+        hops=3,
+        features_at_risk=(),
     )
     unowned = ModelAtRisk(
-        "urn:li:mlModel:(urn:li:dataPlatform:mlflow,b,PROD)", "b", 3, (), (), (), False
+        urn="urn:li:mlModel:(urn:li:dataPlatform:mlflow,b,PROD)",
+        name="b",
+        deployments=(),
+        live_deployments=(),
+        has_owner=False,
+        hops=3,
+        features_at_risk=(),
     )
     assert sorted([owned, unowned], key=ModelAtRisk.sort_key)[0] is unowned
 

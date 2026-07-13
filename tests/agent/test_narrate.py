@@ -213,8 +213,9 @@ def test_graph_metadata_is_passed_to_the_llm_inside_a_delimited_untrusted_block(
 
 
 def test_the_system_prompt_tells_the_model_the_evidence_is_untrusted_data():
-    assert "UNTRUSTED DATA" in narrate_module._SYSTEM_PROMPT
-    assert "ignore" in narrate_module._SYSTEM_PROMPT.lower()
+    prompt = narrate_module._system_prompt(_finding())
+    assert "UNTRUSTED DATA" in prompt
+    assert "ignore" in prompt.lower()
 
 
 # --------------------------------------------------------------------------

@@ -14,7 +14,6 @@ from datahub.metadata.schema_classes import (
 
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import (
-    FRESHNESS_INCIDENT_TYPE,
     blast_radius,
     finding_for,
     freshness_signal,
@@ -239,7 +238,7 @@ def test_the_incident_attaches_to_the_failing_table_never_to_the_model():
 
     finding = finding_for(radius)
     assert finding.resource_urn == TABLE
-    assert finding.incident_type == FRESHNESS_INCIDENT_TYPE
+    assert finding.incident_type == "FRESHNESS"
     assert finding.severity is Severity.CRITICAL
 
 

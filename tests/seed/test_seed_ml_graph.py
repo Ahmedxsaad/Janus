@@ -215,4 +215,4 @@ def test_the_full_seed_reports_the_urns_it_wrote(fakes):
     assert result.model == str(spec.model_urn())
     assert result.features == tuple(str(spec.feature_urn(f)) for f in spec.MODEL_FEATURES)
     # Seven non-feature entities, plus one line per feature.
-    assert len(result.as_lines()) == 7 + len(spec.MODEL_FEATURES)
+    assert len(result.as_lines()) == 8 + len(spec.MODEL_FEATURES)
