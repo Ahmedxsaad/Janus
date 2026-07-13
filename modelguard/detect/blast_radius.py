@@ -39,26 +39,20 @@ from __future__ import annotations
 import time
 
 from datahub.metadata.schema_classes import (
-    DeploymentStatusClass,
-    MLModelDeploymentPropertiesClass,
     MLModelPropertiesClass,
     OperationClass,
-    OwnershipClass,
 )
-from datahub.metadata.urns import DatasetUrn, Urn
+from datahub.metadata.urns import DatasetUrn
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
+from modelguard.detect.graph_reads import entity_type, model_ref
 from modelguard.models import (
     BlastRadius,
-    Finding,
-    FindingType,
+    FreshnessFinding,
     FreshnessSignal,
     ModelAtRisk,
 )
-
-#: DataHub incident type for a table that stopped refreshing.
-FRESHNESS_INCIDENT_TYPE = "FRESHNESS"
 
 _DATASET = "dataset"
 _ML_FEATURE = "mlFeature"
@@ -106,31 +100,6 @@ def freshness_signal(
     )
 
 
-def _entity_type(urn: str) -> str:
-    """Return an URN's entity type, the authoritative one, not the display name."""
-    return Urn.from_string(urn).entity_type
-
-
-def _live_deployments(conn: DataHubConnection, deployment_urns: list[str]) -> tuple[str, ...]:
-    """Return the deployments that are currently serving.
-
-    A deployment whose properties aspect is missing is treated as not live: we
-    only escalate to CRITICAL on positive evidence that traffic is being served.
-    """
-    live: list[str] = []
-    for urn in deployment_urns:
-        properties = conn.graph.get_aspect(urn, MLModelDeploymentPropertiesClass)
-        if properties is not None and properties.status == DeploymentStatusClass.IN_SERVICE:
-            live.append(urn)
-    return tuple(live)
-
-
-def _has_owner(conn: DataHubConnection, entity_urn: str) -> bool:
-    """Whether anyone is on the hook for this entity."""
-    ownership = conn.graph.get_aspect(entity_urn, OwnershipClass)
-    return bool(ownership and ownership.owners)
-
-
 def _model_at_risk(
     conn: DataHubConnection,
     model_urn: str,
@@ -138,20 +107,20 @@ def _model_at_risk(
     downstream_features: frozenset[str],
 ) -> ModelAtRisk:
     """Describe one at-risk model by reading the aspects lineage does not carry."""
+    ref = model_ref(conn, model_urn)
+
     properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
-    deployments = tuple(properties.deployments or []) if properties else ()
     model_features = frozenset(properties.mlFeatures or []) if properties else frozenset()
-    name = (properties.name if properties and properties.name else None) or model_urn
 
     return ModelAtRisk(
-        urn=model_urn,
-        name=name,
+        urn=ref.urn,
+        name=ref.name,
+        deployments=ref.deployments,
+        live_deployments=ref.live_deployments,
+        has_owner=ref.has_owner,
         hops=hops,
-        deployments=deployments,
-        live_deployments=_live_deployments(conn, list(deployments)),
         # Only the model's own features that the failure actually reaches.
         features_at_risk=tuple(sorted(model_features & downstream_features)),
-        has_owner=_has_owner(conn, model_urn),
     )
 
 
@@ -190,9 +159,9 @@ def blast_radius(
     # DataHub returns beyond the cap once max_hops exceeds 2. Honor the cap.
     within_cap = [r for r in results if r.hops <= config.max_hops]
 
-    datasets = sorted(r.urn for r in within_cap if _entity_type(r.urn) == _DATASET)
-    features = sorted(r.urn for r in within_cap if _entity_type(r.urn) == _ML_FEATURE)
-    model_hops = {r.urn: r.hops for r in within_cap if _entity_type(r.urn) == _ML_MODEL}
+    datasets = sorted(r.urn for r in within_cap if entity_type(r.urn) == _DATASET)
+    features = sorted(r.urn for r in within_cap if entity_type(r.urn) == _ML_FEATURE)
+    model_hops = {r.urn: r.hops for r in within_cap if entity_type(r.urn) == _ML_MODEL}
 
     downstream_features = frozenset(features)
     models = tuple(
@@ -215,17 +184,11 @@ def blast_radius(
     )
 
 
-def finding_for(radius: BlastRadius) -> Finding:
+def finding_for(radius: BlastRadius) -> FreshnessFinding:
     """Shape a blast radius into the finding the write-back layer consumes.
 
     The incident attaches to the failing dataset, never to a model: DataHub's
     ``incidentInfo.entities`` relationship rejects mlModel with a 500. Model-level
     risk is carried by the tag and the structured properties instead.
     """
-    return Finding(
-        finding_type=FindingType.UPSTREAM_FRESHNESS,
-        resource_urn=radius.failing_table_urn,
-        incident_type=FRESHNESS_INCIDENT_TYPE,
-        severity=radius.severity,
-        blast_radius=radius,
-    )
+    return FreshnessFinding(blast_radius=radius)
