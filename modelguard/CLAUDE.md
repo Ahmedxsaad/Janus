@@ -47,3 +47,4 @@ security and observability cross-cutting.
 | 2026-07-09 | Claude (for Ghassen Naouar) | client.py exists; note that the shared findings model lands with the first detector |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Phase 1: models.py and config.py exist; core loop lives in agent/pipeline.py; add the LLM-containment and offline-scan rules |
 | 2026-07-10 | Claude (for Ghassen Naouar) | env.py is the sole config entry point; llm.py is the sole vendor boundary; the narrator takes an injected LLMConfig |
+| 2026-07-13 | Claude (for Ahmed Saad) | Phase 2 leakage detector lands. Finding is now an ABC (FreshnessFinding, LeakageFinding); a scan may target a table, a model, or both (D-033) |

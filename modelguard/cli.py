@@ -15,19 +15,21 @@ never a guess: silently auditing the wrong table would be worse than failing.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Annotated
 
 import typer
-from datahub.metadata.urns import DatasetUrn, Urn
+from datahub.metadata.urns import DatasetUrn, MlModelUrn, Urn
 from datahub.sdk.search_filters import FilterDsl as F
 from rich.console import Console
 
-from modelguard.agent.pipeline import ScanReport, run_scan
+from modelguard.agent.pipeline import FindingWrites, ScanReport, run_scan
 from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.config import ScanConfig
 from modelguard.env import ConfigError
 from modelguard.llm import LLMConfig, llm_config_from_env
+from modelguard.models import Finding, FreshnessFinding, LeakageFinding
 
 app = typer.Typer(
     add_completion=False,
@@ -94,6 +96,48 @@ def resolve_table(conn: DataHubConnection, table: str) -> str:
     return unique[0]
 
 
+class ModelResolutionError(ValueError):
+    """The --model argument named zero, or more than one, model."""
+
+
+def resolve_model(conn: DataHubConnection, model: str) -> str:
+    """Turn a model name or URN into exactly one mlModel URN.
+
+    Args:
+        conn: An open connection.
+        model: A full mlModel URN, or a name like ``credit_risk_v3``.
+
+    Returns:
+        The mlModel URN.
+
+    Raises:
+        ModelResolutionError: Nothing matched, or several models did.
+    """
+    if model.startswith("urn:li:mlModel:"):
+        return str(MlModelUrn.from_string(model))
+
+    matches: list[str] = []
+    for urn in conn.client.search.get_urns(query=model, filter=F.entity_type("mlModel")):
+        parsed = Urn.from_string(str(urn))
+        if not isinstance(parsed, MlModelUrn):
+            continue
+        if parsed.name == model or parsed.name.split(".")[-1] == model:
+            matches.append(str(urn))
+
+    unique = sorted(set(matches))
+    if not unique:
+        raise ModelResolutionError(
+            f"no model named {model!r}. Pass a full mlModel URN, or seed the "
+            "demo graph first with: modelguard-seed"
+        )
+    if len(unique) > 1:
+        listed = "\n  ".join(unique)
+        raise ModelResolutionError(
+            f"{model!r} matches {len(unique)} models; pass a full URN:\n  {listed}"
+        )
+    return unique[0]
+
+
 def _resolve_llm(*, no_llm: bool, provider: str | None, model: str | None) -> LLMConfig | None:
     """Decide which language model, if any, this scan narrates with.
 
@@ -124,65 +168,97 @@ def _resolve_llm(*, no_llm: bool, provider: str | None, model: str | None) -> LL
     )
 
 
+def _print_finding(finding: Finding) -> None:
+    """Render one finding's measured facts. Never the narrative: that comes after."""
+    # Parentheses, not brackets, around a severity: rich would read "[critical]"
+    # as a style tag and silently swallow it.
+    console.print(f"[bold red]{finding.title}[/bold red]  (severity: {finding.severity})")
+
+    if isinstance(finding, FreshnessFinding):
+        radius = finding.blast_radius
+        console.print(
+            f"  stale for {radius.signal.lag_hours:.1f}h against a "
+            f"{radius.signal.sla_hours:.1f}h SLA"
+        )
+        console.print(
+            f"  blast radius: {len(radius.downstream_datasets)} dataset(s), "
+            f"{len(radius.downstream_features)} feature(s), {len(radius.models)} model(s)"
+        )
+        for model in radius.models:
+            serving = "[red]LIVE[/red]" if model.is_live else "not serving"
+            console.print(f"    - {model.name} ({model.severity}) {serving}, {model.hops} hops")
+
+    elif isinstance(finding, LeakageFinding):
+        leak = finding.leak
+        console.print(f"  feature      {leak.feature_name}")
+        console.print(f"  leak path    {leak.path_text}")
+        console.print(f"  label        {leak.label_dataset_name}.{leak.label_column_name}")
+        serving = "[red]LIVE[/red]" if finding.model.is_live else "not serving"
+        console.print(f"  model        {finding.model.name} {serving}")
+
+
+def _print_writes(write: FindingWrites) -> None:
+    """Render what one finding actually mutated in the graph."""
+    if write.incident is not None:
+        verb = "raised" if write.incident.created else "reused (already open)"
+        console.print(f"  incident         {verb}: {write.incident.urn}")
+    if write.assertion is not None:
+        verb = "created" if write.assertion.created else "updated"
+        console.print(f"  assertion        {verb}: {write.assertion.urn}")
+        console.print(f"  assertion result {write.assertion_result}")
+    for feature_urn in write.termed_features:
+        console.print(f"  leakage term     {feature_urn}")
+    console.print(
+        f"  tagged models    {len(write.tagged_models)} newly tagged "
+        f"of {len(write.finding.models_at_risk)} at risk"
+    )
+    for document in write.documents:
+        console.print(f"  impact report    {document.urn}")
+
+
 def _print_report(report: ScanReport) -> None:
     """Render a scan's outcome for a human reading a terminal."""
     if report.clean:
-        console.print(f"[green]No finding.[/green] {report.table_urn} is within its freshness SLA.")
+        target = report.model_urn or report.table_urn
+        console.print(f"[green]No finding.[/green] {target} is healthy.")
+        for warning in report.warnings:
+            console.print(f"[yellow]warning:[/yellow] {warning}")
         return
 
-    finding = report.finding
-    narrative = report.narrative
-    assert finding is not None and narrative is not None  # guaranteed when not clean
-
-    radius = finding.blast_radius
-    console.print(f"[bold red]{finding.title}[/bold red]  (severity: {finding.severity})")
-    console.print(
-        f"  stale for {radius.signal.lag_hours:.1f}h against a {radius.signal.sla_hours:.1f}h SLA"
-    )
-    console.print(
-        f"  blast radius: {len(radius.downstream_datasets)} dataset(s), "
-        f"{len(radius.downstream_features)} feature(s), {len(radius.models)} model(s)"
-    )
-    for model in radius.models:
-        serving = "[red]LIVE[/red]" if model.is_live else "not serving"
-        # Parentheses, not brackets: rich would read "[critical]" as a style tag
-        # and silently swallow it.
-        console.print(f"    - {model.name} ({model.severity}) {serving}, {model.hops} hops")
-
-    console.print(f"\n[dim]assessment ({narrative.source}):[/dim] {narrative.assessment}\n")
+    for write in report.writes:
+        _print_finding(write.finding)
+        console.print(
+            f"\n[dim]assessment ({write.narrative.source}):[/dim] {write.narrative.assessment}\n"
+        )
 
     for warning in report.warnings:
         console.print(f"[yellow]warning:[/yellow] {warning}")
 
     if report.dry_run:
         console.print("[yellow]Dry run: nothing was written.[/yellow]")
-        console.print("Would have raised the incident, tagged the models, written the")
-        console.print("guarding assertion and the impact report.")
+        console.print("Would have raised the incident(s), tagged the models, and written")
+        console.print("the guarding assertion and the impact report(s).")
         return
 
     console.print("[bold]Wrote back:[/bold]")
-    if report.incident is not None:
-        verb = "raised" if report.incident.created else "reused (already open)"
-        console.print(f"  incident         {verb}: {report.incident.urn}")
-    if report.assertion is not None:
-        verb = "created" if report.assertion.created else "updated"
-        console.print(f"  assertion        {verb}: {report.assertion.urn}")
-        console.print(f"  assertion result {report.assertion_result}")
-    console.print(
-        f"  tagged models    {len(report.tagged_models)} newly tagged "
-        f"of {len(radius.models)} at risk"
-    )
-    for document in report.documents:
-        console.print(f"  impact report    {document.urn}")
+    for write in report.writes:
+        _print_writes(write)
     console.print(f"\n[dim]run id: {report.run_id}[/dim]")
 
 
 @app.command()
 def scan(
     table: Annotated[
-        str,
+        str | None,
         typer.Option("--table", help="Dataset to audit: a full URN, or a name such as loans_raw."),
-    ],
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            help="Model to audit for target leakage: a full URN, or a name such as credit_risk_v3.",
+        ),
+    ] = None,
     sla_hours: Annotated[
         float | None,
         typer.Option(
@@ -217,17 +293,22 @@ def scan(
         typer.Option("--assertion-out", help="Also write the guarding-assertion YAML here."),
     ] = None,
 ) -> None:
-    """Audit one table: find the models it endangers and write the findings back."""
+    """Audit a table for stale data, a model for target leakage, or both.
+
+    The two targets ask different questions of the graph. ``--table`` asks what a
+    table's going stale endangers downstream. ``--model`` asks whether a model is
+    training on its own label. At least one is required.
+    """
+    if table is None and model is None:
+        console.print("[red]Nothing to scan: pass --table, --model, or both.[/red]")
+        raise typer.Exit(code=2)
+
     try:
         config = ScanConfig.from_env()
         if sla_hours is not None:
-            config = ScanConfig(
-                freshness_sla_hours=sla_hours,
-                max_hops=config.max_hops,
-                lineage_result_cap=config.lineage_result_cap,
-                model_at_risk_tag=config.model_at_risk_tag,
-                freshness_field=config.freshness_field,
-            )
+            # replace(), not a fresh ScanConfig: a hand-listed constructor silently
+            # drops any field added later, which is how a threshold stops working.
+            config = replace(config, freshness_sla_hours=sla_hours)
         llm = _resolve_llm(no_llm=no_llm, provider=llm_provider, model=llm_model)
     except ConfigError as exc:
         # A half-configured LLM, or an unusable threshold. Both are mistakes the
@@ -245,30 +326,45 @@ def scan(
         raise typer.Exit(code=1) from exc
 
     try:
-        table_urn = resolve_table(conn, table)
-    except TableResolutionError as exc:
+        table_urn = resolve_table(conn, table) if table is not None else None
+        model_urn = resolve_model(conn, model) if model is not None else None
+    except (TableResolutionError, ModelResolutionError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from exc
 
     if not conn.has_token:
         console.print("[yellow]No DATAHUB_GMS_TOKEN set; writing unauthenticated.[/yellow]")
 
-    console.print(f"Scanning [bold]{table_urn}[/bold]\n")
-    report = run_scan(conn, table_urn, config, llm=llm, dry_run=dry_run)
+    for target in (table_urn, model_urn):
+        if target is not None:
+            console.print(f"Scanning [bold]{target}[/bold]")
+    console.print()
+
+    report = run_scan(
+        conn,
+        config,
+        table_urn=table_urn,
+        model_urn=model_urn,
+        llm=llm,
+        dry_run=dry_run,
+    )
     _print_report(report)
 
-    if report.finding is None:
+    if report.clean:
         return
 
-    if assertion_out is not None:
+    if assertion_out is not None and report.assertion_yaml:
         assertion_out.write_text(report.assertion_yaml)
         console.print(f"[dim]wrote {assertion_out}[/dim]")
+
     if report_out is not None:
         from modelguard.writeback.documents import render_impact_report
 
-        assert report.narrative is not None
+        # One file per finding would need one path per finding. The worst finding
+        # is the one a human opens first, so that is the one written.
+        worst = report.writes[0]
         report_out.write_text(
-            render_impact_report(report.finding, report.narrative.assessment, report.run_id)
+            render_impact_report(worst.finding, worst.narrative.assessment, report.run_id)
         )
         console.print(f"[dim]wrote {report_out}[/dim]")
 
