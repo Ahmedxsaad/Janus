@@ -102,11 +102,26 @@ _LEAKAGE_EXTRA = """\
 """
 
 
+@singledispatch
 def _system_prompt(finding: Finding) -> str:
-    """Return the brief for this finding's kind of failure."""
-    if isinstance(finding, LeakageFinding):
-        return _SYSTEM_PREAMBLE.format(subject=_LEAKAGE_SUBJECT, extra=_LEAKAGE_EXTRA)
+    """Return the brief for this finding's kind of failure.
+
+    Registered per finding type, like fact_block and template_narrative below.
+    An unregistered type must raise, not silently fall back to some other
+    type's brief: a future finding type routed through the wrong system prompt
+    would misdescribe the failure to the LLM without anyone noticing.
+    """
+    raise NotImplementedError(f"no system prompt registered for {type(finding).__name__}")
+
+
+@_system_prompt.register
+def _freshness_prompt(finding: FreshnessFinding) -> str:
     return _SYSTEM_PREAMBLE.format(subject=_FRESHNESS_SUBJECT, extra=_FRESHNESS_EXTRA)
+
+
+@_system_prompt.register
+def _leakage_prompt(finding: LeakageFinding) -> str:
+    return _SYSTEM_PREAMBLE.format(subject=_LEAKAGE_SUBJECT, extra=_LEAKAGE_EXTRA)
 
 
 @singledispatch

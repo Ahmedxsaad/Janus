@@ -16,9 +16,14 @@ docs/decision-log.md.
 
 Idempotency
 -----------
-The document id is derived from the model URN, so a rerun updates one document in
-place rather than piling up a report per scan. The body changes between runs
-(the lag moves), which is an update, not a duplicate.
+The document id is derived from the model URN and the finding's own resource
+URN, so a rerun of the *same* finding updates one document in place rather than
+piling up a report per scan. The resource URN half matters: a model can be
+named in more than one finding in a single scan (downstream of a stale table
+and independently leaking, or leaking through two separate features), and each
+finding's resource_urn is what it actually points at (a leaking column, say),
+so two distinct findings on one model get two distinct, individually
+convergent reports instead of the second silently overwriting the first.
 
 The prose in the body may come from an LLM. It is only ever prose: every number
 in the report is passed in from the deterministic finding, and the LLM's text is
@@ -27,6 +32,7 @@ rendered as a quoted narrative section, never as a fact table.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from functools import singledispatch
 
@@ -52,14 +58,21 @@ class DocumentWrite:
     markdown: str
 
 
-def _document_id(model_urn: str) -> str:
-    """Derive a stable document id from the model it reports on.
+def _document_id(model_urn: str, resource_urn: str) -> str:
+    """Derive a stable document id from the model and the finding it reports on.
 
     The model's name, not its full URN: URNs contain characters that make an
-    unreadable document id, and one report per model is exactly the cardinality
-    we want.
+    unreadable document id. The resource URN is folded in as a short hash so
+    that two different findings on the same model (a leaking column and a
+    stale upstream table, or two separate leaking columns) land on two
+    different documents rather than colliding on one: without this, the
+    second ``publish_impact_report`` call in a scan would silently overwrite
+    the first finding's report. Hashed rather than embedded verbatim because a
+    schemaField URN contains parentheses and colons that do not belong in an id.
     """
-    return f"modelguard-impact-{MlModelUrn.from_string(model_urn).name}"
+    model_name = MlModelUrn.from_string(model_urn).name
+    resource_hash = hashlib.sha256(resource_urn.encode()).hexdigest()[:12]
+    return f"modelguard-impact-{model_name}-{resource_hash}"
 
 
 def _model_section(model: ModelAtRisk) -> str:
@@ -275,7 +288,7 @@ def publish_impact_report(
     title = f"ModelGuard impact report: {report_subject(finding)}"
 
     document = Document.create_document(
-        id=_document_id(model_urn),
+        id=_document_id(model_urn, finding.resource_urn),
         title=title,
         text=markdown,
         subtype=REPORT_SUBTYPE,

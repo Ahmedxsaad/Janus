@@ -256,9 +256,15 @@ def test_the_at_risk_model_is_tagged(conn: DataHubConnection, seeded: SeedResult
 def test_the_model_carries_the_risk_flag_and_the_run_id(
     conn: DataHubConnection, seeded: SeedResult, scanned
 ):
-    """Model-level risk lives on structured properties, because incidents cannot."""
+    """Model-level risk lives on structured properties, because incidents cannot.
+
+    Inclusion, not exact equality: RISK_FLAGS accumulates across a model's
+    finding history (a model can be both downstream of a stale table and
+    independently leaking), so a model this suite shares with the Phase 2 gate
+    may carry more than just this run's flag.
+    """
     stored = read_properties(conn, seeded.model)
-    assert stored[RISK_FLAGS] == ["upstream-freshness"]
+    assert "upstream-freshness" in stored[RISK_FLAGS]
     assert stored[RUN_ID] == [scanned.run_id]
 
 

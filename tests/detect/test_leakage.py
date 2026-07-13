@@ -317,3 +317,62 @@ def test_a_column_carrying_some_other_term_is_not_a_label(term: str):
     graph.set_aspect(LABEL_COLUMN_URN, _terms(term))
 
     assert leakage_findings(make_connection(graph, client), MODEL_URN, CONFIG) == ()
+
+
+# ---------------------------------------------------------------------------
+# The zero-hop case: a feature aliased directly from the label
+# ---------------------------------------------------------------------------
+
+
+def test_a_feature_whose_own_source_column_is_the_label_is_flagged():
+    """The most direct leak: no transformation at all, just the label reused.
+
+    Without an explicit check, the upstream traversal's own "skip my starting
+    column" guard would swallow this case: the feature's source column IS the
+    label, so the very entry that should match gets skipped as "myself," and
+    a graph leaking in the most blatant way possible would scan clean.
+    """
+    graph = FakeGraph(
+        aspects={  # type: ignore[arg-type]
+            (MODEL_URN, MLModelPropertiesClass): _model(LEAK_FEATURE_URN),
+            (LEAK_FEATURE_URN, MLFeaturePropertiesClass): _feature(LABEL_COLUMN_URN),
+            (LABEL_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN),
+        }
+    )
+    # No lineage call should even be needed: the zero-hop case is decided
+    # before any traversal. An empty client proves that.
+    client = FakeClient()
+
+    findings = leakage_findings(make_connection(graph, client), MODEL_URN, CONFIG)
+
+    assert len(findings) == 1
+    assert findings[0].leak.label_column_urn == LABEL_COLUMN_URN
+    assert findings[0].leak.source_column_urn == LABEL_COLUMN_URN
+    assert client.lineage.lineage_calls == []
+
+
+def test_the_column_path_is_truncated_at_the_matched_label():
+    """A path that continues past the label must not be quoted in full.
+
+    A more distant ancestor beyond the match is not part of the derivation
+    chain that proves the leak.
+    """
+    graph, _ = _leaking_graph()
+    beyond_label = f"urn:li:schemaField:({TABLE_URN},some_upstream_of_the_label)"
+    client = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=1,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN, beyond_label),
+                )
+            ]
+        }
+    )
+
+    finding = leakage_findings(make_connection(graph, client), MODEL_URN, CONFIG)[0]
+
+    assert finding.leak.column_path == ("prior_default_flag", "default_status")
+    assert "some_upstream_of_the_label" not in finding.leak.path_text

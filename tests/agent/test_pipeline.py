@@ -6,28 +6,42 @@ import pytest
 from datahub.metadata.schema_classes import (
     AssertionInfoClass,
     AssertionRunEventClass,
+    BooleanTypeClass,
     DeploymentStatusClass,
     GlobalTagsClass,
+    GlossaryTermAssociationClass,
+    GlossaryTermsClass,
+    MLFeaturePropertiesClass,
     MLModelDeploymentPropertiesClass,
     MLModelPropertiesClass,
     OperationClass,
     OperationTypeClass,
+    OtherSchemaClass,
+    SchemaFieldClass,
+    SchemaFieldDataTypeClass,
+    SchemaMetadataClass,
     StructuredPropertiesClass,
     StructuredPropertyDefinitionClass,
 )
 
 from modelguard.agent.pipeline import FindingWrites, ScanReport, new_run_id, run_scan
 from modelguard.config import ScanConfig
-from modelguard.models import Severity
+from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
+from modelguard.models import FindingType, Severity
 from modelguard.writeback.properties import RISK_FLAGS, RUN_ID
 from tests.conftest import (
     DEPLOYMENT_URN,
+    FEATURE_TABLE_URN,
+    LABEL_COLUMN_URN,
+    LABEL_TERM_URN,
+    LEAK_COLUMN_URN,
     LEAK_FEATURE_URN,
     MODEL_URN,
     NOW_MS,
     TABLE_URN,
     FakeClient,
     FakeGraph,
+    column_path,
     lineage_result,
     make_connection,
 )
@@ -271,3 +285,136 @@ def test_a_stale_table_with_no_model_downstream_warns_and_tags_nothing():
 def test_every_run_gets_a_distinct_run_id():
     assert new_run_id() != new_run_id()
     assert new_run_id().startswith("scan-")
+
+
+# --------------------------------------------------------------------------
+# One model, two findings in the same scan: nothing may overwrite the other
+# --------------------------------------------------------------------------
+
+
+def _dual_target_scan(*, lag_hours: float = 30.0) -> tuple[FakeGraph, FakeClient]:
+    """The seeded demo shape.
+
+    One model is both downstream of a stale table and independently leaking
+    its own label, scanned with --table and --model together.
+    """
+    graph = _graph(lag_hours)
+    graph.set_aspect(
+        LEAK_FEATURE_URN,
+        MLFeaturePropertiesClass(
+            sources=[FEATURE_TABLE_URN],
+            customProperties={SOURCE_COLUMN_PROPERTY: LEAK_COLUMN_URN},
+        ),
+    )
+    graph.set_aspect(
+        LABEL_COLUMN_URN,
+        GlossaryTermsClass(
+            terms=[GlossaryTermAssociationClass(urn=LABEL_TERM_URN)], auditStamp=None
+        ),
+    )
+    # raise_incident resolves a schemaField target through the parent dataset's
+    # schemaMetadata, never through graph.exists() (D-017).
+    graph.set_aspect(
+        FEATURE_TABLE_URN,
+        SchemaMetadataClass(
+            schemaName="customer_features",
+            platform="urn:li:dataPlatform:snowflake",
+            version=0,
+            hash="",
+            platformSchema=OtherSchemaClass(rawSchema=""),
+            fields=[
+                SchemaFieldClass(
+                    fieldPath="prior_default_flag",
+                    type=SchemaFieldDataTypeClass(type=BooleanTypeClass()),
+                    nativeDataType="BOOLEAN",
+                )
+            ],
+        ),
+    )
+
+    client = FakeClient(
+        lineage_results=[
+            lineage_result(FEATURE_TABLE, 1),
+            lineage_result(LEAK_FEATURE_URN, 2),
+            lineage_result(MODEL_URN, 3),
+        ],
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=1,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                )
+            ]
+        },
+    )
+    return graph, client
+
+
+def test_a_model_hit_by_two_findings_keeps_both_risk_flags():
+    """Reproduces the overwrite this design must avoid.
+
+    assign_properties replaces RISK_FLAGS, so the second finding's write must
+    union with the first's, not erase it.
+    """
+    graph, client = _dual_target_scan()
+    graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
+
+    report = run_scan(
+        make_connection(graph, client),
+        ScanConfig(),
+        table_urn=TABLE_URN,
+        model_urn=MODEL_URN,
+        llm=None,
+        now_ms=NOW_MS,
+    )
+
+    assert len(report.writes) == 2
+    properties = _aspects_of(graph, StructuredPropertiesClass)
+    final_flags = {
+        assignment.propertyUrn.rsplit(":", 1)[-1]: assignment.values
+        for assignment in properties[-1].properties
+    }[RISK_FLAGS]
+    assert set(final_flags) == {"upstream-freshness", "target-leakage"}
+
+
+def test_a_model_hit_by_two_findings_gets_two_impact_reports_not_one():
+    """Reproduces the document collision.
+
+    publish_impact_report must not let the second finding's write silently
+    overwrite the first's report.
+    """
+    graph, client = _dual_target_scan()
+    graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
+
+    report = run_scan(
+        make_connection(graph, client),
+        ScanConfig(),
+        table_urn=TABLE_URN,
+        model_urn=MODEL_URN,
+        llm=None,
+        now_ms=NOW_MS,
+    )
+
+    document_urns = {write.documents[0].urn for write in report.writes if write.documents}
+    assert len(document_urns) == 2
+
+
+def test_a_leakage_only_scan_never_claims_a_freshness_assertion_was_written():
+    """assertion_yaml must stay empty when no FreshnessFinding fired in this scan."""
+    graph, client = _dual_target_scan(lag_hours=1.0)  # within the 6h default SLA
+    graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
+
+    report = run_scan(
+        make_connection(graph, client),
+        ScanConfig(),
+        table_urn=TABLE_URN,
+        model_urn=MODEL_URN,
+        llm=None,
+        now_ms=NOW_MS,
+    )
+
+    assert len(report.writes) == 1
+    assert report.writes[0].finding.finding_type is FindingType.TARGET_LEAKAGE
+    assert report.assertion_yaml == ""

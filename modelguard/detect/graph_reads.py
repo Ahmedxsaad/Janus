@@ -52,7 +52,12 @@ def has_owner(conn: DataHubConnection, entity_urn: str) -> bool:
     return bool(ownership and ownership.owners)
 
 
-def model_ref(conn: DataHubConnection, model_urn: str) -> ModelRef:
+def model_ref(
+    conn: DataHubConnection,
+    model_urn: str,
+    *,
+    properties: MLModelPropertiesClass | None = None,
+) -> ModelRef:
     """Read the model facts every detector needs to grade a finding.
 
     Deployments come from ``mlModelProperties``, not from lineage: the
@@ -60,8 +65,18 @@ def model_ref(conn: DataHubConnection, model_urn: str) -> ModelRef:
     unreachable by a lineage traversal. That read is what decides whether a model
     is scoring live traffic, which is what separates a production incident from a
     training-time concern (D-020).
+
+    Args:
+        conn: An open connection.
+        model_urn: The model to describe.
+        properties: The model's ``mlModelProperties``, if the caller already
+            fetched it for its own purposes (blast_radius reads ``mlFeatures``
+            from it, leakage reads it too). Passing it in avoids a second
+            round trip for the same aspect; omit it to have this function fetch
+            its own.
     """
-    properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
+    if properties is None:
+        properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
     deployments = tuple(properties.deployments or []) if properties else ()
     name = (properties.name if properties and properties.name else None) or model_urn
 

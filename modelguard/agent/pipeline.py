@@ -47,7 +47,13 @@ from modelguard.writeback.assertions import (
 from modelguard.writeback.documents import DocumentWrite, publish_impact_report
 from modelguard.writeback.incidents import IncidentWrite, raise_incident
 from modelguard.writeback.labels import add_tag, ensure_tag
-from modelguard.writeback.properties import RISK_FLAGS, RUN_ID, assign_properties, define_properties
+from modelguard.writeback.properties import (
+    RISK_FLAGS,
+    RUN_ID,
+    assign_properties,
+    define_properties,
+    read_properties,
+)
 from modelguard.writeback.terms import add_term, ensure_term
 
 #: Description attached to the tag entity the first time it is created.
@@ -193,10 +199,23 @@ def _write_back(
             tagged.append(model.urn)
         # Model-level risk lives on the model, because DataHub refuses an incident
         # there. The trust score itself is a later phase; this run records the flag.
+        #
+        # Read-then-union, not a blind overwrite: assign_properties replaces the
+        # named property's whole value, and a model can appear in more than one
+        # finding within a single scan (downstream of a stale table AND itself
+        # leaking, or leaking through two separate features). Writing this
+        # finding's type alone would erase whatever an earlier finding in the
+        # same scan just wrote for the same model.
+        existing_flags = {
+            str(flag) for flag in read_properties(conn, model.urn).get(RISK_FLAGS, [])
+        }
         assign_properties(
             conn,
             model.urn,
-            {RISK_FLAGS: [str(finding.finding_type)], RUN_ID: [run_id]},
+            {
+                RISK_FLAGS: sorted(existing_flags | {str(finding.finding_type)}),
+                RUN_ID: [run_id],
+            },
         )
         documents.append(
             publish_impact_report(
@@ -321,9 +340,13 @@ def run_scan(
         for finding in findings
     )
 
+    # Empty, not the unwritten preview, when no write in this scan has an
+    # assertion: a scan that found only a leakage finding never called
+    # upsert_guarding_assertion, and reporting the table's rendered-but-unwritten
+    # YAML here would claim a check was written when it was not.
     written_yaml = next(
         (write.assertion.yaml_text for write in writes if write.assertion is not None),
-        assertion_yaml,
+        "",
     )
 
     return ScanReport(

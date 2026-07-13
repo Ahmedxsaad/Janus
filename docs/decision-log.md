@@ -16,6 +16,64 @@ Entry template:
 
 ---
 
+## D-035: A deep review before the phase 2 PR found and fixed a same-model, two-finding overwrite (2026-07-13)
+- Decided by: Ahmed Saad (requested the review), fixes applied by Claude
+- Decision: An 8-angle review (correctness, removed-behavior, cross-file,
+  reuse, simplification, efficiency, altitude, conventions) ran against the
+  leakage detector diff before opening the PR. Every finding it produced with a
+  concrete failure scenario was fixed, not just logged, and each fix got a
+  regression test that fails on the reverted code (mutation-checked per
+  tests/CLAUDE.md rule 6).
+- Options considered: (a) open the PR as-is and fix findings in follow-ups,
+  (b) fix everything the review surfaced before opening the PR.
+- Why: Two of the findings were directly reachable through the flagship demo
+  command itself, `modelguard scan --table loans_raw --model credit_risk_v3`,
+  because `credit_risk_v3` is simultaneously downstream of `loans_raw`'s blast
+  radius and independently leaking its own label. Shipping a demo command that
+  silently corrupts its own output would have been worse than the delay of
+  fixing it first.
+- Result: Six real defects fixed, verified against a live Quickstart:
+  1. `assign_properties` replaces a structured property's value outright, and
+     `_write_back` ran it once per finding; two findings on one model in a
+     single scan (the case above) had the second overwrite the first's
+     `risk_flags`. Fixed with read-then-union at the call site in
+     `agent/pipeline.py`, which required teaching `FakeGraph.emit_mcp` to
+     actually update its aspect store (it previously only recorded the call),
+     since a real GMS applies a versioned aspect to its primary store
+     synchronously and the fake needed to match that to test the fix at all.
+  2. `_document_id` was keyed on the model alone; the same dual-finding case
+     had the second `publish_impact_report` call silently overwrite the
+     first's document. Fixed by folding a hash of the finding's own
+     `resource_urn` into the id, so two distinct findings on one model land on
+     two distinct, individually convergent documents.
+  3. `leak_path`'s "skip my own starting column" guard also skipped checking
+     whether that column *was itself* the label, so a feature aliased directly
+     from the label with zero transformation, the most direct form of leakage,
+     went undetected. Fixed with an explicit zero-hop check before the
+     traversal.
+  4. `column_path` was built from a `LineageResult`'s whole path rather than
+     truncated at the matched label, so a path continuing past the label to a
+     more distant ancestor was quoted as part of the proof. Fixed by
+     truncating at the matched index.
+  5. `run_scan`'s non-dry-run path fell back to the rendered-but-unwritten
+     assertion YAML when no write in the batch had one, so `--assertion-out`
+     could describe a check for a table that was never found stale in a
+     dual-target scan. Fixed by falling back to empty instead.
+  6. `_system_prompt` used a hand-rolled isinstance check with a silent `else`,
+     unlike its three `singledispatch` siblings in the same file, which raise
+     on an unregistered type. Converted to `singledispatch` so a future third
+     finding type fails loudly instead of silently getting the wrong brief.
+- Not fixed, logged instead: three call sites (`agent/pipeline.py`'s
+  `_write_back`, `cli.py`'s `_print_finding`, and `narrate.py` before this fix)
+  discriminate `Finding` subtypes via `isinstance` while `documents.py` and the
+  rest of `narrate.py` use `singledispatch`, and the `Finding` ABC itself is a
+  third mechanism for the same problem. Converting everything to one pattern
+  now would be premature for two concrete subclasses; revisit when the third
+  detector (schema drift) lands and the actual shape of the problem is known.
+  `leakage_max_hops` also has no `MODELGUARD_*` env override unlike the other
+  three `ScanConfig` thresholds: fixed, since it was a one-line gap against an
+  explicit existing rule (modelguard/CLAUDE.md rule 3), not a design question.
+
 ## D-034: Phase 1 merged to main; Phase 2 branches from a clean base (2026-07-13)
 - Decided by: Ahmed Saad
 - Decision: feat/phase-1-core-loop, gated and passing since D-028, merged to main

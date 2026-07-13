@@ -107,9 +107,8 @@ def _model_at_risk(
     downstream_features: frozenset[str],
 ) -> ModelAtRisk:
     """Describe one at-risk model by reading the aspects lineage does not carry."""
-    ref = model_ref(conn, model_urn)
-
     properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
+    ref = model_ref(conn, model_urn, properties=properties)
     model_features = frozenset(properties.mlFeatures or []) if properties else frozenset()
 
     return ModelAtRisk(

@@ -74,9 +74,17 @@ class FakeGraph:
 
     def emit_mcp(self, mcp: Any, **_: Any) -> None:
         self.emitted.append(mcp)
+        # A real GMS applies a versioned aspect to its primary store synchronously
+        # on emit; only search, relationships, and timeseries indexing lag behind
+        # (that asynchrony is what the integration gate's polling is for, not this
+        # read). Mirroring that here lets a test exercise a read-your-own-write
+        # sequence within one scan, such as two findings on one model each reading
+        # the model's current risk flags before writing theirs back.
+        self.set_aspect(mcp.entityUrn, mcp.aspect)
 
     def emit_mcps(self, mcps: Any, **_: Any) -> list[Any]:
-        self.emitted.extend(mcps)
+        for mcp in mcps:
+            self.emit_mcp(mcp)
         return []
 
     def execute_graphql(self, query: str, variables: dict[str, Any] | None = None, **_: Any) -> Any:

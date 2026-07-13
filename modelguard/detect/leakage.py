@@ -160,6 +160,14 @@ def leak_path(
     """
     field = SchemaFieldUrn.from_string(source_column_urn)
 
+    # A feature whose declared source column IS the label, with no
+    # transformation at all, is leakage in its most direct form: someone wired
+    # a "feature" straight from the ground truth. The traversal below would
+    # never reveal this, since there is nothing left to derive from once the
+    # column already is the label, so it is checked explicitly first.
+    if labels.is_label(source_column_urn):
+        return source_column_urn, (field.field_path,)
+
     results = conn.client.lineage.get_lineage(
         source_urn=field.parent,
         source_column=field.field_path,
@@ -175,11 +183,14 @@ def leak_path(
             continue
 
         path = result.paths or []
-        for step in path:
+        for index, step in enumerate(path):
             if step.urn == source_column_urn:
                 continue
             if labels.is_label(step.urn):
-                columns = tuple(hop.column_name for hop in path if hop.column_name)
+                # Truncated at the match: a path that continues past the label
+                # to a more distant ancestor must not be quoted as part of the
+                # derivation chain that proves this finding.
+                columns = tuple(hop.column_name for hop in path[: index + 1] if hop.column_name)
                 return step.urn, columns
 
     return None
@@ -209,7 +220,7 @@ def leakage_findings(
     if properties is None or not properties.mlFeatures:
         return ()
 
-    model = model_ref(conn, model_urn)
+    model = model_ref(conn, model_urn, properties=properties)
     labels = _LabelIndex(conn, config)
 
     findings: list[LeakageFinding] = []

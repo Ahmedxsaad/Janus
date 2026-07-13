@@ -219,8 +219,8 @@ def _print_writes(write: FindingWrites) -> None:
 def _print_report(report: ScanReport) -> None:
     """Render a scan's outcome for a human reading a terminal."""
     if report.clean:
-        target = report.model_urn or report.table_urn
-        console.print(f"[green]No finding.[/green] {target} is healthy.")
+        targets = [urn for urn in (report.table_urn, report.model_urn) if urn is not None]
+        console.print(f"[green]No finding.[/green] {' and '.join(targets)} healthy.")
         for warning in report.warnings:
             console.print(f"[yellow]warning:[/yellow] {warning}")
         return

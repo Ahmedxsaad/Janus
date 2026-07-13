@@ -26,6 +26,7 @@ from modelguard.env import ConfigError, optional_float, optional_int
 
 __all__ = [
     "ENV_FRESHNESS_SLA_HOURS",
+    "ENV_LEAKAGE_MAX_HOPS",
     "ENV_LINEAGE_RESULT_CAP",
     "ENV_MAX_HOPS",
     "ConfigError",
@@ -35,6 +36,7 @@ __all__ = [
 ENV_FRESHNESS_SLA_HOURS = "MODELGUARD_FRESHNESS_SLA_HOURS"
 ENV_MAX_HOPS = "MODELGUARD_MAX_HOPS"
 ENV_LINEAGE_RESULT_CAP = "MODELGUARD_LINEAGE_RESULT_CAP"
+ENV_LEAKAGE_MAX_HOPS = "MODELGUARD_LEAKAGE_MAX_HOPS"
 
 
 @dataclass(frozen=True)
@@ -104,4 +106,5 @@ class ScanConfig:
             ),
             max_hops=optional_int(ENV_MAX_HOPS, defaults.max_hops),
             lineage_result_cap=optional_int(ENV_LINEAGE_RESULT_CAP, defaults.lineage_result_cap),
+            leakage_max_hops=optional_int(ENV_LEAKAGE_MAX_HOPS, defaults.leakage_max_hops),
         )
