@@ -415,16 +415,42 @@ the impact report's leakage section.
 **Cite** Kaufman et al. 2012 in the report prose.
 
 ### 5.2 P3 - Training/serving schema drift (`detect/schema_drift.py`)
-- Read the training run's **input dataset schema as-of the run timestamp** vs the source's **current**
-  `schemaMetadata`, using the **Timeline / Schema-History API** [verified]:
-  ```bash
-  datahub timeline --urn "urn:li:dataset:(...loans_raw,PROD)" --category TECHNICAL_SCHEMA
-  ```
-  (or the OpenAPI timeline endpoint). Diff added/removed/retyped columns.
-- **Write-back:** `input-schema-drift` incident + structured property `{drifted_fields, training_run_urn}`.
+
+> **Landed 2026-07-16** (D-036). `schema_drift_findings(conn, model_urn, config)`
+> diffs each input dataset's current schema against the schema the model was
+> trained on and returns a `SchemaDriftFinding` per drifted input. 8 unit tests
+> plus the Phase 2 drift/trust integration gate.
+
+The plan's original sketch reconstructed the training-time schema from the
+**Timeline / Schema-History API** (`datahub timeline --urn ... --category
+TECHNICAL_SCHEMA`). That reconstruction is fragile: catalog versions compact,
+ingestion lags training, and the `lastModified` stamps are unreliable as an
+"as-of training" cursor. The shipped detector instead captures a **schema
+fingerprint on the training run at training time** (a JSON map of input dataset
+URN to `field_path -> native_type`, in `customProperties` under
+`modelguard.training_schema`) and diffs the input dataset's **current**
+`schemaMetadata` against it. This is exactly the training-serving skew guard
+TFX/TFDV perform (Breck et al. 2019): freeze a schema at training, validate
+serving data against it. Deterministic, testable, and more robust than trusting
+version history (D-036).
+
+- Diff added/removed/retyped columns; the fingerprint is keyed by input dataset
+  URN so a multi-input run diffs each input against its own baseline.
+- **Write-back:** a `DATA_SCHEMA` incident on the **drifted input dataset** (never
+  on the mlModel: section 6.1), quoting every changed column in its evidence, plus
+  the `model-at-risk` tag and the `input-schema-drift` risk flag on the model. The
+  drifted-field list and training-run URN are carried in the incident description
+  and the impact report rather than as extra structured properties (D-036).
 - **Cite** Breck et al. 2019 (training-serving skew).
 
 ### 5.3 P4 - Model Trust Score (`detect/trust_score.py`)
+
+> **Landed 2026-07-16** (D-037). `trust_inputs_from_findings` reduces a scan's
+> findings about one model to deterministic inputs, `trust_score` applies the
+> weights below, and the pipeline writes `modelguard.trust_score` +
+> `modelguard.trust_band` on each model a finding named. 7 unit tests plus
+> pipeline and integration coverage.
+
 ```
 trust = 100
   − 40·(upstream_assertion_failing)
