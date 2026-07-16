@@ -91,6 +91,41 @@ class ScanConfig:
     leakage_risk_term_urn: str = "urn:li:glossaryTerm:modelguard.leakage-risk"
     """The term ModelGuard attaches to a feature it proved leaks."""
 
+    training_schema_property: str = "modelguard.training_schema"
+    """The custom property on a training run holding the input schema fingerprint.
+
+    A JSON object of ``field_path -> native_type`` captured when the model was
+    trained, which the schema-drift detector diffs against the input dataset's
+    current schema. A name, not a credential, so it has a default (D-029).
+    """
+
+    trust_weight_upstream_failure: float = 40.0
+    """Points a model loses for sitting downstream of a failing upstream table.
+
+    The trust-score weights are the plan's illustrative values (section 5.3). They
+    are algorithm parameters, not identity, so they carry documented defaults and
+    a benchmark can sweep them. An unowned, leaking, drifting model behind a live
+    endpoint on a stale source loses every one of them and scores zero.
+    """
+
+    trust_weight_leakage: float = 20.0
+    """Points lost for a target-leakage finding on the model."""
+
+    trust_weight_schema_drift: float = 15.0
+    """Points lost for an input-schema-drift finding on the model."""
+
+    trust_weight_freshness_lag: float = 15.0
+    """Points lost, scaled by lag/SLA capped at 1, for stale upstream data."""
+
+    trust_weight_missing_owner: float = 10.0
+    """Points lost when no one owns the model, so no one is on the hook to fix it."""
+
+    trust_band_healthy_min: float = 70.0
+    """At or above this score a model is healthy."""
+
+    trust_band_watch_min: float = 40.0
+    """At or above this (but below healthy) a model is on watch; below it, at risk."""
+
     @classmethod
     def from_env(cls) -> ScanConfig:
         """Build a config, applying any ``MODELGUARD_*`` overrides from ``.env``.
