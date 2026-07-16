@@ -24,10 +24,11 @@ security and observability cross-cutting.
 ## Local rules
 
 1. Findings passed between layers are typed models (models.py), not dicts.
-2. cli.py exposes exactly two entry points: scan (batch) and watch (event-driven).
-   Both share the identical detect -> reason -> write core, which lives in
-   agent/pipeline.py, not in cli.py. Only scan exists; watch lands with the
-   Actions framework. Never stub the other.
+2. cli.py exposes two commands: scan (batch) and watch (polling). Both share the
+   identical detect -> reason -> write core in agent/pipeline.py (run_scan), not in
+   cli.py. watch polls and acts on finding-set transitions, auto-approving because
+   it is unattended; it is polling by design (never Kafka-dependent), with the
+   Actions/EntityChangeEvent framework as the documented upgrade path.
 3. Keep hop caps, thresholds, and score weights in config.py, never hardcoded.
    Overrides come from MODELGUARD_* env vars and fail loudly when unusable.
 4. Every run gets a run_id; every log line and write carries it. It is
@@ -49,3 +50,4 @@ security and observability cross-cutting.
 | 2026-07-10 | Claude (for Ghassen Naouar) | env.py is the sole config entry point; llm.py is the sole vendor boundary; the narrator takes an injected LLMConfig |
 | 2026-07-13 | Claude (for Ahmed Saad) | Phase 2 leakage detector lands. Finding is now an ABC (FreshnessFinding, LeakageFinding); a scan may target a table, a model, or both (D-033) |
 | 2026-07-16 | Claude (for Ghassen Naouar) | Phase 2 P3/P4 land. SchemaDriftFinding joins the Finding ABC; a model scan runs leakage + schema drift. TrustScore/TrustBand roll a scan's findings per model into modelguard.trust_score + trust_band, written only for models a finding named (D-036, D-037) |
+| 2026-07-16 | Claude (for Ghassen Naouar) | Section 7 lands. agent/graph.py adds the LangGraph human-approval agent (scan --review); the watch command polls and acts on finding-set transitions. Both reuse run_scan; langgraph is the optional `agent` extra (D-039) |

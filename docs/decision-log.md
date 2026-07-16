@@ -16,6 +16,43 @@ Entry template:
 
 ---
 
+## D-039: Section 7 lands as a LangGraph StateGraph over the existing pipeline, opt-in and dependency-light (2026-07-16)
+- Decided by: Ghassen Naouar (chose scope: agent + watch), design by Claude
+- Decision: `agent/graph.py` runs the same `detect -> reason -> [approval] ->
+  write_back` order the pipeline already runs, but as a compiled `StateGraph` whose
+  nodes delegate to the pipeline's own deterministic functions (`_detect`,
+  `_write_back`, `_persist_trust`, `_trust_scores`) and to `narrate`. The one new
+  capability is a real `interrupt()` human-approval gate: `run_agent` pauses after
+  reasoning, hands the caller a preview, and writes only what is approved.
+  `scan --review` (or `--auto-approve` for the recorded demo) opts into it; the
+  default `scan` and `watch` keep using `run_scan`. `watch` is a polling loop that
+  shares the pipeline core and acts on finding-set transitions (a new problem or a
+  recovery), auto-approving because it is unattended.
+- Options considered: (a) StateGraph over the existing pipeline nodes, opt-in via
+  --review (chosen); (b) make the agent the default write path (rejected: forces the
+  optional `agent` extra on the out-of-the-box `modelguard scan`, which must run on
+  core deps with no LLM); (c) the plan's original `agent/tools.py` + `AgentExecutor`
+  with the Agent Context Kit toolset and umbrella `langchain` (rejected: an LLM
+  tool-caller that could decide to write contradicts the design law that detection
+  is deterministic and the LLM only narrates); (d) event-driven `watch` on the
+  DataHub Actions/Kafka framework (deferred: the plan flags Kafka timing as a demo
+  risk, so polling ships and Actions is the documented upgrade path).
+- Why: The pipeline already delivers the loop, so Section 7's value is the approval
+  interrupt and replayability, not new detection. Reusing the pipeline nodes keeps a
+  single write path and means the swap "touches nothing else" as the agent CLAUDE.md
+  intended. Keeping langgraph an optional, lazily-imported extra preserves the
+  judge's light out-of-the-box path. Dropping the umbrella `langchain` and
+  `datahub-agent-context` from the extra follows from the StateGraph design: nothing
+  imports them.
+- Result: `agent/graph.py` (`run_agent`, `build_scan_graph`), `scan --review` /
+  `--auto-approve`, and the `watch` command land on branch feat/langgraph-agent-watch.
+  langgraph pinned to 1.2.9 in the `agent` extra. The checkpointer is the in-memory
+  MemorySaver, and the findings/reports ride in an in-process holder rather than the
+  checkpointed state, so no ModelGuard dataclass is msgpack-serialized (which
+  langgraph warns will be blocked in a future release). 9 new unit tests: 4 on the
+  approval gate (the preview is shown before any write; approve writes, decline and
+  clean write nothing) and 5 on watch's transition logic. 266 unit tests green.
+
 ## D-038: The input data contract is an ODCS v3.1.0 artifact rendered from a model's inputs, not a graph write (2026-07-16)
 - Decided by: Ghassen Naouar (chose scope and validation), design by Claude
 - Decision: Section 6.5 lands as `writeback/contract.py`, a pure renderer that

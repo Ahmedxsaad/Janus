@@ -548,6 +548,22 @@ committing it to `examples/`. This makes the "contract for the ML boundary" tang
 
 ## 7. The agent (`agent/graph.py`) - LangGraph over the Agent Context Kit
 
+> **Landed 2026-07-16** (D-039). `agent/graph.py` runs the pipeline's node order
+> (`detect -> reason -> [approval] -> write_back`) as a compiled `StateGraph`, but
+> the nodes delegate to the pipeline's own deterministic functions and to
+> `narrate`; there is **no** Agent Context Kit toolset and **no** `AgentExecutor`,
+> because an LLM tool-caller that could decide to write contradicts the design law.
+> The one new capability is a real `interrupt()` approval gate: `run_agent` pauses
+> after reasoning, hands the caller a preview, and writes only what is approved.
+> `scan --review` (or `--auto-approve` for the demo) opts into it; the default
+> `scan` and `watch` keep using `run_scan`, so the out-of-the-box path needs no
+> langgraph (the `agent` extra, pinned to langgraph 1.2.9, is lazily imported).
+> `watch` shipped as a **polling** loop that acts on finding-set transitions, not
+> the Actions/Kafka consumer sketched below; that remains the documented upgrade
+> path. Findings ride an in-process holder rather than the checkpointed state, so
+> no ModelGuard dataclass is msgpack-serialized. 9 unit tests (4 on the approval
+> gate, 5 on watch transitions). The `tools.py` sketch below did not ship.
+
 `datahub-agent-context` gives the read toolset (`search`, `get_entities`, `get_lineage`,
 `list_schema_fields`, `get_dataset_queries`, `search_documents`, `grep_documents`) + mutations
 (`add_tags`, `update_description`, `add_glossary_terms`, `set_domains`, `add_owners`, `save_document`) [verified].
