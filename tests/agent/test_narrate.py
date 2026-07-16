@@ -16,6 +16,7 @@ from modelguard.agent.narrate import (
 )
 from modelguard.llm import LLMConfig
 from tests.conftest import make_finding as _finding
+from tests.conftest import make_leakage_finding as _leakage_finding
 
 SECRET = "sk-super-secret-key-1234567890"
 
@@ -213,8 +214,26 @@ def test_graph_metadata_is_passed_to_the_llm_inside_a_delimited_untrusted_block(
 
 
 def test_the_system_prompt_tells_the_model_the_evidence_is_untrusted_data():
-    assert "UNTRUSTED DATA" in narrate_module._SYSTEM_PROMPT
-    assert "ignore" in narrate_module._SYSTEM_PROMPT.lower()
+    prompt = narrate_module._system_prompt(_finding())
+    assert "UNTRUSTED DATA" in prompt
+    assert "ignore" in prompt.lower()
+
+
+def test_the_system_prompt_is_dispatched_per_finding_type_not_a_default():
+    """Registered per type, like fact_block and template_narrative.
+
+    An unregistered future finding type fails loudly instead of silently
+    getting some other type's brief.
+    """
+    freshness_prompt = narrate_module._system_prompt(_finding())
+    leakage_prompt = narrate_module._system_prompt(_leakage_finding())
+
+    assert "stale upstream table" in freshness_prompt
+    assert "target leakage" in leakage_prompt
+    assert freshness_prompt != leakage_prompt
+
+    with pytest.raises(NotImplementedError):
+        narrate_module._system_prompt(object())  # type: ignore[arg-type]
 
 
 # --------------------------------------------------------------------------

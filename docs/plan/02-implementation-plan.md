@@ -372,27 +372,47 @@ row against a dirty graph. Status: **PASSED 2026-07-10** (D-028).
 ## 5. Phase 2 - Week 3: the three differentiators (Problems 1, 3, 4)
 
 ### 5.1 P1 - Target-leakage detector (`detect/leakage.py`) - the most original piece
-```python
-def leakage_findings(client, model_urn, label_source_column_urn):
-    features = model_features(client, model_urn)                 # mlModelProperties.mlFeatures
-    findings = []
-    for feat in features:
-        # The feature's exact source column comes from customProperties, NOT from
-        # `sources`, which is dataset-granular (see section 3.1).
-        col = feature_source_column(client, feat)                # modelguard.source_column
-        cone = client.lineage.get_lineage(                        # [verified] column-level, upstream
-            source_urn=col.dataset, source_column=col.field,
-            direction="upstream", max_hops=6)
-        if intersects(cone, label_source_column_urn):
-            findings.append((feat, col, "derives from label source"))
-    return findings
-```
-- **Label column** is declared once (glossary term `label` or a structured property on the training dataset).
-- Also flag **temporal leakage**: feature derived from a column produced *after* the prediction timestamp.
-- **Write-back:** `leakage-risk` term on the feature + structured property on the model + a `FIELD` incident
-  **on the leaking `schemaField`** (not on the model: see section 6.1) quoting the exact
-  `feature -> ... -> label` column path. Deterministic, no training required.
-- **Cite** Kaufman et al. 2012 in the report prose.
+
+> **Landed 2026-07-13** (D-031, D-032, D-033). `leakage_findings(conn, model_urn,
+> config)` traverses each feature's upstream column cone and returns a
+> `LeakageFinding` for every column that reaches a declared label. Verified
+> against a live GMS: 5 integration tests
+> (`tests/integration/test_phase2_leakage.py`) plus 14 unit tests including a
+> false-positive control and four killed mutants.
+
+The plan's original sketch, `intersects(cone, label_source_column_urn)`, is
+unsound as written: `client.lineage.get_lineage(source_column=...)` does not put
+the label column in the cone's URNs at all. On the seeded graph,
+`LineageResult.urn` for a column-level upstream query is the **dataset**
+(`loans_raw`), never the column, even one hop up. The column identity survives
+only in `LineageResult.paths`, a list of `LineagePath(urn, entity_name,
+column_name)`. `intersects` against `.urn` would report a leaking graph clean.
+The shipped detector reads `.paths` and never `.urn` for this comparison
+(D-031); this is the sharpest addition to the Most Valuable Feedback list
+(section 8.3).
+
+**Label column** is declared as a glossary term (`urn:li:glossaryTerm:
+modelguard.label`), read from two aspects and unioned: directly on the
+`schemaField` (what ModelGuard and the seeder write), and via
+`editableSchemaMetadata` on the parent dataset (what the DataHub UI writes when
+a human tags a column by hand). Both routes were emitted and read back against
+a live Quickstart before the detector was written (D-032). A structured
+property on the training dataset was considered and rejected: it is invisible
+in the UI's own vocabulary, and a term reaches a human declaring their own
+label with zero ModelGuard configuration.
+
+Temporal leakage (a feature derived from a column produced after the
+prediction timestamp) is not yet implemented; the column-lineage leakage above
+is the shipped detector.
+
+**Write-back:** a `FIELD` incident on the leaking `schemaField` (never on the
+model: section 6.1), quoting the exact `feature <- ... <- label` column path in
+its evidence, plus a `leakage-risk` glossary term on the feature and a
+`risk_flags` structured property on the model. Deterministic, no training
+required. `agent/narrate.py` drafts the prose; `writeback/documents.py` renders
+the impact report's leakage section.
+
+**Cite** Kaufman et al. 2012 in the report prose.
 
 ### 5.2 P3 - Training/serving schema drift (`detect/schema_drift.py`)
 - Read the training run's **input dataset schema as-of the run timestamp** vs the source's **current**
@@ -601,6 +621,13 @@ Concrete, reproducible findings from Phase 0, worth far more than generic praise
     OperationClass)` raises `TypeError: Cannot get a timeseries aspect using "get_aspect"`. The required
     `get_latest_timeseries_value(urn, aspect, filter_criteria_map)` has a mandatory third positional
     argument that is almost always `{}`, which is undiscoverable without reading the source.
+12. **`LineageResult.urn` is the upstream dataset, not the column, for a column-scoped query.**
+    `client.lineage.get_lineage(source_urn=t, source_column=c, direction="upstream")` on the seeded
+    graph returns a result whose `.urn` is the upstream table (`loans_raw`), not the schemaField the
+    query asked about, even at one hop. The column identity is carried only in `LineageResult.paths`
+    (a list of `LineagePath(urn, entity_name, column_name)`), which is undocumented as the source of
+    column granularity. A caller who compares `.urn` against a target column, the obvious thing to do,
+    silently gets zero matches on a graph where the column-level edge plainly exists (D-031).
 
 ---
 

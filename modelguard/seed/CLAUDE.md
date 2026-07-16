@@ -38,3 +38,4 @@ realism, not a prerequisite (D-014).
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: seeding rules and Week 1 gate context |
 | 2026-07-09 | Claude (for Ghassen Naouar) | Record the missing SDK ML entity classes, the dataset-granular sources aspect, and graph_spec as source of truth |
 | 2026-07-10 | Claude (for Ghassen Naouar) | scenarios.py lands: labeled, reversible, injectable clock |
+| 2026-07-13 | Claude (for Ahmed Saad) | seed_ml_graph declares the label: a glossary term on default_status, the column the leakage detector hunts for (D-032) |

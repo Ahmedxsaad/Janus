@@ -52,3 +52,4 @@ docs/plan/02-implementation-plan.md section 6; use those exact forms.
 | 2026-07-09 | Claude (for Ghassen Naouar) | Correct the dedup key (title, not run_id) and the incident types (FIELD, not COLUMN) |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Incidents cannot attach to mlModel; dedup via IncidentOn, never incidentsSummary |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Phase 1: labels, assertions, documents land; Cloud-only assertions client, no source restamping, no mlModel patch builder, no fabricated values |
+| 2026-07-13 | Claude (for Ahmed Saad) | terms.py lands: glossary-term read-merge-emit, same pattern as labels.py. A leakage finding writes a FIELD incident on the column, never on the model, same as freshness |

@@ -32,3 +32,4 @@ section 5): leakage (P1), blast_radius (P2), schema_drift (P3), trust_score (P4)
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: purity, typing, traversal, and test rules |
 | 2026-07-10 | Claude (for Ghassen Naouar) | blast_radius lands: hop-cap filtering, URN-derived entity types, positive-evidence rule, timeseries freshness read |
+| 2026-07-13 | Claude (for Ahmed Saad) | leakage lands: label declared via glossary term (union of two aspects), upstream traversal reads LineagePath, never LineageResult.urn, which is the dataset for a column query (D-031). Shared model/deployment reads factored into graph_reads.py |

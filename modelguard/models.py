@@ -20,6 +20,7 @@ change between runs, live in :attr:`Finding.evidence` and in the description.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -55,12 +56,12 @@ def severity_rank(severity: Severity) -> int:
 class FindingType(StrEnum):
     """The kind of problem a detector found.
 
-    Only the Phase 1 detector's type exists. Leakage, schema drift, and the trust
-    score add their own values when those detectors land; declaring them now
-    would be a placeholder for code that does not exist.
+    Schema drift and the trust score add their own values when those detectors
+    land; declaring them now would be a placeholder for code that does not exist.
     """
 
     UPSTREAM_FRESHNESS = "upstream-freshness"
+    TARGET_LEAKAGE = "target-leakage"
 
 
 @dataclass(frozen=True)
@@ -91,24 +92,36 @@ class FreshnessSignal:
 
 
 @dataclass(frozen=True)
-class ModelAtRisk:
-    """One model that consumes, transitively, a dataset that has gone stale."""
+class ModelRef:
+    """Enough of a model to judge how much a finding about it matters.
+
+    Every detector needs the same three things about a model: who it is, whether
+    it is serving traffic, and whether anyone owns it. What a detector adds on
+    top (how many hops away the failure is, which feature leaks) is specific to
+    that detector and lives on its own finding.
+    """
 
     urn: str
     name: str
-    hops: int
-    """Lineage hops from the failing table to this model."""
     deployments: tuple[str, ...]
     live_deployments: tuple[str, ...]
     """The subset of deployments whose status is IN_SERVICE."""
-    features_at_risk: tuple[str, ...]
-    """The model's own MLFeatures that sit downstream of the failing table."""
     has_owner: bool
 
     @property
     def is_live(self) -> bool:
         """Whether this model is currently serving predictions."""
         return bool(self.live_deployments)
+
+
+@dataclass(frozen=True)
+class ModelAtRisk(ModelRef):
+    """One model that consumes, transitively, a dataset that has gone stale."""
+
+    hops: int = 0
+    """Lineage hops from the failing table to this model."""
+    features_at_risk: tuple[str, ...] = ()
+    """The model's own MLFeatures that sit downstream of the failing table."""
 
     @property
     def severity(self) -> Severity:
@@ -173,40 +186,110 @@ class BlastRadius:
         return tuple(m for m in self.models if m.is_live)
 
 
-@dataclass(frozen=True)
-class Finding:
+class Finding(ABC):
     """A detected problem, ready to be written back to the graph.
 
+    One subclass per detector. The write-back layer and the narrator consume this
+    interface and nothing wider, so a new detector reaches the graph without
+    either of them growing a special case.
+
     ``resource_urn`` is where the incident attaches. It is never an mlModel:
-    DataHub's incident model rejects that entity type, so an upstream data
-    failure attaches to the dataset that failed, and model-level risk is carried
-    by structured properties and a tag on the model instead.
+    DataHub's incident model rejects that entity type (D-017), so a finding
+    attaches to the data asset that is actually wrong (a dataset, or a column),
+    and model-level risk is carried by a tag and structured properties on the
+    model instead.
     """
 
-    finding_type: FindingType
-    resource_urn: str
-    incident_type: str
-    """A DataHub incident type, validated by the write-back layer."""
-    severity: Severity
+    @property
+    @abstractmethod
+    def finding_type(self) -> FindingType:
+        """Which detector produced this."""
+
+    @property
+    @abstractmethod
+    def resource_urn(self) -> str:
+        """The dataset or schemaField the incident attaches to."""
+
+    @property
+    @abstractmethod
+    def incident_type(self) -> str:
+        """A DataHub incident type, validated by the write-back layer."""
+
+    @property
+    @abstractmethod
+    def severity(self) -> Severity:
+        """How much damage this finding can do."""
+
+    @property
+    @abstractmethod
+    def title(self) -> str:
+        """The incident title, and part of the dedup key.
+
+        Every implementation must return a pure function of stable graph facts:
+        no measurement that drifts between scans, no timestamp, and never any
+        LLM output. The dedup key is ``(resource_urn, incident_type, title)``, so
+        a title that changes between runs raises a duplicate incident on every
+        run (D-013, D-027).
+        """
+
+    @property
+    @abstractmethod
+    def evidence(self) -> Mapping[str, str]:
+        """The measured facts behind the finding.
+
+        The only input the narrator is allowed to speak from. Every value is
+        computed from the graph, never generated.
+        """
+
+    @property
+    @abstractmethod
+    def models_at_risk(self) -> tuple[ModelRef, ...]:
+        """The models this finding endangers, most severe first.
+
+        The write-back layer tags these, records risk flags on them, and writes
+        each one an impact report. A finding that endangers no model returns an
+        empty tuple and no model is touched.
+        """
+
+
+@dataclass(frozen=True)
+class FreshnessFinding(Finding):
+    """An upstream table stopped refreshing, and models downstream consume it."""
+
     blast_radius: BlastRadius
 
     @property
-    def title(self) -> str:
-        """Return the incident title. Deterministic: it is part of the dedup key.
+    def finding_type(self) -> FindingType:
+        """An upstream table stopped refreshing."""
+        return FindingType.UPSTREAM_FRESHNESS
 
-        Deliberately carries no measurement. The lag drifts by seconds between
-        scans, so a title quoting it would key a fresh incident every run.
+    @property
+    def resource_urn(self) -> str:
+        """The failing table. The incident lands on the asset that is actually wrong."""
+        return self.blast_radius.failing_table_urn
+
+    @property
+    def incident_type(self) -> str:
+        """DataHub's incident type for a table that stopped changing."""
+        return "FRESHNESS"
+
+    @property
+    def severity(self) -> Severity:
+        """Inherited from the worst model the staleness reaches."""
+        return self.blast_radius.severity
+
+    @property
+    def title(self) -> str:
+        """Deliberately carries no measurement.
+
+        The lag drifts by seconds between scans, so a title quoting it would key
+        a fresh incident every run.
         """
         return f"Stale upstream data in {self.blast_radius.failing_table_name}"
 
     @property
     def evidence(self) -> Mapping[str, str]:
-        """Return the measured facts behind the finding.
-
-        This is the only input the narrator is allowed to speak from, and it is
-        what the assertion result records. Every value is computed from the
-        graph, never generated.
-        """
+        """The lag, the SLA, and the size of the blast radius. All measured."""
         signal = self.blast_radius.signal
         return {
             "failing_table": self.blast_radius.failing_table_name,
@@ -218,3 +301,118 @@ class Finding:
             "downstream_datasets": str(len(self.blast_radius.downstream_datasets)),
             "severity": str(self.severity),
         }
+
+    @property
+    def models_at_risk(self) -> tuple[ModelRef, ...]:
+        """Every model the failing table reaches, already ordered worst first."""
+        return self.blast_radius.models
+
+
+@dataclass(frozen=True)
+class LeakingFeature:
+    """One feature whose upstream column lineage reaches a label column.
+
+    The model is being trained on a column derived from the answer it is supposed
+    to predict. Its offline metrics are inflated by construction, and they will
+    not survive contact with production, where the label does not exist yet.
+
+    ``column_path`` is the literal chain of columns the traversal walked, from the
+    feature's own source column back to the label. It is what the incident quotes,
+    and it is why this finding is auditable rather than a claim.
+    """
+
+    feature_urn: str
+    feature_name: str
+    source_column_urn: str
+    """The schemaField the feature is computed from. Where the incident lands."""
+    source_column_name: str
+    label_column_urn: str
+    label_column_name: str
+    label_dataset_name: str
+    column_path: tuple[str, ...]
+    """Column names from the feature's source column back to the label, inclusive."""
+
+    @property
+    def path_text(self) -> str:
+        """Render the leak path the way the incident and the report quote it."""
+        return " <- ".join(self.column_path)
+
+    @property
+    def origin(self) -> str:
+        """Name the feature and its source column without saying the same word twice.
+
+        A feature is very often named after the column it is computed from, and
+        "the feature x is computed from x" reads like a bug. When they differ, both
+        names matter and both are said.
+        """
+        if self.feature_name == self.source_column_name:
+            return f"The feature {self.feature_name}"
+        return f"The feature {self.feature_name}, computed from {self.source_column_name},"
+
+
+@dataclass(frozen=True)
+class LeakageFinding(Finding):
+    """A model consumes a feature that derives from its own label.
+
+    One finding per leaking feature, so each leaking column gets its own incident
+    and its own dedup key. A model with two leaking features produces two
+    findings, not one finding listing two columns.
+    """
+
+    model: ModelRef
+    leak: LeakingFeature
+
+    @property
+    def finding_type(self) -> FindingType:
+        """A feature derives from the label the model predicts."""
+        return FindingType.TARGET_LEAKAGE
+
+    @property
+    def resource_urn(self) -> str:
+        """The leaking column itself, not the model and not the table.
+
+        The incident points at the precise column a human has to go fix.
+        """
+        return self.leak.source_column_urn
+
+    @property
+    def incident_type(self) -> str:
+        """FIELD is DataHub's column-scoped incident type. There is no COLUMN."""
+        return "FIELD"
+
+    @property
+    def severity(self) -> Severity:
+        """Leakage is never minor, and a live model makes it a production lie.
+
+        A leaking model that is serving is reporting an accuracy it does not have
+        on data it will never see at inference time. One that is not yet deployed
+        is a release away from the same thing.
+        """
+        return Severity.CRITICAL if self.model.is_live else Severity.HIGH
+
+    @property
+    def title(self) -> str:
+        """A pure function of two column names. No measurement, no timestamp."""
+        return (
+            f"Target leakage: {self.leak.source_column_name} derives from "
+            f"label {self.leak.label_column_name}"
+        )
+
+    @property
+    def evidence(self) -> Mapping[str, str]:
+        """The column path proving the derivation. Every value read from lineage."""
+        return {
+            "feature": self.leak.feature_name,
+            "leaking_column": self.leak.source_column_name,
+            "label_column": self.leak.label_column_name,
+            "label_table": self.leak.label_dataset_name,
+            "column_path": self.leak.path_text,
+            "model": self.model.name,
+            "model_is_live": str(self.model.is_live).lower(),
+            "severity": str(self.severity),
+        }
+
+    @property
+    def models_at_risk(self) -> tuple[ModelRef, ...]:
+        """Exactly the one model that consumes this leaking feature."""
+        return (self.model,)
