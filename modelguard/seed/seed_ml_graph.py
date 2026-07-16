@@ -30,6 +30,7 @@ MLModelDeployment either, so those are emitted as aspect MCPs.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
@@ -253,7 +254,9 @@ def seed_training_run(conn: DataHubConnection) -> str:
 
     Modelled as a DataProcessInstance carrying ``mlTrainingRunProperties``. The
     ``dataProcessInstanceInput`` aspect is what lets the schema-drift detector
-    later ask which dataset the model was trained on.
+    ask which dataset the model was trained on, and the training-schema
+    fingerprint in ``customProperties`` is the baseline it diffs the dataset's
+    current schema against (training-serving skew, Breck et al. 2019).
 
     Returns:
         The training run URN.
@@ -266,6 +269,11 @@ def seed_training_run(conn: DataHubConnection) -> str:
             name=spec.TRAINING_RUN_ID,
             type=DataProcessTypeClass.BATCH_SCHEDULED,
             created=AuditStampClass(time=SEED_TIMESTAMP_MS, actor=SEED_ACTOR),
+            customProperties={
+                spec.TRAINING_SCHEMA_PROPERTY: json.dumps(
+                    spec.training_schema_fingerprint(), sort_keys=True
+                )
+            },
         ),
         SubTypesClass(typeNames=[TRAINING_RUN_SUBTYPE]),
         MLTrainingRunPropertiesClass(
