@@ -38,3 +38,4 @@ later phase; the boundaries are drawn so that swap touches nothing else.
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: node order, LLM gating, security rules |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Phase 1: pipeline.py runs the node order, narrate.py is the reason node; --dry-run is the gate until interrupt() lands; the narrator must never raise |
 | 2026-07-10 | Claude (for Ghassen Naouar) | The narrator is vendor-blind and env-free: LLMConfig is injected, provider errors are scrubbed before logging |
+| 2026-07-16 | Claude (for Ghassen Naouar) | pipeline runs schema drift on a model target and, after every per-finding write, a trust-score pass that aggregates the scan's findings per model and persists the score + band. narrate.py dispatches the drift finding (P3/P4, D-036, D-037) |

@@ -39,3 +39,4 @@ realism, not a prerequisite (D-014).
 | 2026-07-09 | Claude (for Ghassen Naouar) | Record the missing SDK ML entity classes, the dataset-granular sources aspect, and graph_spec as source of truth |
 | 2026-07-10 | Claude (for Ghassen Naouar) | scenarios.py lands: labeled, reversible, injectable clock |
 | 2026-07-13 | Claude (for Ahmed Saad) | seed_ml_graph declares the label: a glossary term on default_status, the column the leakage detector hunts for (D-032) |
+| 2026-07-16 | Claude (for Ghassen Naouar) | The training run carries a schema fingerprint (customProperties, keyed by input dataset URN) the drift detector diffs against (D-036). scenarios adds plant/revert_schema_drift, mutating the feature table's live schema and leaving the leakage columns untouched so both Phase 2 scenarios coexist |
