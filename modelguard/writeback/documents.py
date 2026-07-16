@@ -40,7 +40,13 @@ from datahub.metadata.urns import MlModelUrn
 from datahub.sdk.document import Document
 
 from modelguard.client import DataHubConnection
-from modelguard.models import Finding, FreshnessFinding, LeakageFinding, ModelAtRisk
+from modelguard.models import (
+    Finding,
+    FreshnessFinding,
+    LeakageFinding,
+    ModelAtRisk,
+    SchemaDriftFinding,
+)
 
 #: Renders under the document's title in the UI, and groups ModelGuard's reports.
 REPORT_SUBTYPE = "Model Impact Report"
@@ -108,6 +114,11 @@ def _freshness_subject(finding: FreshnessFinding) -> str:
 
 @report_subject.register
 def _leakage_subject(finding: LeakageFinding) -> str:
+    return finding.model.name
+
+
+@report_subject.register
+def _drift_subject(finding: SchemaDriftFinding) -> str:
     return finding.model.name
 
 
@@ -233,6 +244,70 @@ reported performance as unverified.
 
 ModelGuard proves the derivation from lineage, not from the data. If the lineage \
 is wrong, this finding is wrong: correct the lineage and rescan.
+"""
+
+
+@_report_body.register
+def _drift_body(finding: SchemaDriftFinding) -> str:
+    model = finding.model
+    serving = (
+        f"**Live**, serving through {len(model.live_deployments)} deployment(s)."
+        if model.is_live
+        else "Not currently serving."
+    )
+    owner = "Owned." if model.has_owner else "**Unowned**: nobody is on the hook to fix this."
+    changes = "\n".join(f"- {change.describe()}" for change in finding.changes)
+
+    return f"""## What happened
+
+The model **{model.name}** was trained on `{finding.dataset_name}`. Its schema has \
+since drifted from the one captured when the model was trained:
+
+{changes}
+
+The training-time schema was snapshotted on the training run \
+(`{finding.training_run_urn}`). ModelGuard compared it against the dataset's \
+current `schemaMetadata`; it read the schemas, not the data.
+
+## Assessment
+
+{{narrative}}
+
+## Why this matters
+
+Training-serving skew does not fail loudly. A retyped column is parsed differently \
+at serving time than at training; a removed column leaves the serving code reading \
+something that is gone; an added column is noise the model never learned to weigh. \
+The model keeps scoring, on inputs that no longer mean what they meant at training.
+
+Breck et al. (MLSys 2019) prescribe exactly this guard: a schema fixed at training \
+time, against which serving data is continuously validated.
+
+## Model at risk
+
+### {model.name}
+
+- URN: `{model.urn}`
+- Severity: **{finding.severity}**
+- Serving status: {serving}
+- Ownership: {owner}
+- Drifted input: `{finding.dataset_urn}`
+
+## What ModelGuard did
+
+1. Raised a `{finding.incident_type}` incident on the drifted input dataset.
+2. Tagged the model and recorded the risk flag as a structured property on it.
+
+## What to do
+
+Reconcile `{finding.dataset_name}`'s schema with the model's training schema, or \
+retrain the model against the current schema, then revalidate. Until then, treat \
+this model's predictions as scored on inputs it was not trained for.
+
+## Caveats
+
+ModelGuard compares the training-time schema snapshot against the current schema, \
+both from metadata DataHub holds. It did not query the warehouse.
 """
 
 
