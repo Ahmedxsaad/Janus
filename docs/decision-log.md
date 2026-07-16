@@ -16,6 +16,33 @@ Entry template:
 
 ---
 
+## D-038: The input data contract is an ODCS v3.1.0 artifact rendered from a model's inputs, not a graph write (2026-07-16)
+- Decided by: Ghassen Naouar (chose scope and validation), design by Claude
+- Decision: Section 6.5 lands as `writeback/contract.py`, a pure renderer that
+  reads a model's training-run input datasets and their current `schemaMetadata`
+  and emits an Open Data Contract Standard v3.1.0 YAML: one ODCS schema object per
+  input table (columns as `physicalType` verbatim, `logicalType` mapped where
+  unambiguous and omitted otherwise, `required` from the field's `nullable` flag)
+  and one `slaProperties` freshness entry per table carrying the SLA ModelGuard
+  guards. The CLI exposes it as `modelguard scan --model <m> --contract-out <path>`;
+  it writes the file to disk, not the graph, and renders even on a clean or dry-run
+  scan because a contract describes the model's boundary, not a finding. No volume
+  or distribution expectation is emitted: ModelGuard measures none, and fabricating
+  one would break writeback rule 10.
+- Options considered: (a) render to an examples/ artifact and validate with
+  datacontract-cli (chosen); (b) also write the contract back to DataHub as a graph
+  entity; (c) reconstruct volume/quality expectations to fill more ODCS fields.
+- Why: The plan frames the ODCS contract as a standards-based artifact for judges
+  (section 6.5, examples/), so a renderer plus a CLI flag is the whole job; a graph
+  write is a separate, larger scope. datacontract-cli ships the ODCS 3.1.0 JSON
+  Schema, so `datacontract lint <file>` is a real, reproducible validation, not a
+  hand-check. Emitting only schema + freshness keeps every value traceable to a
+  fact DataHub holds or a config the guarding assertion already uses.
+- Result: `writeback/contract.py` (10 unit tests), the `--contract-out` flag, and
+  `examples/input-data-contract.odcs.yaml` generated from a real seeded scan and
+  linted green against ODCS 3.1.0. datacontract-cli is a dev/validation tool, not a
+  runtime dependency; `modelguard/` never imports it.
+
 ## D-037: The trust score is a rollup of a scan's findings, written only for models it found something about (2026-07-16)
 - Decided by: Ghassen Naouar (chose the aggregation model), design by Claude
 - Decision: P4 (`detect/trust_score.py`) starts at 100 and subtracts fixed
