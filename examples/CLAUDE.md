@@ -27,9 +27,20 @@ incident payload JSON.
    without an API key. The run_id changes on every regeneration; that is real
    output, not churn to suppress.
 
+6. Regenerate the ODCS input contract from a seeded model scan, then lint it:
+
+       modelguard scan --model credit_risk_v3 --no-llm --dry-run \
+         --contract-out examples/input-data-contract.odcs.yaml
+       datacontract lint examples/input-data-contract.odcs.yaml
+
+   --dry-run is fine here: the contract is read-and-render, never a graph write.
+   datacontract-cli is a validation tool only; install it with
+   `pip install datacontract-cli` if `datacontract` is not on PATH (rule 2).
+
 ## Change Log
 
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: real-output-only and validation rules |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Record the exact command that regenerates the Phase 1 artifacts |
+| 2026-07-16 | Claude (for Ghassen Naouar) | Add the ODCS input contract regeneration + lint command (D-038) |

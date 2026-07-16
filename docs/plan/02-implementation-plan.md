@@ -527,6 +527,18 @@ PATCH builders instead of the agent so writes are reproducible in tests.
 `search_documents` / `grep_documents`.
 
 ### 6.5 Data contract artifact (ODCS) - high-value extra write-back
+
+> **Landed 2026-07-16** (D-038). `writeback/contract.py`'s `render_input_contract(conn,
+> model_urn, config)` reads a model's training-run input datasets and their current
+> `schemaMetadata` and returns an ODCS v3.1.0 YAML: one schema object per input table
+> (native types verbatim as `physicalType`, `logicalType` mapped where unambiguous,
+> `required` from `nullable`) plus one `slaProperties` freshness entry per table for the
+> SLA ModelGuard guards. Exposed as `modelguard scan --model <m> --contract-out <path>`;
+> it renders a file and never mutates the graph, so it runs on a clean or dry-run scan.
+> `examples/input-data-contract.odcs.yaml` was generated from a real seeded scan and
+> lints green against datacontract-cli's bundled ODCS 3.1.0 JSON Schema. 10 unit tests.
+> No volume/quality expectation is emitted: ModelGuard measures none (writeback rule 10).
+
 For a model's input tables, emit an **Open Data Contract Standard (ODCS v3.1.0)** YAML capturing the schema
 + freshness/volume/quality expectations ModelGuard derived, and validate it with `datacontract-cli` before
 committing it to `examples/`. This makes the "contract for the ML boundary" tangible and standards-based
