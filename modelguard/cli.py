@@ -15,6 +15,7 @@ never a guess: silently auditing the wrong table would be worse than failing.
 
 from __future__ import annotations
 
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Annotated
@@ -223,15 +224,20 @@ def _print_writes(write: FindingWrites) -> None:
         console.print(f"  impact report    {document.urn}")
 
 
-def _print_report(report: ScanReport) -> None:
-    """Render a scan's outcome for a human reading a terminal."""
-    if report.clean:
-        targets = [urn for urn in (report.table_urn, report.model_urn) if urn is not None]
-        console.print(f"[green]No finding.[/green] {' and '.join(targets)} healthy.")
-        for warning in report.warnings:
-            console.print(f"[yellow]warning:[/yellow] {warning}")
-        return
+def _print_clean(report: ScanReport) -> None:
+    """Render a scan that found nothing: the healthy targets and any warnings."""
+    targets = [urn for urn in (report.table_urn, report.model_urn) if urn is not None]
+    console.print(f"[green]No finding.[/green] {' and '.join(targets)} healthy.")
+    for warning in report.warnings:
+        console.print(f"[yellow]warning:[/yellow] {warning}")
 
+
+def _print_findings_and_trust(report: ScanReport) -> None:
+    """Render every finding, its assessment, the warnings, and the trust scores.
+
+    The measured half of a report, shared by the plain ``scan`` output and the
+    ``--review`` preview a human approves before anything is written.
+    """
     for write in report.writes:
         _print_finding(write.finding)
         console.print(
@@ -249,16 +255,195 @@ def _print_report(report: ScanReport) -> None:
                 f"  {trust.model_name}: {trust.score.value}/100 ({trust.score.band}) - {reasons}"
             )
 
+
+def _print_writes_section(report: ScanReport) -> None:
+    """Render what a scan actually mutated in the graph, and its run id."""
+    console.print("\n[bold]Wrote back:[/bold]")
+    for write in report.writes:
+        _print_writes(write)
+    console.print(f"\n[dim]run id: {report.run_id}[/dim]")
+
+
+def _print_report(report: ScanReport) -> None:
+    """Render a scan's outcome for a human reading a terminal."""
+    if report.clean:
+        _print_clean(report)
+        return
+
+    _print_findings_and_trust(report)
+
     if report.dry_run:
         console.print("\n[yellow]Dry run: nothing was written.[/yellow]")
         console.print("Would have raised the incident(s), tagged the models, written the")
         console.print("guarding assertion, the impact report(s), and the trust score(s).")
         return
 
-    console.print("\n[bold]Wrote back:[/bold]")
-    for write in report.writes:
-        _print_writes(write)
-    console.print(f"\n[dim]run id: {report.run_id}[/dim]")
+    _print_writes_section(report)
+
+
+def _prepare(
+    *,
+    table: str | None,
+    model: str | None,
+    sla_hours: float | None,
+    no_llm: bool,
+    llm_provider: str | None,
+    llm_model: str | None,
+) -> tuple[DataHubConnection, ScanConfig, LLMConfig | None, str | None, str | None]:
+    """Do the setup ``scan`` and ``watch`` share: config, LLM, connect, resolve.
+
+    Both commands need the same five things before they can run a scan, and both
+    fail the same way on the same mistakes. Keeping it in one place means a change
+    to how a target is resolved or a credential is read cannot drift between them.
+
+    Raises:
+        typer.Exit: A target is missing, the config or LLM is unusable, DataHub is
+            unreachable, or a name did not resolve. The message is already printed.
+    """
+    if table is None and model is None:
+        console.print("[red]Nothing to scan: pass --table, --model, or both.[/red]")
+        raise typer.Exit(code=2)
+
+    try:
+        config = ScanConfig.from_env()
+        if sla_hours is not None:
+            # replace(), not a fresh ScanConfig: a hand-listed constructor silently
+            # drops any field added later, which is how a threshold stops working.
+            config = replace(config, freshness_sla_hours=sla_hours)
+        llm = _resolve_llm(no_llm=no_llm, provider=llm_provider, model=llm_model)
+    except ConfigError as exc:
+        # A half-configured LLM, or an unusable threshold. Both are mistakes the
+        # operator wants to hear about now, not after a bland report lands.
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    try:
+        # A token is not required: the OSS Quickstart ships with metadata service
+        # authentication disabled and accepts unauthenticated writes. Demanding one
+        # would break the judge's out-of-the-box path.
+        conn = connect()
+    except DataHubConnectionError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    try:
+        table_urn = resolve_table(conn, table) if table is not None else None
+        model_urn = resolve_model(conn, model) if model is not None else None
+    except (TableResolutionError, ModelResolutionError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    if not conn.has_token:
+        console.print("[yellow]No DATAHUB_GMS_TOKEN set; writing unauthenticated.[/yellow]")
+
+    return conn, config, llm, table_urn, model_urn
+
+
+def _finding_signature(report: ScanReport) -> frozenset[tuple[str, str, str]]:
+    """Reduce a scan to the set of distinct problems it found.
+
+    The tuple is the incident dedup key ``(finding_type, resource_urn, title)``,
+    which is stable across scans of an unchanged graph (no timestamp, no lag). So
+    two scans that found the same problems compare equal, and ``watch`` acts on the
+    transitions, a new problem or a recovery, rather than on every poll.
+    """
+    return frozenset(
+        (str(finding.finding_type), finding.resource_urn, finding.title)
+        for finding in report.findings
+    )
+
+
+def _announce_watch_change(
+    previous: frozenset[tuple[str, str, str]] | None,
+    signature: frozenset[tuple[str, str, str]],
+    preview: ScanReport,
+) -> None:
+    """Say what changed since the last poll: a recovery, or new or changed findings."""
+    stamp = time.strftime("%H:%M:%S")
+    if not signature:
+        console.print(f"[green]{stamp} recovered: no findings.[/green]")
+        return
+    verb = "detected" if not previous else "changed to"
+    console.print(f"[bold red]{stamp} {verb} {len(signature)} finding(s):[/bold red]")
+    _print_findings_and_trust(preview)
+
+
+def _watch_once(
+    conn: DataHubConnection,
+    config: ScanConfig,
+    *,
+    table_urn: str | None,
+    model_urn: str | None,
+    llm: LLMConfig | None,
+    previous: frozenset[tuple[str, str, str]] | None,
+) -> frozenset[tuple[str, str, str]]:
+    """Poll once: detect, and write back only when the set of findings has changed.
+
+    A dry scan detects without writing; only a changed, non-empty finding set
+    triggers the real write-back. Re-writing an unchanged finding every poll would
+    be safe (the writes are idempotent) but noisy and pointless, so a steady state
+    stays quiet. Returns the current signature, which the caller carries into the
+    next poll.
+    """
+    preview = run_scan(
+        conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm, dry_run=True
+    )
+    signature = _finding_signature(preview)
+
+    if signature == previous:
+        console.print(
+            f"[dim]{time.strftime('%H:%M:%S')} no change "
+            f"({len(signature)} open finding(s))[/dim]"
+        )
+        return signature
+
+    _announce_watch_change(previous, signature, preview)
+    if signature:
+        written = run_scan(conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm)
+        _print_writes_section(written)
+    return signature
+
+
+def _run_review(
+    conn: DataHubConnection,
+    config: ScanConfig,
+    *,
+    table_urn: str | None,
+    model_urn: str | None,
+    llm: LLMConfig | None,
+    auto: bool,
+) -> ScanReport:
+    """Run the LangGraph agent, prompting for approval before any write lands.
+
+    The agent is the optional ``agent`` extra, so it is imported here rather than
+    at module load: a plain ``modelguard scan`` must run without LangGraph
+    installed. The approve callback prints the findings and either prompts or, with
+    ``--auto-approve``, writes without asking (the recorded-demo path).
+    """
+    from modelguard.agent.graph import AgentUnavailableError, run_agent
+
+    def _approve(preview: ScanReport) -> bool:
+        _print_findings_and_trust(preview)
+        if auto:
+            console.print("\n[dim]--auto-approve: writing without prompting.[/dim]")
+            return True
+        return typer.confirm("\nWrite these findings back to DataHub?", default=False)
+
+    try:
+        report = run_agent(
+            conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm, approve=_approve
+        )
+    except AgentUnavailableError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    if report.clean:
+        _print_clean(report)
+    elif report.dry_run:
+        console.print("\n[yellow]Declined: nothing was written.[/yellow]")
+    else:
+        _print_writes_section(report)
+    return report
 
 
 @app.command()
@@ -314,67 +499,69 @@ def scan(
             help="Write the model's ODCS input-data-contract YAML here. Requires --model.",
         ),
     ] = None,
+    review: Annotated[
+        bool,
+        typer.Option(
+            "--review",
+            help="Run the human-approval agent: show the findings and prompt before writing.",
+        ),
+    ] = False,
+    auto_approve: Annotated[
+        bool,
+        typer.Option(
+            "--auto-approve",
+            help="Run the agent but write without prompting. For the recorded demo.",
+        ),
+    ] = False,
 ) -> None:
     """Audit a table for stale data, a model for target leakage, or both.
 
     The two targets ask different questions of the graph. ``--table`` asks what a
     table's going stale endangers downstream. ``--model`` asks whether a model is
     training on its own label. At least one is required.
-    """
-    if table is None and model is None:
-        console.print("[red]Nothing to scan: pass --table, --model, or both.[/red]")
-        raise typer.Exit(code=2)
 
+    By default the writes land straight away. ``--review`` (or ``--auto-approve``
+    for the demo) instead runs the LangGraph agent, which pauses after detection so
+    a human can approve the mutations before they are written.
+    """
     if contract_out is not None and model is None:
         console.print("[red]--contract-out describes a model's inputs; pass --model.[/red]")
         raise typer.Exit(code=2)
 
-    try:
-        config = ScanConfig.from_env()
-        if sla_hours is not None:
-            # replace(), not a fresh ScanConfig: a hand-listed constructor silently
-            # drops any field added later, which is how a threshold stops working.
-            config = replace(config, freshness_sla_hours=sla_hours)
-        llm = _resolve_llm(no_llm=no_llm, provider=llm_provider, model=llm_model)
-    except ConfigError as exc:
-        # A half-configured LLM, or an unusable threshold. Both are mistakes the
-        # operator wants to hear about now, not after a bland report lands.
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=2) from exc
+    use_agent = review or auto_approve
+    if dry_run and use_agent:
+        console.print("[red]--dry-run and --review/--auto-approve are mutually exclusive: ")
+        console.print("--review already previews the findings before writing.[/red]")
+        raise typer.Exit(code=2)
 
-    try:
-        # A token is not required: the OSS Quickstart ships with metadata service
-        # authentication disabled and accepts unauthenticated writes. Demanding one
-        # would break the judge's out-of-the-box path.
-        conn = connect()
-    except DataHubConnectionError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
-
-    try:
-        table_urn = resolve_table(conn, table) if table is not None else None
-        model_urn = resolve_model(conn, model) if model is not None else None
-    except (TableResolutionError, ModelResolutionError) as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=2) from exc
-
-    if not conn.has_token:
-        console.print("[yellow]No DATAHUB_GMS_TOKEN set; writing unauthenticated.[/yellow]")
+    conn, config, llm, table_urn, model_urn = _prepare(
+        table=table,
+        model=model,
+        sla_hours=sla_hours,
+        no_llm=no_llm,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+    )
 
     for target in (table_urn, model_urn):
         if target is not None:
             console.print(f"Scanning [bold]{target}[/bold]")
     console.print()
 
-    report = run_scan(
-        conn,
-        config,
-        table_urn=table_urn,
-        model_urn=model_urn,
-        llm=llm,
-        dry_run=dry_run,
-    )
-    _print_report(report)
+    if use_agent:
+        report = _run_review(
+            conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm, auto=auto_approve
+        )
+    else:
+        report = run_scan(
+            conn,
+            config,
+            table_urn=table_urn,
+            model_urn=model_urn,
+            llm=llm,
+            dry_run=dry_run,
+        )
+        _print_report(report)
 
     # The input contract describes the model's expected inputs, not this scan's
     # findings, so it is written even when the scan is clean: a clean model still
@@ -405,6 +592,88 @@ def scan(
             render_impact_report(worst.finding, worst.narrative.assessment, report.run_id)
         )
         console.print(f"[dim]wrote {report_out}[/dim]")
+
+
+@app.command()
+def watch(
+    table: Annotated[
+        str | None,
+        typer.Option("--table", help="Dataset to watch: a full URN, or a name such as loans_raw."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="Model to watch: a full URN, or a name like credit_risk_v3."),
+    ] = None,
+    interval: Annotated[
+        float,
+        typer.Option("--interval", help="Seconds between polls.", min=1.0),
+    ] = 30.0,
+    once: Annotated[
+        bool,
+        typer.Option("--once", help="Poll a single time and exit. For scripts and the demo."),
+    ] = False,
+    sla_hours: Annotated[
+        float | None,
+        typer.Option("--sla-hours", help="Freshness SLA in hours. Overrides the env default."),
+    ] = None,
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Skip the LLM and use the deterministic template prose."),
+    ] = False,
+    llm_provider: Annotated[
+        str | None,
+        typer.Option("--llm-provider", help="Override MODELGUARD_LLM_PROVIDER."),
+    ] = None,
+    llm_model: Annotated[
+        str | None,
+        typer.Option("--llm-model", help="Override MODELGUARD_LLM_MODEL."),
+    ] = None,
+) -> None:
+    """Poll a table and/or model and write back the moment a new problem appears.
+
+    ``watch`` shares ``scan``'s detection and write-back exactly; it only differs
+    in what wakes it. It is unattended, so it approves its own writes (there is no
+    human to prompt) and, because the writes are idempotent, it acts on the
+    transitions, a new finding or a recovery, rather than on every poll.
+
+    This is polling, deliberately: it never depends on Kafka timing, which is what
+    makes it reliable for a demo. An event-driven build on DataHub's Actions
+    framework (``EntityChangeEvent``) is the upgrade path when poll latency matters.
+    """
+    # ponytail: polling loop, not the Actions/Kafka EntityChangeEvent consumer.
+    # Wire datahub-actions here if sub-poll-interval latency ever matters.
+    conn, config, llm, table_urn, model_urn = _prepare(
+        table=table,
+        model=model,
+        sla_hours=sla_hours,
+        no_llm=no_llm,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+    )
+
+    for target in (table_urn, model_urn):
+        if target is not None:
+            console.print(f"Watching [bold]{target}[/bold]")
+    if not once:
+        console.print(f"[dim]polling every {interval:.0f}s; Ctrl-C to stop[/dim]")
+    console.print()
+
+    previous: frozenset[tuple[str, str, str]] | None = None
+    try:
+        while True:
+            previous = _watch_once(
+                conn,
+                config,
+                table_urn=table_urn,
+                model_urn=model_urn,
+                llm=llm,
+                previous=previous,
+            )
+            if once:
+                break
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        console.print("\n[dim]watch stopped.[/dim]")
 
 
 def main() -> None:
