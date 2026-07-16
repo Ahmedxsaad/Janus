@@ -41,8 +41,10 @@ docs/plan/02-implementation-plan.md section 6; use those exact forms.
 9. There is no mlModel patch builder in datahub.specific, so tags on a model go
    through read-merge-emit on globalTags. Never blind-write the aspect: it is an
    upsert of the whole list and would drop tags somebody else applied.
-10. Never write a value no detector computed. Phase 1 writes risk_flags and
-    run_id; trust_score waits for the detector that computes it.
+10. Never write a value no detector computed. Phase 1 wrote only risk_flags and
+    run_id; since P4 landed (D-037), trust_score and trust_band are also written,
+    because a detector now computes them. The rule stands: the number comes from
+    a finding's evidence or a detector, never from an LLM or thin air.
 
 ## Change Log
 
@@ -53,3 +55,4 @@ docs/plan/02-implementation-plan.md section 6; use those exact forms.
 | 2026-07-10 | Claude (for Ghassen Naouar) | Incidents cannot attach to mlModel; dedup via IncidentOn, never incidentsSummary |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Phase 1: labels, assertions, documents land; Cloud-only assertions client, no source restamping, no mlModel patch builder, no fabricated values |
 | 2026-07-13 | Claude (for Ahmed Saad) | terms.py lands: glossary-term read-merge-emit, same pattern as labels.py. A leakage finding writes a FIELD incident on the column, never on the model, same as freshness |
+| 2026-07-16 | Claude (for Ghassen Naouar) | P3/P4: a schema-drift finding writes a DATA_SCHEMA incident on the drifted dataset (documents.py renders its report); trust_score + the new trust_band property are written per model (rule 10 updated, D-036, D-037) |

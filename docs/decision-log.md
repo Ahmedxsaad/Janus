@@ -16,6 +16,73 @@ Entry template:
 
 ---
 
+## D-037: The trust score is a rollup of a scan's findings, written only for models it found something about (2026-07-16)
+- Decided by: Ghassen Naouar (chose the aggregation model), design by Claude
+- Decision: P4 (`detect/trust_score.py`) starts at 100 and subtracts fixed
+  weights for the risks a scan actually found about a model: upstream failure
+  (40), leakage (20), schema drift (15), freshness lag scaled by lag/SLA (15),
+  missing owner (10). The weights and the band thresholds (healthy >= 70, watch
+  >= 40, else at-risk) live in `config.py` as documented defaults, no env
+  plumbing. The score and band are written as `modelguard.trust_score` (number)
+  and `modelguard.trust_band` (string) structured properties on the mlModel, in
+  a pass after every per-finding write so the read-merge preserves the risk
+  flags already set.
+- Options considered: (a) score every scanned model, writing 100 for a clean
+  one; (b) score only models a finding named, so a clean model is never written;
+  (c) re-traverse the graph inside the trust detector to fill in dimensions the
+  scan did not check (e.g. freshness for a `--model` scan).
+- Why: (a) breaks the invariant that a clean scan writes nothing, and would
+  stamp 100 on a model the scan barely assessed. (c) doubles the detection work
+  and blurs which evidence the score rests on. (b) keeps the score honest about
+  its own evidence: it aggregates exactly the findings this scan produced, so a
+  `--table --model` scan of the seeded demo (stale source + leakage + drift +
+  unowned) scores the live model 0, while a `--model`-only scan of the same
+  model scores 55 because freshness was not checked. The trade-off is that the
+  score reflects the scan's scope, which is documented on the detector.
+- Result: `TrustScore`/`TrustBand` in models.py; `trust_inputs_from_findings`
+  reduces findings to inputs, `trust_score` applies the weights; the pipeline's
+  `_trust_scores`/`_persist_trust` run the pass. `modelguard.trust_band` added to
+  the props YAML. 7 unit tests plus pipeline coverage; the phase 2 drift/trust
+  integration gate asserts a score lands on the live model.
+
+## D-036: Training-serving schema drift diffs a snapshot captured at training time, not a reconstructed timeline (2026-07-16)
+- Decided by: Ghassen Naouar (chose the snapshot over the timeline), design by Claude
+- Decision: P3 (`detect/schema_drift.py`) reads a schema fingerprint captured on
+  the training run at seed/training time (a JSON map of input dataset URN to
+  `field_path -> native_type`, in the run's `customProperties` under
+  `modelguard.training_schema`) and diffs it against the input dataset's current
+  `schemaMetadata`. Added, removed, and retyped columns each become a
+  `SchemaChange`; a drifted input raises a `DATA_SCHEMA` incident on the dataset.
+- Options considered: (a) reconstruct the training-time schema from DataHub's
+  Timeline / Schema-History API as the plan (section 5.2) originally specified;
+  (b) walk the versioned `schemaMetadata` aspect backward to the version whose
+  `lastModified` predates the training run; (c) snapshot the schema on the
+  training run and diff the current schema against it.
+- Why: (a) and (b) both reconstruct "as-of training" from catalog history, which
+  is fragile (versions compact, ingestion lags training, `lastModified` stamps
+  are unreliable) and needs version-history support added to the test fake. (c)
+  is exactly how TFX/TFDV guard against training-serving skew (Breck et al.
+  2019): freeze a schema at training and validate serving data against it. It is
+  deterministic, robust, testable against the existing fake, and arguably more
+  correct than trusting a catalog's version history. It diverges from the plan's
+  Timeline wording, so the plan and this log are updated together
+  (docs/CLAUDE.md rule 1). The fingerprint is keyed by input dataset URN, not a
+  flat field map, so a run with several inputs diffs each against the schema that
+  input actually had, never another input's.
+- Result: `graph_spec.training_schema_fingerprint` + `TRAINING_SCHEMA_PROPERTY`;
+  the seeder writes it on the training run; `scenarios.plant_schema_drift` /
+  `revert_schema_drift` mutate the feature table's live schema (one retype, one
+  drop, one add), deliberately leaving the leakage columns untouched so the two
+  Phase 2 scenarios coexist. `SchemaDriftFinding` carries the changes; narrate.py
+  and documents.py dispatch on it, citing Breck 2019. The structured-property
+  detail the plan named (`drifted_fields`, `training_run_urn`) is carried in the
+  incident description and the impact report rather than as extra structured
+  properties: the `input-schema-drift` risk flag already makes the model
+  filterable, and the report holds the full column list. 8 detector unit tests
+  (including a false-positive control and a malformed-snapshot guard), scenario,
+  narrate, document, model, and pipeline tests, plus the drift/trust integration
+  gate.
+
 ## D-035: A deep review before the phase 2 PR found and fixed a same-model, two-finding overwrite (2026-07-13)
 - Decided by: Ahmed Saad (requested the review), fixes applied by Claude
 - Decision: An 8-angle review (correctness, removed-behavior, cross-file,

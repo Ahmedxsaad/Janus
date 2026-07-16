@@ -4,8 +4,8 @@ import re
 
 import pytest
 
-from modelguard.models import ModelAtRisk, Severity, severity_rank
-from tests.conftest import DEPLOYMENT_URN, make_finding
+from modelguard.models import ChangeKind, ModelAtRisk, SchemaChange, Severity, severity_rank
+from tests.conftest import DEPLOYMENT_URN, make_finding, make_schema_drift_finding
 
 DIGIT = re.compile(r"\d")
 
@@ -46,6 +46,24 @@ def test_the_measurements_live_in_the_evidence_not_in_the_title():
     assert finding.evidence["lag_hours"] == "30.0"
     assert finding.evidence["sla_hours"] == "6.0"
     assert finding.evidence["live_models_at_risk"] == "1"
+
+
+def test_the_drift_title_names_the_dataset_and_keeps_the_columns_in_evidence():
+    """The drifted column set can grow between scans, so it stays out of the key."""
+    one = make_schema_drift_finding(changes=(SchemaChange("a", ChangeKind.RETYPED, "INT", "STR"),))
+    many = make_schema_drift_finding(
+        changes=(
+            SchemaChange("a", ChangeKind.RETYPED, "INT", "STR"),
+            SchemaChange("b", ChangeKind.REMOVED, "INT", None),
+        )
+    )
+    # Same dataset, so the same dedup title regardless of how much has drifted.
+    assert one.title == many.title
+    assert "customer_features" in one.title
+    # The columns live in the evidence, where changing them is fine.
+    assert "a: INT -> STR" in many.evidence["drifted_fields"]
+    assert many.evidence["retyped"] == "1"
+    assert many.evidence["removed"] == "1"
 
 
 # --------------------------------------------------------------------------

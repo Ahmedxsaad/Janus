@@ -56,12 +56,13 @@ def severity_rank(severity: Severity) -> int:
 class FindingType(StrEnum):
     """The kind of problem a detector found.
 
-    Schema drift and the trust score add their own values when those detectors
-    land; declaring them now would be a placeholder for code that does not exist.
+    One value per detector that raises a finding. The trust score has no value
+    here: it is a rollup of these findings, not a finding of its own.
     """
 
     UPSTREAM_FRESHNESS = "upstream-freshness"
     TARGET_LEAKAGE = "target-leakage"
+    INPUT_SCHEMA_DRIFT = "input-schema-drift"
 
 
 @dataclass(frozen=True)
@@ -416,3 +417,138 @@ class LeakageFinding(Finding):
     def models_at_risk(self) -> tuple[ModelRef, ...]:
         """Exactly the one model that consumes this leaking feature."""
         return (self.model,)
+
+
+class ChangeKind(StrEnum):
+    """How one column changed between training time and now."""
+
+    ADDED = "added"
+    """Present in the current schema, absent when the model was trained."""
+    REMOVED = "removed"
+    """Present at training time, gone from the current schema. The worst case:
+    the model's serving code will read a column the source no longer provides."""
+    RETYPED = "retyped"
+    """Present in both, but its native type changed. Silent skew: the serving
+    pipeline parses a column the model was never trained to expect."""
+
+
+@dataclass(frozen=True)
+class SchemaChange:
+    """One column that differs between the training-time and current schema."""
+
+    field_path: str
+    kind: ChangeKind
+    training_type: str | None
+    """The native type at training time. None when the column is newly added."""
+    current_type: str | None
+    """The native type now. None when the column has been removed."""
+
+    def describe(self) -> str:
+        """Render the change the way the incident and the report quote it."""
+        if self.kind is ChangeKind.RETYPED:
+            return f"{self.field_path}: {self.training_type} -> {self.current_type}"
+        if self.kind is ChangeKind.ADDED:
+            return f"{self.field_path} (added, {self.current_type})"
+        return f"{self.field_path} (removed, was {self.training_type})"
+
+
+@dataclass(frozen=True)
+class SchemaDriftFinding(Finding):
+    """A model's input dataset no longer matches the schema it was trained on.
+
+    The schema the model was trained against is captured on the training run at
+    training time. Comparing it against the dataset's current schema is exactly
+    the training-serving skew check TFX/TFDV perform: freeze a schema at training,
+    validate serving data against it. A drifted column feeds the live model values
+    it was never trained to parse, and nothing in the serving path signals it.
+    """
+
+    model: ModelRef
+    training_run_urn: str
+    dataset_urn: str
+    """The training input dataset whose schema drifted. Where the incident lands."""
+    dataset_name: str
+    changes: tuple[SchemaChange, ...]
+    """Every column that differs, ordered for a stable report."""
+
+    @property
+    def finding_type(self) -> FindingType:
+        """The training-time input schema and the current one diverged."""
+        return FindingType.INPUT_SCHEMA_DRIFT
+
+    @property
+    def resource_urn(self) -> str:
+        """The drifted input dataset, never the model.
+
+        DataHub refuses an incident on an mlModel, and the schema is a property
+        of the dataset anyway.
+        """
+        return self.dataset_urn
+
+    @property
+    def incident_type(self) -> str:
+        """DataHub's incident type for a schema that changed."""
+        return "DATA_SCHEMA"
+
+    @property
+    def severity(self) -> Severity:
+        """A live model scoring on a drifted schema is a production skew.
+
+        Lower than leakage: drift corrupts inputs but does not, by itself, mean
+        the reported accuracy was a fiction. A model not yet serving is a
+        training-time concern.
+        """
+        return Severity.HIGH if self.model.is_live else Severity.MEDIUM
+
+    @property
+    def title(self) -> str:
+        """A pure function of the dataset name.
+
+        The drifted columns, which can grow between scans, live in the evidence,
+        not the dedup key.
+        """
+        return f"Training-serving schema drift in {self.dataset_name}"
+
+    @property
+    def evidence(self) -> Mapping[str, str]:
+        """The drifted columns and their counts. Every value read from the graph."""
+        return {
+            "dataset": self.dataset_name,
+            "model": self.model.name,
+            "model_is_live": str(self.model.is_live).lower(),
+            "training_run": self.training_run_urn,
+            "added": str(sum(1 for c in self.changes if c.kind is ChangeKind.ADDED)),
+            "removed": str(sum(1 for c in self.changes if c.kind is ChangeKind.REMOVED)),
+            "retyped": str(sum(1 for c in self.changes if c.kind is ChangeKind.RETYPED)),
+            "drifted_fields": ", ".join(c.describe() for c in self.changes),
+            "severity": str(self.severity),
+        }
+
+    @property
+    def models_at_risk(self) -> tuple[ModelRef, ...]:
+        """Exactly the one model this training run produced."""
+        return (self.model,)
+
+
+class TrustBand(StrEnum):
+    """A model's reliability band, derived from its trust score."""
+
+    HEALTHY = "healthy"
+    WATCH = "watch"
+    AT_RISK = "at-risk"
+
+
+@dataclass(frozen=True)
+class TrustScore:
+    """A model's aggregate reliability, 0 (worst) to 100 (best), and why.
+
+    Rolls up every risk a scan found about one model into a single number a
+    human can act on, in the spirit of a model card (Mitchell et al. 2019). The
+    number is deterministic: it is a fixed weighted sum of the findings, and the
+    LLM never touches it (modelguard/CLAUDE.md rule 5).
+    """
+
+    value: int
+    band: TrustBand
+    deductions: Mapping[str, float]
+    """What each risk subtracted, keyed by name, for the audit trail and report."""

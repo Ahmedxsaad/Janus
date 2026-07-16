@@ -45,7 +45,12 @@ from functools import singledispatch
 
 from modelguard.env import scrub
 from modelguard.llm import LLMConfig, build_chat_model
-from modelguard.models import Finding, FreshnessFinding, LeakageFinding
+from modelguard.models import (
+    Finding,
+    FreshnessFinding,
+    LeakageFinding,
+    SchemaDriftFinding,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +94,19 @@ Rules, all mandatory:
 _FRESHNESS_SUBJECT = "a stale upstream table that feeds production machine learning models"
 _FRESHNESS_EXTRA = "- If a model is live, say plainly that it is scoring traffic on stale inputs.\n"
 
+_DRIFT_SUBJECT = (
+    "training-serving schema drift: a model's input table no longer has the schema "
+    "the model was trained on"
+)
+_DRIFT_EXTRA = """\
+- Name the drifted columns from the evidence exactly: which were retyped (with the
+  old and new type), which were removed, which were added.
+- Explain that the serving pipeline now feeds the model values it was never trained
+  to parse, and that nothing in the serving path signals this.
+- If the model is live, say plainly that it is scoring production traffic on a schema
+  that does not match its training.
+"""
+
 _LEAKAGE_SUBJECT = (
     "target leakage: a model consuming a feature derived from the very label it predicts"
 )
@@ -122,6 +140,11 @@ def _freshness_prompt(finding: FreshnessFinding) -> str:
 @_system_prompt.register
 def _leakage_prompt(finding: LeakageFinding) -> str:
     return _SYSTEM_PREAMBLE.format(subject=_LEAKAGE_SUBJECT, extra=_LEAKAGE_EXTRA)
+
+
+@_system_prompt.register
+def _drift_prompt(finding: SchemaDriftFinding) -> str:
+    return _SYSTEM_PREAMBLE.format(subject=_DRIFT_SUBJECT, extra=_DRIFT_EXTRA)
 
 
 @singledispatch
@@ -183,6 +206,27 @@ def _leakage_facts(finding: LeakageFinding) -> str:
             "ModelGuard did not read the data, only the lineage.",
         ]
     )
+
+
+@fact_block.register
+def _drift_facts(finding: SchemaDriftFinding) -> str:
+    model = finding.model
+    lines = [
+        f"{finding.dataset_name} no longer matches the schema {model.name} was "
+        f"trained on ({len(finding.changes)} column change(s)):",
+        "",
+    ]
+    lines += [f"  - {change.describe()}" for change in finding.changes]
+    lines += [
+        "",
+        f"Model at risk: {model.name} "
+        f"[{finding.severity}] {'live' if model.is_live else 'not serving'}.",
+        "",
+        "The training-time schema was captured on the training run when the model "
+        "was trained. ModelGuard compared it against the dataset's current schema; "
+        "it did not read the data.",
+    ]
+    return "\n".join(lines)
 
 
 @singledispatch
@@ -248,6 +292,28 @@ def _leakage_template(finding: LeakageFinding) -> str:
     )
 
 
+@template_narrative.register
+def _drift_template(finding: SchemaDriftFinding) -> str:
+    model = finding.model
+    changes = ", ".join(change.describe() for change in finding.changes)
+
+    serving = (
+        f"{model.name} is behind a live endpoint, so it is scoring production traffic "
+        "on inputs whose schema no longer matches its training."
+        if model.is_live
+        else f"{model.name} is not currently serving, so the exposure is still to the "
+        "next training or evaluation run."
+    )
+
+    return (
+        f"The schema of {finding.dataset_name}, which {model.name} was trained on, has "
+        f"drifted: {changes}. The serving pipeline now feeds the model columns it was "
+        "never trained to parse, and nothing in the serving path would surface that. "
+        f"{serving} Reconcile the input schema with the model's training schema, or "
+        "retrain against the current schema, before trusting the model's output."
+    )
+
+
 @singledispatch
 def _evidence_detail(finding: Finding) -> str:
     """Render the per-type detail the evidence mapping cannot carry."""
@@ -271,6 +337,20 @@ def _leakage_detail(finding: LeakageFinding) -> str:
     return (
         f"\n\nmodels:\n- name={model.name!r} severity={finding.severity} "
         f"live={model.is_live} owned={model.has_owner}"
+    )
+
+
+@_evidence_detail.register
+def _drift_detail(finding: SchemaDriftFinding) -> str:
+    model = finding.model
+    changes = "\n".join(
+        f"- field={change.field_path!r} kind={change.kind} "
+        f"training_type={change.training_type!r} current_type={change.current_type!r}"
+        for change in finding.changes
+    )
+    return (
+        f"\n\nchanges:\n{changes}\n\nmodels:\n- name={model.name!r} "
+        f"severity={finding.severity} live={model.is_live} owned={model.has_owner}"
     )
 
 

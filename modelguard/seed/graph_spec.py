@@ -55,6 +55,11 @@ ML_PLATFORM = "mlflow"
 #: Bridges the dataset-only granularity of MLFeatureProperties.sources.
 SOURCE_COLUMN_PROPERTY = "modelguard.source_column"
 
+#: Custom property on the training run holding the input schema fingerprint the
+#: model was trained against. Derived from config so the seeder writes the very
+#: property the schema-drift detector reads, and the two cannot drift apart.
+TRAINING_SCHEMA_PROPERTY = ScanConfig().training_schema_property
+
 SOURCE_TABLE = "ecommerce.public.loans_raw"
 FEATURE_TABLE = "ecommerce.public.customer_features"
 
@@ -136,6 +141,22 @@ PRIMARY_KEY: tuple[str, str] = ("applicant_id", "applicant_id")
 
 TRAINING_METRICS: dict[str, str] = {"auc": "0.88", "ks": "0.61"}
 HYPER_PARAMS: dict[str, str] = {"max_depth": "6", "n_estimators": "300"}
+
+
+def training_schema_fingerprint() -> dict[str, dict[str, str]]:
+    """Return the training-time input schemas, keyed by input dataset URN.
+
+    Each value maps field path to native type. Keying by dataset means a run with
+    several inputs records a distinct baseline per input, so the schema-drift
+    detector diffs each input against the schema that input actually had at
+    training time, never against another input's. The seeded run has one input,
+    the feature table, whose training-time schema is exactly :data:`FEATURE_COLUMNS`.
+    """
+    return {
+        str(feature_table_dataset_urn()): {
+            column.name: column.native_type for column in FEATURE_COLUMNS
+        }
+    }
 
 
 def source_table_urn() -> DatasetUrn:

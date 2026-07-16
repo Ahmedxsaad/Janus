@@ -48,3 +48,4 @@ security and observability cross-cutting.
 | 2026-07-10 | Claude (for Ghassen Naouar) | Phase 1: models.py and config.py exist; core loop lives in agent/pipeline.py; add the LLM-containment and offline-scan rules |
 | 2026-07-10 | Claude (for Ghassen Naouar) | env.py is the sole config entry point; llm.py is the sole vendor boundary; the narrator takes an injected LLMConfig |
 | 2026-07-13 | Claude (for Ahmed Saad) | Phase 2 leakage detector lands. Finding is now an ABC (FreshnessFinding, LeakageFinding); a scan may target a table, a model, or both (D-033) |
+| 2026-07-16 | Claude (for Ghassen Naouar) | Phase 2 P3/P4 land. SchemaDriftFinding joins the Finding ABC; a model scan runs leakage + schema drift. TrustScore/TrustBand roll a scan's findings per model into modelguard.trust_score + trust_band, written only for models a finding named (D-036, D-037) |

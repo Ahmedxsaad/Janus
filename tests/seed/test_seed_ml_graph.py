@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 from datahub.metadata.schema_classes import (
     DataProcessInstanceInputClass,
+    DataProcessInstancePropertiesClass,
     DeploymentStatusClass,
     MLFeaturePropertiesClass,
     MLFeatureTablePropertiesClass,
@@ -162,6 +163,20 @@ def test_the_training_run_declares_the_feature_table_as_its_input(fakes):
 
     subtype = _aspect_for(graph, urn, SubTypesClass)
     assert subtype.typeNames == [TRAINING_RUN_SUBTYPE]
+
+
+def test_the_training_run_carries_the_training_schema_snapshot(fakes):
+    """P3 diffs the current schema against this frozen fingerprint."""
+    import json
+
+    graph, client = fakes
+    urn = seed_training_run(make_connection(graph, client))
+
+    properties = _aspect_for(graph, urn, DataProcessInstancePropertiesClass)
+    snapshot = json.loads(properties.customProperties[spec.TRAINING_SCHEMA_PROPERTY])
+    # Keyed by input dataset URN, valued by the feature table's training-time schema.
+    assert snapshot == spec.training_schema_fingerprint()
+    assert snapshot[str(spec.feature_table_dataset_urn())]["prior_default_flag"] == "BOOLEAN"
 
 
 def test_the_training_run_records_its_metrics_and_params(fakes):

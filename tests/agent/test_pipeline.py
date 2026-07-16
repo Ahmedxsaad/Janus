@@ -199,15 +199,26 @@ def test_the_at_risk_model_is_tagged_and_flagged():
     assert assigned[RUN_ID] == ["scan-fixed"]
 
 
-def test_no_trust_score_is_invented_before_the_detector_that_computes_it_exists():
-    """Phase 1 records the risk flag. Writing a made-up score would be fabrication."""
-    graph, client = _graph(30.0), _client()
+def test_the_at_risk_model_gets_a_trust_score_and_band():
+    """P4: a model a scan finds a risk about is scored, worst risks driving it down."""
+    graph, client = _graph(30.0), _client()  # live, 30h stale, unowned
     graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
-    _scan(graph, client)
+    report = _scan(graph, client)
 
+    assert len(report.trust) == 1
+    trust = report.trust[0]
+    assert trust.model_urn == MODEL_URN
+    # 100 - 40 (upstream failure) - 15 (freshness at/over SLA) - 10 (unowned) = 35.
+    assert trust.score.value == 35
+    assert str(trust.score.band) == "at-risk"
+
+    # The score and band land on the model as structured properties, merged
+    # alongside the risk flags an earlier per-finding write set.
     properties = _aspects_of(graph, StructuredPropertiesClass)
-    written = {a.propertyUrn.rsplit(":", 1)[-1] for a in properties[0].properties}
-    assert "modelguard.trust_score" not in written
+    final = {a.propertyUrn.rsplit(":", 1)[-1]: a.values for a in properties[-1].properties}
+    assert final["modelguard.trust_score"] == [35.0]
+    assert final["modelguard.trust_band"] == ["at-risk"]
+    assert final["modelguard.risk_flags"] == ["upstream-freshness"]
 
 
 def test_the_guarding_assertion_and_its_measured_result_are_both_written():
@@ -399,6 +410,89 @@ def test_a_model_hit_by_two_findings_gets_two_impact_reports_not_one():
 
     document_urns = {write.documents[0].urn for write in report.writes if write.documents}
     assert len(document_urns) == 2
+
+
+# --------------------------------------------------------------------------
+# Schema drift on a model scan (P3) end to end
+# --------------------------------------------------------------------------
+
+
+def _drift_graph() -> FakeGraph:
+    """A model whose one training run's input schema has drifted since training."""
+    import json
+
+    from datahub.metadata.schema_classes import (
+        AuditStampClass,
+        DataProcessInstanceInputClass,
+        DataProcessInstancePropertiesClass,
+    )
+
+    run_urn = "urn:li:dataProcessInstance:credit_risk_v3_run"
+    training = {"applicant_income": "NUMBER", "prior_default_flag": "BOOLEAN"}
+    current = {"applicant_income": "VARCHAR", "prior_default_flag": "BOOLEAN"}
+    return FakeGraph(
+        {
+            (MODEL_URN, MLModelPropertiesClass): MLModelPropertiesClass(
+                name="Credit Risk v3",
+                deployments=[DEPLOYMENT_URN],
+                trainingJobs=[run_urn],
+            ),
+            (DEPLOYMENT_URN, MLModelDeploymentPropertiesClass): (
+                MLModelDeploymentPropertiesClass(status=DeploymentStatusClass.IN_SERVICE)
+            ),
+            (run_urn, DataProcessInstancePropertiesClass): DataProcessInstancePropertiesClass(
+                name="credit_risk_v3_run",
+                created=AuditStampClass(time=0, actor="urn:li:corpuser:datahub"),
+                customProperties={
+                    ScanConfig().training_schema_property: json.dumps({FEATURE_TABLE_URN: training})
+                },
+            ),
+            (run_urn, DataProcessInstanceInputClass): DataProcessInstanceInputClass(
+                inputs=[FEATURE_TABLE_URN]
+            ),
+            (FEATURE_TABLE_URN, SchemaMetadataClass): SchemaMetadataClass(
+                schemaName="customer_features",
+                platform="urn:li:dataPlatform:snowflake",
+                version=0,
+                hash="",
+                platformSchema=OtherSchemaClass(rawSchema=""),
+                fields=[
+                    SchemaFieldClass(
+                        fieldPath=path,
+                        type=SchemaFieldDataTypeClass(type=BooleanTypeClass()),
+                        nativeDataType=native,
+                    )
+                    for path, native in current.items()
+                ],
+            ),
+        }
+    )
+
+
+def test_a_model_scan_raises_a_schema_drift_incident_on_the_input_dataset():
+    graph = _drift_graph()
+    graph.graphql_response = {"raiseIncident": "urn:li:incident:drift"}
+
+    report = run_scan(
+        make_connection(graph, FakeClient()),
+        ScanConfig(),
+        model_urn=MODEL_URN,
+        llm=None,
+        now_ms=NOW_MS,
+    )
+
+    assert len(report.writes) == 1
+    finding = report.writes[0].finding
+    assert finding.finding_type is FindingType.INPUT_SCHEMA_DRIFT
+    assert finding.severity is Severity.HIGH  # live model
+
+    # The incident lands on the drifted dataset, typed DATA_SCHEMA.
+    _, variables = graph.graphql_calls[0]
+    assert variables["input"]["resourceUrn"] == FEATURE_TABLE_URN
+    assert variables["input"]["type"] == "DATA_SCHEMA"
+
+    # And the model is scored: 100 - 15 (drift) - 10 (unowned) = 75.
+    assert report.trust[0].score.value == 75
 
 
 def test_a_leakage_only_scan_never_claims_a_freshness_assertion_was_written():

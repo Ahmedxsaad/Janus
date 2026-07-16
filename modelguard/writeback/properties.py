@@ -36,6 +36,7 @@ from modelguard.client import DataHubConnection
 PROPS_FILE = Path(__file__).parent / "props" / "modelguard_props.yaml"
 
 TRUST_SCORE = "modelguard.trust_score"
+TRUST_BAND = "modelguard.trust_band"
 RISK_FLAGS = "modelguard.risk_flags"
 RUN_ID = "modelguard.run_id"
 

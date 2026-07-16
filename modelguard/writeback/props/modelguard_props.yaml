@@ -16,6 +16,15 @@ properties:
     cardinality: SINGLE
     entity_types: [mlModel]
 
+  - qualified_name: modelguard.trust_band
+    display_name: ModelGuard Trust Band
+    description: >-
+      The reliability band the trust score falls in: healthy, watch, or at-risk.
+      A human-readable summary of modelguard.trust_score.
+    value_type: string
+    cardinality: SINGLE
+    entity_types: [mlModel]
+
   - qualified_name: modelguard.risk_flags
     display_name: ModelGuard Risk Flags
     description: >-

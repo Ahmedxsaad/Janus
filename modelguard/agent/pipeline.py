@@ -30,12 +30,16 @@ from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import blast_radius, finding_for
 from modelguard.detect.leakage import leakage_findings
+from modelguard.detect.schema_drift import schema_drift_findings
+from modelguard.detect.trust_score import trust_inputs_from_findings, trust_score
 from modelguard.llm import LLMConfig
 from modelguard.models import (
     Finding,
     FreshnessFinding,
     LeakageFinding,
+    ModelRef,
     Severity,
+    TrustScore,
     severity_rank,
 )
 from modelguard.writeback.assertions import (
@@ -50,6 +54,8 @@ from modelguard.writeback.labels import add_tag, ensure_tag
 from modelguard.writeback.properties import (
     RISK_FLAGS,
     RUN_ID,
+    TRUST_BAND,
+    TRUST_SCORE,
     assign_properties,
     define_properties,
     read_properties,
@@ -96,6 +102,15 @@ class FindingWrites:
 
 
 @dataclass(frozen=True)
+class TrustWrite:
+    """One model's trust score, and whether it was persisted this run."""
+
+    model_urn: str
+    model_name: str
+    score: TrustScore
+
+
+@dataclass(frozen=True)
 class ScanReport:
     """Everything one scan found and wrote. Returned to the CLI and the tests.
 
@@ -108,6 +123,8 @@ class ScanReport:
     table_urn: str | None = None
     model_urn: str | None = None
     writes: tuple[FindingWrites, ...] = ()
+    trust: tuple[TrustWrite, ...] = ()
+    """One entry per model the scan produced a finding about, worst score first."""
     assertion_yaml: str = ""
     """The guarding assertion a freshness finding would leave. Rendered even on a
     dry run, so the caller can see the artifact that was not written."""
@@ -239,6 +256,53 @@ def _write_back(
     )
 
 
+def _trust_scores(findings: list[Finding], config: ScanConfig) -> tuple[TrustWrite, ...]:
+    """Roll the scan's findings into one trust score per model. Pure, no writes.
+
+    A model is scored against every finding that names it, so a model both
+    downstream of a stale table and independently leaking loses trust for both.
+    Only models the scan actually found something about are scored: a clean model
+    is not written a score of 100, which keeps a clean scan writing nothing.
+
+    Returns:
+        One entry per model, worst (lowest) score first, then by URN for stability.
+    """
+    by_model: dict[str, list[Finding]] = {}
+    refs: dict[str, ModelRef] = {}
+    for finding in findings:
+        for model in finding.models_at_risk:
+            by_model.setdefault(model.urn, []).append(finding)
+            refs.setdefault(model.urn, model)
+
+    trust_writes = [
+        TrustWrite(
+            model_urn=model_urn,
+            model_name=refs[model_urn].name,
+            score=trust_score(trust_inputs_from_findings(model_findings, refs[model_urn]), config),
+        )
+        for model_urn, model_findings in by_model.items()
+    ]
+    return tuple(sorted(trust_writes, key=lambda w: (w.score.value, w.model_urn)))
+
+
+def _persist_trust(conn: DataHubConnection, trust_writes: tuple[TrustWrite, ...]) -> None:
+    """Write each model's trust score and band as structured properties.
+
+    Read-then-merge inside ``assign_properties`` preserves the risk flags and run
+    id an earlier per-finding write set on the same model, and rewriting an
+    unchanged score is a no-op, so a rerun converges.
+    """
+    for trust_write in trust_writes:
+        assign_properties(
+            conn,
+            trust_write.model_urn,
+            {
+                TRUST_SCORE: [float(trust_write.score.value)],
+                TRUST_BAND: [str(trust_write.score.band)],
+            },
+        )
+
+
 def _detect(
     conn: DataHubConnection,
     config: ScanConfig,
@@ -266,6 +330,7 @@ def _detect(
 
     if model_urn is not None:
         findings.extend(leakage_findings(conn, model_urn, config))
+        findings.extend(schema_drift_findings(conn, model_urn, config))
 
     findings.sort(key=lambda finding: severity_rank(finding.severity))
     return findings, warnings
@@ -321,6 +386,8 @@ def run_scan(
         else ""
     )
 
+    trust = _trust_scores(findings, config)
+
     if dry_run:
         return ScanReport(
             run_id=run_id,
@@ -331,6 +398,7 @@ def run_scan(
                 FindingWrites(finding=finding, narrative=narrate(finding, llm))
                 for finding in findings
             ),
+            trust=trust,
             assertion_yaml=assertion_yaml,
             warnings=tuple(warnings),
         )
@@ -339,6 +407,9 @@ def run_scan(
         _write_back(conn, finding, narrate(finding, llm), config, run_id, observed_at)
         for finding in findings
     )
+    # After every per-finding write, so each model's risk flags are already on the
+    # graph when the trust score reads and merges alongside them.
+    _persist_trust(conn, trust)
 
     # Empty, not the unwritten preview, when no write in this scan has an
     # assertion: a scan that found only a leakage finding never called
@@ -355,6 +426,7 @@ def run_scan(
         model_urn=model_urn,
         dry_run=False,
         writes=writes,
+        trust=trust,
         assertion_yaml=written_yaml,
         warnings=tuple(warnings),
     )

@@ -17,6 +17,7 @@ from modelguard.agent.narrate import (
 from modelguard.llm import LLMConfig
 from tests.conftest import make_finding as _finding
 from tests.conftest import make_leakage_finding as _leakage_finding
+from tests.conftest import make_schema_drift_finding as _drift_finding
 
 SECRET = "sk-super-secret-key-1234567890"
 
@@ -227,13 +228,28 @@ def test_the_system_prompt_is_dispatched_per_finding_type_not_a_default():
     """
     freshness_prompt = narrate_module._system_prompt(_finding())
     leakage_prompt = narrate_module._system_prompt(_leakage_finding())
+    drift_prompt = narrate_module._system_prompt(_drift_finding())
 
     assert "stale upstream table" in freshness_prompt
     assert "target leakage" in leakage_prompt
-    assert freshness_prompt != leakage_prompt
+    assert "schema drift" in drift_prompt
+    assert len({freshness_prompt, leakage_prompt, drift_prompt}) == 3
 
     with pytest.raises(NotImplementedError):
         narrate_module._system_prompt(object())  # type: ignore[arg-type]
+
+
+def test_the_drift_fact_block_and_template_name_the_changed_columns():
+    finding = _drift_finding(live=True)
+    block = fact_block(finding)
+    assert "applicant_income: NUMBER -> VARCHAR" in block
+    assert "did not read the data" in block
+
+    text = template_narrative(finding)
+    assert "Credit Risk v3" in text
+    assert "applicant_income: NUMBER -> VARCHAR" in text
+    # A live model must be named as scoring on the drifted schema.
+    assert "live endpoint" in text
 
 
 # --------------------------------------------------------------------------

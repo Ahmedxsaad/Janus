@@ -29,7 +29,7 @@ from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.config import ScanConfig
 from modelguard.env import ConfigError
 from modelguard.llm import LLMConfig, llm_config_from_env
-from modelguard.models import Finding, FreshnessFinding, LeakageFinding
+from modelguard.models import Finding, FreshnessFinding, LeakageFinding, SchemaDriftFinding
 
 app = typer.Typer(
     add_completion=False,
@@ -196,6 +196,13 @@ def _print_finding(finding: Finding) -> None:
         serving = "[red]LIVE[/red]" if finding.model.is_live else "not serving"
         console.print(f"  model        {finding.model.name} {serving}")
 
+    elif isinstance(finding, SchemaDriftFinding):
+        console.print(f"  input        {finding.dataset_name}")
+        for change in finding.changes:
+            console.print(f"  drift        {change.describe()}")
+        serving = "[red]LIVE[/red]" if finding.model.is_live else "not serving"
+        console.print(f"  model        {finding.model.name} {serving}")
+
 
 def _print_writes(write: FindingWrites) -> None:
     """Render what one finding actually mutated in the graph."""
@@ -234,13 +241,21 @@ def _print_report(report: ScanReport) -> None:
     for warning in report.warnings:
         console.print(f"[yellow]warning:[/yellow] {warning}")
 
+    if report.trust:
+        console.print("\n[bold]Trust scores:[/bold]")
+        for trust in report.trust:
+            reasons = ", ".join(sorted(trust.score.deductions)) or "no deductions"
+            console.print(
+                f"  {trust.model_name}: {trust.score.value}/100 ({trust.score.band}) - {reasons}"
+            )
+
     if report.dry_run:
-        console.print("[yellow]Dry run: nothing was written.[/yellow]")
-        console.print("Would have raised the incident(s), tagged the models, and written")
-        console.print("the guarding assertion and the impact report(s).")
+        console.print("\n[yellow]Dry run: nothing was written.[/yellow]")
+        console.print("Would have raised the incident(s), tagged the models, written the")
+        console.print("guarding assertion, the impact report(s), and the trust score(s).")
         return
 
-    console.print("[bold]Wrote back:[/bold]")
+    console.print("\n[bold]Wrote back:[/bold]")
     for write in report.writes:
         _print_writes(write)
     console.print(f"\n[dim]run id: {report.run_id}[/dim]")
