@@ -307,6 +307,13 @@ def scan(
         Path | None,
         typer.Option("--assertion-out", help="Also write the guarding-assertion YAML here."),
     ] = None,
+    contract_out: Annotated[
+        Path | None,
+        typer.Option(
+            "--contract-out",
+            help="Write the model's ODCS input-data-contract YAML here. Requires --model.",
+        ),
+    ] = None,
 ) -> None:
     """Audit a table for stale data, a model for target leakage, or both.
 
@@ -316,6 +323,10 @@ def scan(
     """
     if table is None and model is None:
         console.print("[red]Nothing to scan: pass --table, --model, or both.[/red]")
+        raise typer.Exit(code=2)
+
+    if contract_out is not None and model is None:
+        console.print("[red]--contract-out describes a model's inputs; pass --model.[/red]")
         raise typer.Exit(code=2)
 
     try:
@@ -364,6 +375,18 @@ def scan(
         dry_run=dry_run,
     )
     _print_report(report)
+
+    # The input contract describes the model's expected inputs, not this scan's
+    # findings, so it is written even when the scan is clean: a clean model still
+    # has a boundary worth contracting (the "before promoting a model" use case).
+    if contract_out is not None and model_urn is not None:
+        from modelguard.writeback.contract import ContractError, render_input_contract
+
+        try:
+            contract_out.write_text(render_input_contract(conn, model_urn, config))
+            console.print(f"[dim]wrote {contract_out}[/dim]")
+        except ContractError as exc:
+            console.print(f"[yellow]{exc}[/yellow]")
 
     if report.clean:
         return
