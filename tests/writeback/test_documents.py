@@ -10,6 +10,7 @@ from tests.conftest import MODEL_URN as MODEL
 from tests.conftest import TABLE_URN, FakeClient, FakeGraph, make_connection
 from tests.conftest import make_finding as _finding
 from tests.conftest import make_leakage_finding as _leakage_finding
+from tests.conftest import make_schema_drift_finding as _drift_finding
 
 
 def test_the_document_id_is_derived_from_the_model_and_the_resource_so_reruns_converge():
@@ -35,6 +36,17 @@ def test_the_report_states_the_measured_numbers_and_the_model_at_risk():
     assert "6.0 hours" in markdown
     assert "Credit Risk v3" in markdown
     assert "scan-abc" in markdown
+
+
+def test_the_drift_report_lists_the_changed_columns_and_cites_breck():
+    markdown = render_impact_report(_drift_finding(live=True), "assessment prose", "scan-xyz")
+
+    assert "ecommerce.public.customer_features" in markdown
+    assert "applicant_income: NUMBER -> VARCHAR" in markdown
+    assert "Breck" in markdown
+    assert "scan-xyz" in markdown
+    # The narrative is quoted, not treated as fact.
+    assert "assessment prose" in markdown
 
 
 def test_the_report_quotes_the_narrative_without_letting_it_supply_facts():

@@ -6,18 +6,28 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from datahub.metadata.schema_classes import (
+    OtherSchemaClass,
+    SchemaFieldClass,
+    SchemaFieldDataTypeClass,
+    SchemaMetadataClass,
+    StringTypeClass,
+)
 from datahub.metadata.urns import SchemaFieldUrn, Urn
 from datahub.sdk.lineage_client import LineagePath, LineageResult
 
 from modelguard.client import DataHubConnection
 from modelguard.models import (
     BlastRadius,
+    ChangeKind,
     FreshnessFinding,
     FreshnessSignal,
     LeakageFinding,
     LeakingFeature,
     ModelAtRisk,
     ModelRef,
+    SchemaChange,
+    SchemaDriftFinding,
 )
 
 
@@ -306,6 +316,59 @@ def make_leakage_finding(*, live: bool = True, has_owner: bool = False) -> Leaka
             label_dataset_name="ecommerce.public.loans_raw",
             column_path=("prior_default_flag", "default_status"),
         ),
+    )
+
+
+TRAINING_RUN_URN = "urn:li:dataProcessInstance:credit_risk_v3_run"
+
+
+def schema_metadata(fields: dict[str, str]) -> SchemaMetadataClass:
+    """Build a SchemaMetadata carrying the given field-path to native-type map.
+
+    Only ``fieldPath`` and ``nativeDataType`` matter to the drift detector, so the
+    logical type is a fixed placeholder. Built from the real SDK class so the fake
+    cannot drift from the shape a live GMS returns.
+    """
+    return SchemaMetadataClass(
+        schemaName="s",
+        platform="urn:li:dataPlatform:snowflake",
+        version=0,
+        hash="",
+        platformSchema=OtherSchemaClass(rawSchema=""),
+        fields=[
+            SchemaFieldClass(
+                fieldPath=path,
+                type=SchemaFieldDataTypeClass(type=StringTypeClass()),
+                nativeDataType=native_type,
+            )
+            for path, native_type in fields.items()
+        ],
+    )
+
+
+def make_schema_drift_finding(
+    *,
+    live: bool = True,
+    has_owner: bool = False,
+    changes: tuple[SchemaChange, ...] = (
+        SchemaChange("applicant_income", ChangeKind.RETYPED, "NUMBER", "VARCHAR"),
+        SchemaChange("debt_to_income", ChangeKind.ADDED, None, "NUMBER"),
+        SchemaChange("updated_at", ChangeKind.REMOVED, "TIMESTAMP", None),
+    ),
+) -> SchemaDriftFinding:
+    """Build a schema-drift finding the way the detector would, without a graph."""
+    return SchemaDriftFinding(
+        model=ModelRef(
+            urn=MODEL_URN,
+            name="Credit Risk v3",
+            deployments=(DEPLOYMENT_URN,),
+            live_deployments=(DEPLOYMENT_URN,) if live else (),
+            has_owner=has_owner,
+        ),
+        training_run_urn=TRAINING_RUN_URN,
+        dataset_urn=FEATURE_TABLE_URN,
+        dataset_name="ecommerce.public.customer_features",
+        changes=changes,
     )
 
 
