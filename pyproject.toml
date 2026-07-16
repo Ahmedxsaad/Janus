@@ -32,10 +32,13 @@ anthropic = ["langchain-anthropic==1.4.8"]
 openai = ["langchain-openai==1.3.4"]
 google = ["langchain-google-genai==4.2.7"]
 
-# LangGraph lands in Phase 3 with the state machine; unpinned until installed.
+# The human-approval agent (modelguard/agent/graph.py) and `scan --review`.
+# Only langgraph is needed: the StateGraph's nodes call ModelGuard's own
+# deterministic detect/write functions, so there is no LLM tool-caller and thus
+# no umbrella `langchain` or `datahub-agent-context` dependency. The narrator's
+# langchain-core comes from whichever provider extra is installed.
 agent = [
-    "langgraph",
-    "langchain",
+    "langgraph==1.2.9",
 ]
 dev = [
     "mypy==2.2.0",
