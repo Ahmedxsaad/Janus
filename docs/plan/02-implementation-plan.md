@@ -548,6 +548,22 @@ committing it to `examples/`. This makes the "contract for the ML boundary" tang
 
 ## 7. The agent (`agent/graph.py`) - LangGraph over the Agent Context Kit
 
+> **Landed 2026-07-16** (D-039). `agent/graph.py` runs the pipeline's node order
+> (`detect -> reason -> [approval] -> write_back`) as a compiled `StateGraph`, but
+> the nodes delegate to the pipeline's own deterministic functions and to
+> `narrate`; there is **no** Agent Context Kit toolset and **no** `AgentExecutor`,
+> because an LLM tool-caller that could decide to write contradicts the design law.
+> The one new capability is a real `interrupt()` approval gate: `run_agent` pauses
+> after reasoning, hands the caller a preview, and writes only what is approved.
+> `scan --review` (or `--auto-approve` for the demo) opts into it; the default
+> `scan` and `watch` keep using `run_scan`, so the out-of-the-box path needs no
+> langgraph (the `agent` extra, pinned to langgraph 1.2.9, is lazily imported).
+> `watch` shipped as a **polling** loop that acts on finding-set transitions, not
+> the Actions/Kafka consumer sketched below; that remains the documented upgrade
+> path. Findings ride an in-process holder rather than the checkpointed state, so
+> no ModelGuard dataclass is msgpack-serialized. 9 unit tests (4 on the approval
+> gate, 5 on watch transitions). The `tools.py` sketch below did not ship.
+
 `datahub-agent-context` gives the read toolset (`search`, `get_entities`, `get_lineage`,
 `list_schema_fields`, `get_dataset_queries`, `search_documents`, `grep_documents`) + mutations
 (`add_tags`, `update_description`, `add_glossary_terms`, `set_domains`, `add_owners`, `save_document`) [verified].
@@ -569,7 +585,7 @@ llm = ChatAnthropic(model="claude-opus-4-8", temperature=0)
 ```
 
 **LangGraph state machine** (why LangGraph over a bare AgentExecutor: explicit human-approval interrupt +
-deterministic node ordering + replayable state → far better demo and robustness):
+deterministic node ordering + process-local control-flow checkpointing):
 ```
 detect ─▶ investigate ─▶ reason_and_score ─▶ [human_approval interrupt] ─▶ write_back ─▶ END
 ```
@@ -577,13 +593,15 @@ detect ─▶ investigate ─▶ reason_and_score ─▶ [human_approval interru
   a problem - it explains and ranks).
 - `reason_and_score` = LLM: severity narrative, incident text, impact-report prose, trust rationale.
 - `human_approval` = LangGraph `interrupt()` before any mutation (config flag `--auto-approve` for the demo).
+  The public API requires an approval callback unless `auto_approve=True` is explicit. The current CLI
+  approval exchange is synchronous and process-local; durable cross-process resume is not claimed.
 - `write_back` = idempotent mutations from §6.
 
 Two entry points via `cli.py` (Typer):
 - `modelguard scan` - one-shot audit of all models (great for the video's "before" state).
-- `modelguard watch` - event-driven via the **DataHub Actions framework** (Kafka `EntityChangeEvent`),
-  with a **polling fallback** so the demo never depends on Kafka timing. [confirm] Actions setup adds complexity -
-  build `scan` first; add `watch` only once the loop is bulletproof.
+- `modelguard watch` - polling audit with finding-set transition detection, recovery
+  reconciliation, bounded retry/backoff, and the DataHub Actions framework as a future
+  event-driven upgrade. The demo never depends on Kafka timing.
 
 ---
 

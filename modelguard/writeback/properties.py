@@ -216,3 +216,23 @@ def read_properties(conn: DataHubConnection, entity_urn: str) -> dict[str, list[
         StructuredPropertyUrn.from_string(a.propertyUrn).id: list(a.values)
         for a in aspect.properties
     }
+
+
+def remove_properties(conn: DataHubConnection, entity_urn: str, names: set[str]) -> bool:
+    """Remove named structured-property assignments without touching other values."""
+    existing = conn.graph.get_aspect(entity_urn, StructuredPropertiesClass)
+    if existing is None:
+        return False
+
+    urns = {str(StructuredPropertyUrn(name)) for name in names}
+    kept = [assignment for assignment in existing.properties if assignment.propertyUrn not in urns]
+    if len(kept) == len(existing.properties):
+        return False
+
+    conn.graph.emit_mcp(
+        MetadataChangeProposalWrapper(
+            entityUrn=entity_urn,
+            aspect=StructuredPropertiesClass(properties=kept),
+        )
+    )
+    return True

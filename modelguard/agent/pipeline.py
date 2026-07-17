@@ -303,6 +303,21 @@ def _persist_trust(conn: DataHubConnection, trust_writes: tuple[TrustWrite, ...]
         )
 
 
+def written_assertion_yaml(writes: tuple[FindingWrites, ...]) -> str:
+    """The YAML of the first guarding assertion actually written this scan, or ``""``.
+
+    Empty, not the unwritten preview, when no write in this scan carries an
+    assertion: a scan that found only a leakage finding never called
+    ``upsert_guarding_assertion``, and reporting the table's rendered-but-unwritten
+    YAML would claim a check was written when it was not. Shared by ``run_scan`` and
+    the LangGraph agent so both report the written artifact identically.
+    """
+    return next(
+        (write.assertion.yaml_text for write in writes if write.assertion is not None),
+        "",
+    )
+
+
 def _detect(
     conn: DataHubConnection,
     config: ScanConfig,
@@ -411,15 +426,6 @@ def run_scan(
     # graph when the trust score reads and merges alongside them.
     _persist_trust(conn, trust)
 
-    # Empty, not the unwritten preview, when no write in this scan has an
-    # assertion: a scan that found only a leakage finding never called
-    # upsert_guarding_assertion, and reporting the table's rendered-but-unwritten
-    # YAML here would claim a check was written when it was not.
-    written_yaml = next(
-        (write.assertion.yaml_text for write in writes if write.assertion is not None),
-        "",
-    )
-
     return ScanReport(
         run_id=run_id,
         table_urn=table_urn,
@@ -427,6 +433,6 @@ def run_scan(
         dry_run=False,
         writes=writes,
         trust=trust,
-        assertion_yaml=written_yaml,
+        assertion_yaml=written_assertion_yaml(writes),
         warnings=tuple(warnings),
     )

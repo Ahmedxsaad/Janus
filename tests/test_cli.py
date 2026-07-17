@@ -1,10 +1,35 @@
 from __future__ import annotations
 
-import pytest
+import time
 
-from modelguard.cli import TableResolutionError, resolve_table
+import pytest
+from datahub.metadata.schema_classes import (
+    AuditStampClass,
+    DeploymentStatusClass,
+    GlobalTagsClass,
+    IncidentInfoClass,
+    IncidentStateClass,
+    IncidentStatusClass,
+    MLModelDeploymentPropertiesClass,
+    MLModelPropertiesClass,
+    OperationClass,
+    OperationTypeClass,
+    StructuredPropertiesClass,
+)
+
+from modelguard.cli import TableResolutionError, WatchState, _watch_once, resolve_table
 from modelguard.client import DataHubConnection
-from tests.conftest import TABLE_URN, FakeClient, FakeGraph, make_connection
+from modelguard.config import ScanConfig
+from tests.conftest import (
+    DEPLOYMENT_URN,
+    LEAK_FEATURE_URN,
+    MODEL_URN,
+    TABLE_URN,
+    FakeClient,
+    FakeGraph,
+    lineage_result,
+    make_connection,
+)
 
 OTHER_TABLE = "urn:li:dataset:(urn:li:dataPlatform:bigquery,analytics.public.loans_raw,PROD)"
 
@@ -46,3 +71,180 @@ def test_an_ambiguous_name_is_refused_rather_than_guessed():
     """Two platforms hold a loans_raw. Scanning the wrong one silently is worse than failing."""
     with pytest.raises(TableResolutionError, match="matches 2 datasets"):
         resolve_table(_conn([TABLE_URN, OTHER_TABLE]), "loans_raw")
+
+
+# --------------------------------------------------------------------------
+# watch: poll, act on transitions only
+# --------------------------------------------------------------------------
+
+FEATURE_TABLE = (
+    "urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.customer_features,PROD)"
+)
+HOUR = 3_600_000
+
+
+def _watch_fixture(lag_hours: float) -> tuple[FakeGraph, FakeClient]:
+    """A live model downstream of a table that is ``lag_hours`` old, per its operation aspect.
+
+    ``watch`` measures staleness against real wall-clock time (it has no fixed
+    ``now``), so the operation timestamp is anchored to ``time.time()`` rather than
+    the fixed ``NOW_MS`` the ``now_ms``-driven tests use.
+    """
+    now_ms = int(time.time() * 1000)
+    graph = FakeGraph(
+        {
+            (MODEL_URN, MLModelPropertiesClass): MLModelPropertiesClass(
+                name="Credit Risk v3", deployments=[DEPLOYMENT_URN], mlFeatures=[LEAK_FEATURE_URN]
+            ),
+            (DEPLOYMENT_URN, MLModelDeploymentPropertiesClass): (
+                MLModelDeploymentPropertiesClass(status=DeploymentStatusClass.IN_SERVICE)
+            ),
+        },
+        timeseries={
+            (TABLE_URN, OperationClass): OperationClass(
+                timestampMillis=now_ms,
+                operationType=OperationTypeClass.UPDATE,
+                lastUpdatedTimestamp=now_ms - int(lag_hours * HOUR),
+                actor="urn:li:corpuser:datahub",
+            )
+        },
+    )
+    graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
+    client = FakeClient(
+        lineage_results=[
+            lineage_result(FEATURE_TABLE, 1),
+            lineage_result(LEAK_FEATURE_URN, 2),
+            lineage_result(MODEL_URN, 3),
+        ]
+    )
+    return graph, client
+
+
+def _poll(
+    graph: FakeGraph, client: FakeClient, previous: frozenset | None
+) -> frozenset[tuple[str, str, str, str]]:
+    return _watch_once(
+        make_connection(graph, client),
+        ScanConfig(),
+        table_urn=TABLE_URN,
+        model_urn=None,
+        llm=None,
+        previous=previous,
+    )
+
+
+def test_the_signature_is_stable_across_polls_of_an_unchanged_stale_state():
+    """Two polls of the same stale table compare equal, so watch does not re-fire."""
+    graph, client = _watch_fixture(30.0)
+    first = _poll(graph, client, previous=None)
+    # A second poll of the same unchanged state must yield the identical signature.
+    graph.emitted.clear()
+    graph.graphql_calls.clear()
+    second = _poll(graph, client, previous=first)
+    assert first == second
+    assert first != frozenset()
+
+
+def test_a_newly_stale_table_is_written_back_on_the_first_poll():
+    graph, client = _watch_fixture(30.0)
+    signature = _poll(graph, client, previous=None)
+
+    assert signature != frozenset()
+    # The transition from clean to stale wrote the incident back.
+    assert len(graph.graphql_calls) == 1
+    _, variables = graph.graphql_calls[0]
+    assert variables["input"]["resourceUrn"] == TABLE_URN
+
+
+def test_an_unchanged_finding_set_writes_nothing_on_the_next_poll():
+    """Idempotent by design, but re-writing every poll would be noise: stay quiet."""
+    graph, client = _watch_fixture(30.0)
+    signature = _poll(graph, client, previous=None)
+    graph.emitted.clear()
+    graph.graphql_calls.clear()
+
+    unchanged = _poll(graph, client, previous=signature)
+
+    assert unchanged == signature
+    assert graph.emitted == [], "an unchanged finding set must not write again"
+    assert graph.graphql_calls == []
+
+
+def test_a_healthy_target_writes_nothing_and_has_an_empty_signature():
+    graph, client = _watch_fixture(1.0)  # within the 6h default SLA
+    signature = _poll(graph, client, previous=None)
+
+    assert signature == frozenset()
+    assert graph.emitted == []
+    assert graph.graphql_calls == []
+
+
+def test_finding_signature_carries_the_incident_dedup_key():
+    """Signature starts with the incident key and includes measured severity."""
+    graph, client = _watch_fixture(30.0)
+    signature = _poll(graph, client, previous=None)
+    (entry,) = signature
+    finding_type, resource_urn, title, severity = entry
+    assert finding_type == "upstream-freshness"
+    assert resource_urn == TABLE_URN
+    assert title == "Stale upstream data in ecommerce.public.loans_raw"
+    assert severity == "critical"
+
+
+def test_recovery_resolves_incident_and_clears_model_risk_state():
+    """A recovered finding must not leave stale governance metadata behind."""
+    graph, client = _watch_fixture(30.0)
+    state = WatchState()
+    first = _watch_once(
+        make_connection(graph, client),
+        ScanConfig(),
+        table_urn=TABLE_URN,
+        model_urn=None,
+        llm=None,
+        previous=None,
+        state=state,
+    )
+    assert first
+
+    incident_urn = "urn:li:incident:abc"
+    stamp = AuditStampClass(time=0, actor="urn:li:corpuser:datahub")
+    graph._related[TABLE_URN] = [incident_urn]
+    graph._aspects[(incident_urn, IncidentInfoClass)] = IncidentInfoClass(
+        type="FRESHNESS",
+        entities=[TABLE_URN],
+        title="Stale upstream data in ecommerce.public.loans_raw",
+        description="body",
+        status=IncidentStatusClass(state=IncidentStateClass.ACTIVE, lastUpdated=stamp),
+        created=stamp,
+    )
+    graph.graphql_response = {"updateIncidentStatus": True}
+    graph.graphql_calls.clear()
+    graph.emitted.clear()
+    now_ms = int(time.time() * 1000)
+    graph._timeseries[(TABLE_URN, OperationClass)] = OperationClass(
+        timestampMillis=now_ms,
+        operationType=OperationTypeClass.UPDATE,
+        lastUpdatedTimestamp=now_ms - HOUR,
+        actor="urn:li:corpuser:datahub",
+    )
+
+    recovered = _watch_once(
+        make_connection(graph, client),
+        ScanConfig(),
+        table_urn=TABLE_URN,
+        model_urn=None,
+        llm=None,
+        previous=state.signature,
+        state=state,
+    )
+
+    assert recovered == frozenset()
+    assert any("updateIncidentStatus" in query for query, _ in graph.graphql_calls)
+    tags = graph.get_aspect(MODEL_URN, GlobalTagsClass)
+    assert tags is None or all(tag.tag != "urn:li:tag:model-at-risk" for tag in tags.tags)
+    properties = graph.get_aspect(MODEL_URN, StructuredPropertiesClass)
+    assert properties is not None
+    assert all(
+        a.propertyUrn != "urn:li:structuredProperty:modelguard.risk_flags"
+        for a in properties.properties
+    )

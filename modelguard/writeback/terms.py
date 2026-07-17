@@ -101,7 +101,9 @@ def add_term(
         nothing was written.
     """
     existing = conn.graph.get_aspect(entity_urn, GlossaryTermsClass)
-    current = list(existing.terms) if existing else []
+    if existing is None:
+        return False
+    current = list(existing.terms)
 
     if any(association.urn == term_urn for association in current):
         return False
@@ -132,3 +134,25 @@ def read_terms(conn: DataHubConnection, entity_urn: str) -> tuple[str, ...]:
     if aspect is None:
         return ()
     return tuple(association.urn for association in aspect.terms)
+
+
+def remove_term(conn: DataHubConnection, entity_urn: str, term_urn: str) -> bool:
+    """Remove one ModelGuard-owned term while preserving every other term."""
+    existing = conn.graph.get_aspect(entity_urn, GlossaryTermsClass)
+    if existing is None:
+        return False
+    current = list(existing.terms)
+    kept = [association for association in current if association.urn != term_urn]
+    if len(kept) == len(current):
+        return False
+
+    conn.graph.emit_mcp(
+        MetadataChangeProposalWrapper(
+            entityUrn=entity_urn,
+            aspect=GlossaryTermsClass(
+                terms=kept,
+                auditStamp=existing.auditStamp,
+            ),
+        )
+    )
+    return True
