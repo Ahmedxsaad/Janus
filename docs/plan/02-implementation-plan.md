@@ -585,7 +585,7 @@ llm = ChatAnthropic(model="claude-opus-4-8", temperature=0)
 ```
 
 **LangGraph state machine** (why LangGraph over a bare AgentExecutor: explicit human-approval interrupt +
-deterministic node ordering + replayable state → far better demo and robustness):
+deterministic node ordering + process-local control-flow checkpointing):
 ```
 detect ─▶ investigate ─▶ reason_and_score ─▶ [human_approval interrupt] ─▶ write_back ─▶ END
 ```
@@ -593,13 +593,15 @@ detect ─▶ investigate ─▶ reason_and_score ─▶ [human_approval interru
   a problem - it explains and ranks).
 - `reason_and_score` = LLM: severity narrative, incident text, impact-report prose, trust rationale.
 - `human_approval` = LangGraph `interrupt()` before any mutation (config flag `--auto-approve` for the demo).
+  The public API requires an approval callback unless `auto_approve=True` is explicit. The current CLI
+  approval exchange is synchronous and process-local; durable cross-process resume is not claimed.
 - `write_back` = idempotent mutations from §6.
 
 Two entry points via `cli.py` (Typer):
 - `modelguard scan` - one-shot audit of all models (great for the video's "before" state).
-- `modelguard watch` - event-driven via the **DataHub Actions framework** (Kafka `EntityChangeEvent`),
-  with a **polling fallback** so the demo never depends on Kafka timing. [confirm] Actions setup adds complexity -
-  build `scan` first; add `watch` only once the loop is bulletproof.
+- `modelguard watch` - polling audit with finding-set transition detection, recovery
+  reconciliation, bounded retry/backoff, and the DataHub Actions framework as a future
+  event-driven upgrade. The demo never depends on Kafka timing.
 
 ---
 

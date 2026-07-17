@@ -88,3 +88,24 @@ def read_tags(conn: DataHubConnection, entity_urn: str) -> tuple[str, ...]:
     if aspect is None:
         return ()
     return tuple(association.tag for association in aspect.tags)
+
+
+def remove_tag(conn: DataHubConnection, entity_urn: str, tag_urn: str) -> bool:
+    """Remove one ModelGuard-owned tag while preserving every other tag.
+
+    Returns:
+        ``True`` when an aspect was changed, ``False`` when the tag was absent.
+    """
+    existing = conn.graph.get_aspect(entity_urn, GlobalTagsClass)
+    current = list(existing.tags) if existing else []
+    kept = [association for association in current if association.tag != tag_urn]
+    if len(kept) == len(current):
+        return False
+
+    conn.graph.emit_mcp(
+        MetadataChangeProposalWrapper(
+            entityUrn=entity_urn,
+            aspect=GlobalTagsClass(tags=kept),
+        )
+    )
+    return True

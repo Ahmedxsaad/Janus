@@ -13,7 +13,8 @@ same deterministic functions the pipeline uses (``_detect``, ``_write_back``,
 ``_persist_trust``, ``_trust_scores``) and to the same narrator, so a finding is
 detected, explained, and written back byte-for-byte the way ``scan`` already does
 it (modelguard/agent/CLAUDE.md). The graph adds orchestration, not capability: the
-approval interrupt and a checkpointer so a paused run is replayable.
+approval interrupt and a process-local checkpointer for the synchronous approval
+exchange. Cross-process resume requires a durable run store outside this CLI path.
 
 The LLM still runs only in the reason node, and it still never decides whether a
 finding exists (the design law). ``interrupt()`` gates every mutation: nothing in
@@ -21,7 +22,8 @@ the write node runs until the caller resumes with an approval.
 
 Why the findings ride outside the graph state
 ----------------------------------------------
-LangGraph checkpoints its state so a run can pause and resume. The checkpointer
+LangGraph checkpoints its control-flow state so a run can pause and resume within
+one call. The checkpointer
 serializes whatever the state holds, and it does not know ModelGuard's finding and
 report dataclasses, so carrying them in the state serializes them on every hop and
 warns that unregistered types will be blocked in a future release. The state
@@ -30,8 +32,9 @@ approved); the findings, narratives, and reports live in an in-process holder th
 node closures share. That is sound precisely because the checkpointer is the
 in-memory :class:`~langgraph.checkpoint.memory.MemorySaver`: a paused run resumes
 within the same ``run_agent`` call, in the same process, so the holder is always
-there. A durable checkpointer would matter only if a paused run had to outlive the
-process, which ``scan`` never asks of it.
+there. A durable checkpointer is intentionally out of scope for this synchronous
+CLI path; callers that need cross-process approval must provide their own durable
+run store around the preview.
 
 LangGraph is an optional extra (the ``agent`` install target). Importing this
 module therefore requires it; :func:`~modelguard.cli.scan` imports it lazily and
@@ -65,13 +68,16 @@ from modelguard.models import Finding
 from modelguard.writeback.assertions import render_assertion_yaml
 
 #: A caller's approval decision, given the preview of what would be written. The
-#: CLI prints the preview and prompts; a non-interactive caller may pass ``None``
-#: to :func:`run_agent`, which approves automatically.
+#: CLI prints the preview and prompts before the callback returns a decision.
 ApproveFn = Callable[[ScanReport], bool]
 
 
 class AgentUnavailableError(RuntimeError):
     """LangGraph is not installed, so the human-approval agent cannot run."""
+
+
+class ApprovalRequiredError(PermissionError):
+    """A caller must explicitly approve writes on the agent API."""
 
 
 class ScanState(TypedDict, total=False):
@@ -126,6 +132,7 @@ def build_scan_graph(
 
     Raises:
         AgentUnavailableError: LangGraph is not installed.
+        ApprovalRequiredError: No callback or explicit unattended approval was given.
     """
     try:
         from langgraph.checkpoint.memory import MemorySaver
@@ -151,9 +158,7 @@ def build_scan_graph(
             dry_run=True,
             writes=tuple(
                 FindingWrites(finding=finding, narrative=narrative)
-                for finding, narrative in zip(
-                    artifacts.findings, artifacts.narratives, strict=True
-                )
+                for finding, narrative in zip(artifacts.findings, artifacts.narratives, strict=True)
             ),
             trust=artifacts.trust,
             assertion_yaml=(
@@ -194,9 +199,7 @@ def build_scan_graph(
         """Perform every mutation, then persist the trust scores. Idempotent."""
         writes = tuple(
             _write_back(conn, finding, narrative, config, run_id, observed_at)
-            for finding, narrative in zip(
-                artifacts.findings, artifacts.narratives, strict=True
-            )
+            for finding, narrative in zip(artifacts.findings, artifacts.narratives, strict=True)
         )
         _persist_trust(conn, artifacts.trust)
         artifacts.report = ScanReport(
@@ -253,6 +256,7 @@ def run_agent(
     run_id: str | None = None,
     llm: LLMConfig | None = None,
     approve: ApproveFn | None = None,
+    auto_approve: bool = False,
     now_ms: int | None = None,
 ) -> ScanReport:
     """Audit a table, a model, or both, pausing for approval before writing.
@@ -270,8 +274,9 @@ def run_agent(
         model_urn: The model to audit for leakage and schema drift, if any.
         run_id: Provenance stamp and the checkpointer thread id. Minted when omitted.
         llm: The configured model, or None for deterministic template prose.
-        approve: Called with the preview; returns whether to write. ``None`` approves
-            automatically, which is the unattended and recorded-demo path.
+        approve: Called with the preview; returns whether to write. It is required
+            unless ``auto_approve`` is explicitly set.
+        auto_approve: Explicitly allow unattended writes for a controlled caller.
         now_ms: The instant to measure staleness against. Defaults to now.
 
     Returns:
@@ -286,9 +291,7 @@ def run_agent(
 
     # build_scan_graph raises the actionable AgentUnavailableError if LangGraph is
     # missing, so it runs before any bare langgraph import the caller would see raw.
-    app, artifacts = build_scan_graph(
-        conn, config, llm, run_id, observed_at, table_urn, model_urn
-    )
+    app, artifacts = build_scan_graph(conn, config, llm, run_id, observed_at, table_urn, model_urn)
     thread = {"configurable": {"thread_id": run_id}}
 
     from langgraph.types import Command
@@ -296,7 +299,12 @@ def run_agent(
     state = app.invoke({}, thread)
     if "__interrupt__" in state:
         assert artifacts.preview is not None  # set by the approval node before it paused
-        decision = approve(artifacts.preview) if approve is not None else True
+        if approve is None and not auto_approve:
+            raise ApprovalRequiredError(
+                "an approval callback is required; pass auto_approve=True explicitly "
+                "for an unattended run"
+            )
+        decision = auto_approve if approve is None else approve(artifacts.preview)
         app.invoke(Command(resume=decision), thread)
 
     assert artifacts.report is not None  # a terminal node always sets it

@@ -4,14 +4,20 @@ import time
 
 import pytest
 from datahub.metadata.schema_classes import (
+    AuditStampClass,
     DeploymentStatusClass,
+    GlobalTagsClass,
+    IncidentInfoClass,
+    IncidentStateClass,
+    IncidentStatusClass,
     MLModelDeploymentPropertiesClass,
     MLModelPropertiesClass,
     OperationClass,
     OperationTypeClass,
+    StructuredPropertiesClass,
 )
 
-from modelguard.cli import TableResolutionError, _watch_once, resolve_table
+from modelguard.cli import TableResolutionError, WatchState, _watch_once, resolve_table
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from tests.conftest import (
@@ -116,7 +122,7 @@ def _watch_fixture(lag_hours: float) -> tuple[FakeGraph, FakeClient]:
 
 def _poll(
     graph: FakeGraph, client: FakeClient, previous: frozenset | None
-) -> frozenset[tuple[str, str, str]]:
+) -> frozenset[tuple[str, str, str, str]]:
     return _watch_once(
         make_connection(graph, client),
         ScanConfig(),
@@ -174,11 +180,71 @@ def test_a_healthy_target_writes_nothing_and_has_an_empty_signature():
 
 
 def test_finding_signature_carries_the_incident_dedup_key():
-    """Signature entries are (finding_type, resource_urn, title): the dedup key itself."""
+    """Signature starts with the incident key and includes measured severity."""
     graph, client = _watch_fixture(30.0)
     signature = _poll(graph, client, previous=None)
     (entry,) = signature
-    finding_type, resource_urn, title = entry
+    finding_type, resource_urn, title, severity = entry
     assert finding_type == "upstream-freshness"
     assert resource_urn == TABLE_URN
     assert title == "Stale upstream data in ecommerce.public.loans_raw"
+    assert severity == "critical"
+
+
+def test_recovery_resolves_incident_and_clears_model_risk_state():
+    """A recovered finding must not leave stale governance metadata behind."""
+    graph, client = _watch_fixture(30.0)
+    state = WatchState()
+    first = _watch_once(
+        make_connection(graph, client),
+        ScanConfig(),
+        table_urn=TABLE_URN,
+        model_urn=None,
+        llm=None,
+        previous=None,
+        state=state,
+    )
+    assert first
+
+    incident_urn = "urn:li:incident:abc"
+    stamp = AuditStampClass(time=0, actor="urn:li:corpuser:datahub")
+    graph._related[TABLE_URN] = [incident_urn]
+    graph._aspects[(incident_urn, IncidentInfoClass)] = IncidentInfoClass(
+        type="FRESHNESS",
+        entities=[TABLE_URN],
+        title="Stale upstream data in ecommerce.public.loans_raw",
+        description="body",
+        status=IncidentStatusClass(state=IncidentStateClass.ACTIVE, lastUpdated=stamp),
+        created=stamp,
+    )
+    graph.graphql_response = {"updateIncidentStatus": True}
+    graph.graphql_calls.clear()
+    graph.emitted.clear()
+    now_ms = int(time.time() * 1000)
+    graph._timeseries[(TABLE_URN, OperationClass)] = OperationClass(
+        timestampMillis=now_ms,
+        operationType=OperationTypeClass.UPDATE,
+        lastUpdatedTimestamp=now_ms - HOUR,
+        actor="urn:li:corpuser:datahub",
+    )
+
+    recovered = _watch_once(
+        make_connection(graph, client),
+        ScanConfig(),
+        table_urn=TABLE_URN,
+        model_urn=None,
+        llm=None,
+        previous=state.signature,
+        state=state,
+    )
+
+    assert recovered == frozenset()
+    assert any("updateIncidentStatus" in query for query, _ in graph.graphql_calls)
+    tags = graph.get_aspect(MODEL_URN, GlobalTagsClass)
+    assert tags is None or all(tag.tag != "urn:li:tag:model-at-risk" for tag in tags.tags)
+    properties = graph.get_aspect(MODEL_URN, StructuredPropertiesClass)
+    assert properties is not None
+    assert all(
+        a.propertyUrn != "urn:li:structuredProperty:modelguard.risk_flags"
+        for a in properties.properties
+    )

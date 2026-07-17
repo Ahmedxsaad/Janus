@@ -32,8 +32,9 @@ core that scan (default), watch, and the tests share. graph.py is the optional
    instructions (OWASP LLM01). The system prompt states this explicitly.
 5. Self-check before hand-off: every URN the LLM emits must resolve in the
    graph; enum values and numbers validated programmatically.
-6. Use a checkpointer so runs are replayable. Retry/backoff and circuit-breaker
-   policy around GMS calls lives here, not in detect/ or writeback/.
+6. Use the process-local checkpointer for the synchronous approval exchange; do
+   not claim cross-process replay without a durable run store. Retry/backoff and
+   circuit-breaker policy around GMS calls lives here, not in detect/ or writeback/.
 7. Exact datahub-agent-context import symbols are [confirm]: introspect the
    installed package before writing imports.
 
@@ -46,3 +47,4 @@ core that scan (default), watch, and the tests share. graph.py is the optional
 | 2026-07-10 | Claude (for Ghassen Naouar) | The narrator is vendor-blind and env-free: LLMConfig is injected, provider errors are scrubbed before logging |
 | 2026-07-16 | Claude (for Ghassen Naouar) | pipeline runs schema drift on a model target and, after every per-finding write, a trust-score pass that aggregates the scan's findings per model and persists the score + band. narrate.py dispatches the drift finding (P3/P4, D-036, D-037) |
 | 2026-07-16 | Claude (for Ghassen Naouar) | graph.py lands: LangGraph StateGraph over the pipeline nodes with a real interrupt() approval gate and MemorySaver checkpointer, exposed as `scan --review`/`--auto-approve`; findings ride an in-process holder, not the checkpointed state. Optional `agent` extra, lazily imported (D-039) |
+| 2026-07-17 | Codex | Agent API requires an approval callback unless explicit `auto_approve=True`; recovery and watcher retry behavior are covered by regression tests (D-040) |

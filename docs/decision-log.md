@@ -16,6 +16,29 @@ Entry template:
 
 ---
 
+## D-040: Reconcile watcher recovery and require explicit agent approval (2026-07-17)
+- Decided by: Codex, requested by the repository maintainer
+- Decision: A watch recovery resolves the active incident and removes only the
+  recovered ModelGuard risk metadata, preserving unrelated tags, terms, and flags.
+  The public LangGraph API requires an approval callback unless the caller passes
+  `auto_approve=True` explicitly. Polling failures retry with bounded exponential
+  backoff, and the process-local checkpointer is documented as synchronous rather
+  than durable.
+- Options considered: (a) leave recovery as console output, (b) clear all model
+  metadata, (c) reconcile only the finding types and assets present in the prior
+  typed report; (c) chosen. For approval, (a) default auto-approval, (b) default
+  denial requiring explicit approval, and (c) a separate explicit auto-approve
+  flag were considered; (c) preserves the demo path without granting library
+  callers an implicit write capability.
+- Why: An at-risk incident, tag, and trust score that survive a healthy poll are
+  operationally false and can drive unsafe decisions. Implicit writes violate the
+  least-agency boundary. A watcher that exits on one transient GMS error is not an
+  always-on monitor. ModelGuard's current CLI is synchronous, so claiming durable
+  replay from MemorySaver was misleading.
+- Result: `watch` now reconciles incident status, risk flags, tags, leakage terms,
+  and trust state; retries failures up to a bounded delay; and the agent API is
+  approval-safe by default. New unit tests cover recovery and omitted approval.
+
 ## D-039: Section 7 lands as a LangGraph StateGraph over the existing pipeline, opt-in and dependency-light (2026-07-16)
 - Decided by: Ghassen Naouar (chose scope: agent + watch), design by Claude
 - Decision: `agent/graph.py` runs the same `detect -> reason -> [approval] ->

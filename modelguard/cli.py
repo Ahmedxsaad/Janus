@@ -1,9 +1,8 @@
 """The ``modelguard`` command line.
 
-``scan`` audits one table and writes back what it endangers. ``watch``, the
-event-driven twin that shares the same core, arrives with the Actions framework
-in a later phase and is not stubbed here (no placeholder commands: root
-CLAUDE.md code rule 3).
+``scan`` audits one table and writes back what it endangers. ``watch`` is the
+polling twin that shares the same core; it can later move to the Actions framework
+without changing detection or write-back.
 
 Table resolution
 ----------------
@@ -16,7 +15,7 @@ never a guess: silently auditing the wrong table would be worse than failing.
 from __future__ import annotations
 
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated
 
@@ -28,9 +27,28 @@ from rich.console import Console
 from modelguard.agent.pipeline import FindingWrites, ScanReport, run_scan
 from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.config import ScanConfig
+from modelguard.detect.trust_score import trust_inputs_from_findings, trust_score
 from modelguard.env import ConfigError
 from modelguard.llm import LLMConfig, llm_config_from_env
-from modelguard.models import Finding, FreshnessFinding, LeakageFinding, SchemaDriftFinding
+from modelguard.models import (
+    Finding,
+    FreshnessFinding,
+    LeakageFinding,
+    ModelRef,
+    SchemaDriftFinding,
+)
+from modelguard.writeback.incidents import find_active_incident, resolve_incident
+from modelguard.writeback.labels import remove_tag
+from modelguard.writeback.properties import (
+    RISK_FLAGS,
+    RUN_ID,
+    TRUST_BAND,
+    TRUST_SCORE,
+    assign_properties,
+    read_properties,
+    remove_properties,
+)
+from modelguard.writeback.terms import remove_term
 
 app = typer.Typer(
     add_completion=False,
@@ -40,6 +58,8 @@ app = typer.Typer(
 
 # soft_wrap: URNs are long and must stay on one line to be copy-pasteable.
 console = Console(soft_wrap=True)
+
+WATCH_MAX_BACKOFF_SECONDS = 300.0
 
 
 @app.callback()
@@ -339,23 +359,103 @@ def _prepare(
     return conn, config, llm, table_urn, model_urn
 
 
-def _finding_signature(report: ScanReport) -> frozenset[tuple[str, str, str]]:
+FindingSignature = tuple[str, str, str, str]
+
+
+def _finding_signature(report: ScanReport) -> frozenset[FindingSignature]:
     """Reduce a scan to the set of distinct problems it found.
 
-    The tuple is the incident dedup key ``(finding_type, resource_urn, title)``,
-    which is stable across scans of an unchanged graph (no timestamp, no lag). So
-    two scans that found the same problems compare equal, and ``watch`` acts on the
-    transitions, a new problem or a recovery, rather than on every poll.
+    The first three fields are the incident dedup key
+    ``(finding_type, resource_urn, title)``. The fourth is measured severity, so a
+    deployment becoming live triggers a new write even though the incident key is
+    unchanged. No timestamp or narrative enters the signature.
     """
     return frozenset(
-        (str(finding.finding_type), finding.resource_urn, finding.title)
+        (
+            str(finding.finding_type),
+            finding.resource_urn,
+            finding.title,
+            str(finding.severity),
+        )
         for finding in report.findings
     )
 
 
+@dataclass
+class WatchState:
+    """In-process state needed to reconcile a finding that has recovered."""
+
+    signature: frozenset[FindingSignature] | None = None
+    report: ScanReport | None = None
+
+
+def _reconcile_recovery(
+    conn: DataHubConnection,
+    previous: ScanReport,
+    config: ScanConfig,
+) -> None:
+    """Resolve recovered incidents and remove only the risk that recovered.
+
+    The previous dry-run report contains the typed finding and model references
+    that are no longer present in a clean scan. Other tags, terms, and risk flags
+    are preserved. A trust score is recomputed only when no ModelGuard risk flags
+    remain, using the model's current ownership fact and no active findings.
+    """
+    recovered_models: dict[str, ModelRef] = {}
+    recovery_run_id = f"recovery-{int(time.time() * 1000)}"
+
+    for write in previous.writes:
+        finding = write.finding
+        incident = find_active_incident(
+            conn, finding.resource_urn, str(finding.incident_type), finding.title
+        )
+        if incident is not None:
+            resolve_incident(
+                conn,
+                incident,
+                f"Recovered by ModelGuard poll {recovery_run_id}; "
+                "the finding is no longer present.",
+            )
+
+        if isinstance(finding, LeakageFinding):
+            remove_term(conn, finding.leak.feature_urn, config.leakage_risk_term_urn)
+
+        for model in finding.models_at_risk:
+            recovered_models[model.urn] = model
+            properties = read_properties(conn, model.urn)
+            flags = {str(flag) for flag in properties.get(RISK_FLAGS, [])}
+            remaining = flags - {str(finding.finding_type)}
+            if remaining:
+                assign_properties(
+                    conn,
+                    model.urn,
+                    {RISK_FLAGS: sorted(remaining), RUN_ID: [recovery_run_id]},
+                )
+            else:
+                remove_properties(conn, model.urn, {RISK_FLAGS})
+
+    for model_urn, model in recovered_models.items():
+        properties = read_properties(conn, model_urn)
+        remaining_flags = properties.get(RISK_FLAGS, [])
+        if remaining_flags:
+            continue
+
+        remove_tag(conn, model_urn, f"urn:li:tag:{config.model_at_risk_tag}")
+        score = trust_score(trust_inputs_from_findings((), model), config)
+        assign_properties(
+            conn,
+            model_urn,
+            {
+                TRUST_SCORE: [float(score.value)],
+                TRUST_BAND: [str(score.band)],
+                RUN_ID: [recovery_run_id],
+            },
+        )
+
+
 def _announce_watch_change(
-    previous: frozenset[tuple[str, str, str]] | None,
-    signature: frozenset[tuple[str, str, str]],
+    previous: frozenset[FindingSignature] | None,
+    signature: frozenset[FindingSignature],
     preview: ScanReport,
 ) -> None:
     """Say what changed since the last poll: a recovery, or new or changed findings."""
@@ -375,8 +475,9 @@ def _watch_once(
     table_urn: str | None,
     model_urn: str | None,
     llm: LLMConfig | None,
-    previous: frozenset[tuple[str, str, str]] | None,
-) -> frozenset[tuple[str, str, str]]:
+    previous: frozenset[FindingSignature] | None,
+    state: WatchState | None = None,
+) -> frozenset[FindingSignature]:
     """Poll once: detect, and write back only when the set of findings has changed.
 
     A dry scan detects without writing; only a changed, non-empty finding set
@@ -385,6 +486,7 @@ def _watch_once(
     stays quiet. Returns the current signature, which the caller carries into the
     next poll.
     """
+    previous_report = state.report if state is not None else None
     preview = run_scan(
         conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm, dry_run=True
     )
@@ -392,8 +494,7 @@ def _watch_once(
 
     if signature == previous:
         console.print(
-            f"[dim]{time.strftime('%H:%M:%S')} no change "
-            f"({len(signature)} open finding(s))[/dim]"
+            f"[dim]{time.strftime('%H:%M:%S')} no change ({len(signature)} open finding(s))[/dim]"
         )
         return signature
 
@@ -401,6 +502,12 @@ def _watch_once(
     if signature:
         written = run_scan(conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm)
         _print_writes_section(written)
+    elif previous and previous_report is not None:
+        _reconcile_recovery(conn, previous_report, config)
+
+    if state is not None:
+        state.signature = signature
+        state.report = preview
     return signature
 
 
@@ -658,17 +765,31 @@ def watch(
         console.print(f"[dim]polling every {interval:.0f}s; Ctrl-C to stop[/dim]")
     console.print()
 
-    previous: frozenset[tuple[str, str, str]] | None = None
+    state = WatchState()
+    backoff = interval
     try:
         while True:
-            previous = _watch_once(
-                conn,
-                config,
-                table_urn=table_urn,
-                model_urn=model_urn,
-                llm=llm,
-                previous=previous,
-            )
+            try:
+                _watch_once(
+                    conn,
+                    config,
+                    table_urn=table_urn,
+                    model_urn=model_urn,
+                    llm=llm,
+                    previous=state.signature,
+                    state=state,
+                )
+                backoff = interval
+            except Exception as exc:  # a daemon must survive SDK failures
+                console.print(
+                    f"[yellow]watch poll failed ({type(exc).__name__}); "
+                    f"retrying in {backoff:.0f}s.[/yellow]"
+                )
+                if once:
+                    raise typer.Exit(code=1) from exc
+                time.sleep(backoff)
+                backoff = min(backoff * 2, WATCH_MAX_BACKOFF_SECONDS)
+                continue
             if once:
                 break
             time.sleep(interval)

@@ -13,7 +13,7 @@ from datahub.metadata.schema_classes import (
     StructuredPropertiesClass,
 )
 
-from modelguard.agent.graph import run_agent
+from modelguard.agent.graph import ApprovalRequiredError, run_agent
 from modelguard.agent.pipeline import ScanReport
 from modelguard.config import ScanConfig
 from modelguard.models import Severity
@@ -120,22 +120,36 @@ def test_approving_writes_the_incident_and_the_trust_score():
     assert variables["input"]["type"] == "FRESHNESS"
     # The trust score was persisted as a structured property on the model.
     props = [
-        mcp.aspect
-        for mcp in graph.emitted
-        if isinstance(mcp.aspect, StructuredPropertiesClass)
+        mcp.aspect for mcp in graph.emitted if isinstance(mcp.aspect, StructuredPropertiesClass)
     ]
     final = {a.propertyUrn.rsplit(":", 1)[-1]: a.values for a in props[-1].properties}
     assert final["modelguard.trust_score"] == [35.0]
 
 
-def test_auto_approve_writes_without_a_callback():
+def test_omitting_approval_is_rejected_before_any_write():
+    graph, client = _stale()
+    with pytest.raises(ApprovalRequiredError, match="approval callback is required"):
+        run_agent(
+            make_connection(graph, client),
+            ScanConfig(),
+            table_urn=TABLE_URN,
+            llm=None,
+            now_ms=NOW_MS,
+            run_id="scan-requires-approval",
+        )
+    assert graph.graphql_calls == []
+    assert graph.emitted == []
+
+
+def test_auto_approve_writes_only_when_explicitly_requested():
     graph, client = _stale()
     report = run_agent(
         make_connection(graph, client),
         ScanConfig(),
         table_urn=TABLE_URN,
         llm=None,
-        approve=None,  # unattended / recorded-demo path
+        approve=None,
+        auto_approve=True,  # unattended / recorded-demo path
         now_ms=NOW_MS,
     )
     assert report.dry_run is False
