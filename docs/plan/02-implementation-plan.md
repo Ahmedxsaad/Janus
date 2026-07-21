@@ -607,7 +607,18 @@ Two entry points via `cli.py` (Typer):
 
 ## 8. OSS contribution (the bonus - two verified gaps to fill)
 
-### 8.1 `datahub-ml-guard` Skill (primary - first ML skill in the registry) [verified] gap confirmed
+> **All three points landed 2026-07-21** (D-041). The `datahub-ml-guard` skill is
+> under `skill/datahub-ml-guard/`; the MCP `raise_incident` tool + RFC are under
+> `mcp_ext/`; the Most Valuable Feedback survey is `docs/most-valuable-feedback.md`.
+
+### 8.1 `datahub-ml-guard` Skill (primary - a deterministic-engine ML skill) [verified] gap confirmed
+
+> **Landed 2026-07-21** (D-041). `skill/datahub-ml-guard/` ships `SKILL.md` (the
+> frontmatter below plus When-to-use / Workflow / Cloud-boundary), `scripts/` (thin
+> bash wrappers shelling to `modelguard-seed` and `modelguard scan --table/--model`,
+> no logic fork), and `references/` (`detectors.md`, `datahub-write-surface.md`). It
+> mirrors the upstream datahub-enrich format (frontmatter fields `name`,
+> `description`, `user-invocable`, `allowed-tools`).
 Repo layout mirrors existing skills (`skills/<name>/SKILL.md`, `references/`, `templates/`; standards are
 symlinked; shared CLI/MCP signatures live in `shared-references/`) [verified]. Anthropic Skill format = YAML
 frontmatter (`name`, `description`) + Markdown body. Mirror `skills/datahub-enrich/SKILL.md` exactly.
@@ -636,12 +647,27 @@ Contribute per `CONTRIBUTING.md` (commit conventions + release process). Even if
 well-documented standalone skill repo linked from the README **still counts** as a contribution.
 
 ### 8.2 MCP mutation tool `raise_incident` (stretch) [verified] gap confirmed
+
+> **Landed 2026-07-21** (D-041). `mcp_ext/raise_incident_tool.py` is a thin,
+> standalone tool: it wraps the same `raiseIncident` GraphQL mutation as
+> `writeback/incidents.py`, derives the allowed incident/entity types from the
+> installed metadata model, refuses unless `TOOLS_IS_MUTATION_ENABLED` is truthy, and
+> registers with `readOnlyHint: false`. It carries an offline `demo()` self-check
+> (gating, mlModel rejection, payload shape) that runs with no network.
+> `mcp_ext/RFC-ml-incidents.md` files the larger gap: incidents cannot attach to an
+> mlModel at all.
+
 The MCP server (v0.6.0) has **no** assertion/incident/lineage-write tools. A thin `raise_incident` /
 `create_assertion` mutation tool (annotated `readOnlyHint: false`, gated by `TOOLS_IS_MUTATION_ENABLED`) is a
 small, on-roadmap PR to `acryldata/mcp-server-datahub` - or file it as an **RFC** for a first-class "ML
 incident" workflow.
 
 ### 8.3 Most Valuable Feedback survey - real bugs found while building [verified]
+
+> **Landed 2026-07-21** (D-041). Assembled into `docs/most-valuable-feedback.md`: the
+> 12 findings below, each with its affected package/version, symptom, minimal repro,
+> and workaround. Version strings cross-checked against the installed `acryl-datahub`.
+
 Concrete, reproducible findings from Phase 0, worth far more than generic praise:
 1. **`datahub datapack --help` crashes** (acryl-datahub 1.6.0.13): `FileNotFoundError` for
    `datahub/cli/datapack/resources/DATAPACK_AGENT_CONTEXT.md`. The `resources/` directory ships with only
@@ -716,8 +742,8 @@ detects the leakage feature, computes the trust score. (1:40) **cut to the DataH
       rebuild" · one-command setup
 - [ ] ≤3-min public video (YouTube/Vimeo), no copyrighted music/marks
 - [ ] Text description (features, tech, data used)
-- [ ] Link the skill PR / MCP PR / RFC prominently (bonus)
-- [ ] Complete the Most Valuable Feedback survey
+- [x] Link the skill PR / MCP PR / RFC prominently (bonus) - README OSS-contributions section (D-041)
+- [x] Complete the Most Valuable Feedback survey - docs/most-valuable-feedback.md (D-041)
 - [ ] Submit **24h early**
 
 ---

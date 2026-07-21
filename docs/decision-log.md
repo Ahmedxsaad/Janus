@@ -16,6 +16,74 @@ Entry template:
 
 ---
 
+## D-043: Drop the "first ML-reliability skill" claim after checking the upstream queue (2026-07-21)
+- Decided by: Ahmed Saad (requested the review), fix applied by Claude
+- Decision: Remove the "first ML-reliability skill for the DataHub skills registry"
+  wording from README.md and the "(primary - first ML skill in the registry)"
+  header in docs/plan/02-implementation-plan.md section 8.1. Replace with a claim
+  that is actually true and actually differentiating: `datahub-ml-guard` wraps a
+  real, tested, deterministic detection engine, not an LLM asked to eyeball a
+  lineage graph.
+- Options considered: (a) keep the "first" framing, (b) drop it with no
+  replacement, (c) drop it and state the real differentiator; (c) chosen.
+- Why: a review of datahub-project/datahub-skills open PRs (done as part of this
+  review, 2026-07-21) found roughly seven overlapping ML-reliability skills
+  already submitted (drift, trust-score, leakage, blast-radius, silent-failure
+  RCA), several predating this branch by up to two weeks (#29 2026-07-08, #31
+  2026-07-09, #33 and #34 2026-07-11). The "first" claim was false and would have
+  read as a hackathon-crowd, unverified assertion. Diffing every one of those PRs'
+  file lists showed all of them ship SKILL.md plus reference/template markdown
+  only, no backing detection code, tests, or benchmark: the actual gap
+  `datahub-ml-guard` fills is determinism and verifiability, which is true,
+  checkable, and does not depend on being first.
+- Result: README.md and 02-implementation-plan.md corrected before the PR (#8)
+  was approved and merged. No other "first"/"primary gap" language found
+  elsewhere in the branch.
+
+## D-042: OSS contribution delivery route (2026-07-21)
+- Decided by: Ghassen Naouar, applied by Claude
+- Decision: Deliver all three Section 8 contributions the maximal way. (1) The
+  skill goes as a full PR to datahub-project/datahub-skills. (2) The MCP tool goes
+  as a full code PR to acryldata/mcp-server-datahub (register inside
+  `register_mutation_tools()`, use the module-level `execute_graphql()` helper),
+  with the RFC linked or filed as a companion issue. (3) The Most Valuable Feedback
+  survey is submitted through the Devpost feedback form, not a PR. The concrete
+  steps and division of labor are recorded in docs/plan/05-oss-delivery.md.
+- Options considered: For the skill, (a) standalone linked repo only (the plan says
+  it still counts), (b) also a full upstream PR; (b) chosen. For the MCP tool,
+  (a) file the RFC as an issue only, (b) a full code PR plus the RFC; (b) chosen.
+- Why: The upstream PRs are stronger contribution evidence than standalone
+  artifacts. The MCP server already has a mutation-gating pattern
+  (`TOOLS_IS_MUTATION_ENABLED`) and a GraphQL helper to plug into, so the code PR is
+  a bounded change, not a rewrite. The survey mechanism is fixed by the rules.
+- Result: docs/plan/05-oss-delivery.md records the steps. No upstream work started
+  yet (the maintainer opens the forks/PRs and completes the Devpost form); the
+  built artifacts and this delivery doc are committed to feat/oss-contribution.
+
+## D-041: Section 8 OSS contributions ship (2026-07-21)
+- Decided by: Ghassen Naouar, applied by Claude
+- Decision: Deliver all three points of plan section 8. (1) The `datahub-ml-guard`
+  skill lands under `skill/datahub-ml-guard/` (SKILL.md + scripts/ + references/),
+  mirroring the upstream datahub-enrich format. Its `scripts/` are thin bash
+  wrappers that shell out to the `modelguard` CLI (`modelguard-seed`,
+  `modelguard scan --table/--model`), not a fork of detection logic. (2) The MCP
+  contribution ships as both a thin `mcp_ext/raise_incident_tool.py` (wrapping the
+  same `raiseIncident` GraphQL mutation as writeback/incidents.py, gated by
+  `TOOLS_IS_MUTATION_ENABLED`, with an offline self-check) and `RFC-ml-incidents.md`.
+  (3) The Most Valuable Feedback survey is assembled into `docs/most-valuable-feedback.md`
+  from the 12 findings in plan section 8.3.
+- Options considered: For the skill scripts, (a) thin CLI wrappers, (b) standalone
+  Python importing modelguard, (c) embedded logic; (a) chosen (satisfies
+  skill/CLAUDE.md rule 3, no logic fork). For the MCP tool, (a) RFC only, (b) thin
+  tool file plus RFC; (b) chosen (a runnable artifact plus the metadata-model RFC
+  the mlModel-incident gap actually needs).
+- Why: The skill and the feedback survey are the primary and cheapest bonus points;
+  the MCP tool is a stretch but the mutation already exists in writeback/, so a thin
+  wrapper is small. Shelling to the CLI keeps one detection implementation.
+- Result: `skill/datahub-ml-guard/` (7 files), `mcp_ext/raise_incident_tool.py`
+  (self-check green) + `RFC-ml-incidents.md`, `docs/most-valuable-feedback.md`, and a
+  README OSS-contributions section. Benchmarks and quickstart.sh remain for section 9.
+
 ## D-040: Reconcile watcher recovery and require explicit agent approval (2026-07-17)
 - Decided by: Codex, requested by the repository maintainer
 - Decision: A watch recovery resolves the active incident and removes only the

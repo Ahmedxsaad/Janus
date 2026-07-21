@@ -20,3 +20,4 @@ lineage-write tools; gap verified July 2026).
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: scope, gating, RFC fallback |
+| 2026-07-21 | Claude (for Ghassen Naouar) | raise_incident_tool.py lands: thin raiseIncident wrapper, gated by TOOLS_IS_MUTATION_ENABLED, offline self-check. RFC-ml-incidents.md files the mlModel-incident gap (D-041) |
