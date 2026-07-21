@@ -16,6 +16,50 @@ Entry template:
 
 ---
 
+## D-042: OSS contribution delivery route (2026-07-21)
+- Decided by: Ghassen Naouar, applied by Claude
+- Decision: Deliver all three Section 8 contributions the maximal way. (1) The
+  skill goes as a full PR to datahub-project/datahub-skills. (2) The MCP tool goes
+  as a full code PR to acryldata/mcp-server-datahub (register inside
+  `register_mutation_tools()`, use the module-level `execute_graphql()` helper),
+  with the RFC linked or filed as a companion issue. (3) The Most Valuable Feedback
+  survey is submitted through the Devpost feedback form, not a PR. The concrete
+  steps and division of labor are recorded in docs/plan/05-oss-delivery.md.
+- Options considered: For the skill, (a) standalone linked repo only (the plan says
+  it still counts), (b) also a full upstream PR; (b) chosen. For the MCP tool,
+  (a) file the RFC as an issue only, (b) a full code PR plus the RFC; (b) chosen.
+- Why: The upstream PRs are stronger contribution evidence than standalone
+  artifacts. The MCP server already has a mutation-gating pattern
+  (`TOOLS_IS_MUTATION_ENABLED`) and a GraphQL helper to plug into, so the code PR is
+  a bounded change, not a rewrite. The survey mechanism is fixed by the rules.
+- Result: docs/plan/05-oss-delivery.md records the steps. No upstream work started
+  yet (the maintainer opens the forks/PRs and completes the Devpost form); the
+  built artifacts and this delivery doc are committed to feat/oss-contribution.
+
+## D-041: Section 8 OSS contributions ship (2026-07-21)
+- Decided by: Ghassen Naouar, applied by Claude
+- Decision: Deliver all three points of plan section 8. (1) The `datahub-ml-guard`
+  skill lands under `skill/datahub-ml-guard/` (SKILL.md + scripts/ + references/),
+  mirroring the upstream datahub-enrich format. Its `scripts/` are thin bash
+  wrappers that shell out to the `modelguard` CLI (`modelguard-seed`,
+  `modelguard scan --table/--model`), not a fork of detection logic. (2) The MCP
+  contribution ships as both a thin `mcp_ext/raise_incident_tool.py` (wrapping the
+  same `raiseIncident` GraphQL mutation as writeback/incidents.py, gated by
+  `TOOLS_IS_MUTATION_ENABLED`, with an offline self-check) and `RFC-ml-incidents.md`.
+  (3) The Most Valuable Feedback survey is assembled into `docs/most-valuable-feedback.md`
+  from the 12 findings in plan section 8.3.
+- Options considered: For the skill scripts, (a) thin CLI wrappers, (b) standalone
+  Python importing modelguard, (c) embedded logic; (a) chosen (satisfies
+  skill/CLAUDE.md rule 3, no logic fork). For the MCP tool, (a) RFC only, (b) thin
+  tool file plus RFC; (b) chosen (a runnable artifact plus the metadata-model RFC
+  the mlModel-incident gap actually needs).
+- Why: The skill and the feedback survey are the primary and cheapest bonus points;
+  the MCP tool is a stretch but the mutation already exists in writeback/, so a thin
+  wrapper is small. Shelling to the CLI keeps one detection implementation.
+- Result: `skill/datahub-ml-guard/` (7 files), `mcp_ext/raise_incident_tool.py`
+  (self-check green) + `RFC-ml-incidents.md`, `docs/most-valuable-feedback.md`, and a
+  README OSS-contributions section. Benchmarks and quickstart.sh remain for section 9.
+
 ## D-040: Reconcile watcher recovery and require explicit agent approval (2026-07-17)
 - Decided by: Codex, requested by the repository maintainer
 - Decision: A watch recovery resolves the active incident and removes only the
