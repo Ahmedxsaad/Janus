@@ -611,7 +611,7 @@ Two entry points via `cli.py` (Typer):
 > under `skill/datahub-ml-guard/`; the MCP `raise_incident` tool + RFC are under
 > `mcp_ext/`; the Most Valuable Feedback survey is `docs/most-valuable-feedback.md`.
 
-### 8.1 `datahub-ml-guard` Skill (primary - first ML skill in the registry) [verified] gap confirmed
+### 8.1 `datahub-ml-guard` Skill (primary - a deterministic-engine ML skill) [verified] gap confirmed
 
 > **Landed 2026-07-21** (D-041). `skill/datahub-ml-guard/` ships `SKILL.md` (the
 > frontmatter below plus When-to-use / Workflow / Cloud-boundary), `scripts/` (thin

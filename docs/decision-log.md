@@ -16,6 +16,30 @@ Entry template:
 
 ---
 
+## D-043: Drop the "first ML-reliability skill" claim after checking the upstream queue (2026-07-21)
+- Decided by: Ahmed Saad (requested the review), fix applied by Claude
+- Decision: Remove the "first ML-reliability skill for the DataHub skills registry"
+  wording from README.md and the "(primary - first ML skill in the registry)"
+  header in docs/plan/02-implementation-plan.md section 8.1. Replace with a claim
+  that is actually true and actually differentiating: `datahub-ml-guard` wraps a
+  real, tested, deterministic detection engine, not an LLM asked to eyeball a
+  lineage graph.
+- Options considered: (a) keep the "first" framing, (b) drop it with no
+  replacement, (c) drop it and state the real differentiator; (c) chosen.
+- Why: a review of datahub-project/datahub-skills open PRs (done as part of this
+  review, 2026-07-21) found roughly seven overlapping ML-reliability skills
+  already submitted (drift, trust-score, leakage, blast-radius, silent-failure
+  RCA), several predating this branch by up to two weeks (#29 2026-07-08, #31
+  2026-07-09, #33 and #34 2026-07-11). The "first" claim was false and would have
+  read as a hackathon-crowd, unverified assertion. Diffing every one of those PRs'
+  file lists showed all of them ship SKILL.md plus reference/template markdown
+  only, no backing detection code, tests, or benchmark: the actual gap
+  `datahub-ml-guard` fills is determinism and verifiability, which is true,
+  checkable, and does not depend on being first.
+- Result: README.md and 02-implementation-plan.md corrected before the PR (#8)
+  was approved and merged. No other "first"/"primary gap" language found
+  elsewhere in the branch.
+
 ## D-042: OSS contribution delivery route (2026-07-21)
 - Decided by: Ghassen Naouar, applied by Claude
 - Decision: Deliver all three Section 8 contributions the maximal way. (1) The
