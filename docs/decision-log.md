@@ -16,6 +16,23 @@ Entry template:
 
 ---
 
+## D-044: Agent instructions use linked compatibility files (2026-07-17)
+- Decided by: Repository maintainers
+- Decision: Every directory that contains a `CLAUDE.md` also contains an
+  `AGENTS.md` relative symlink to it.
+- Options considered: (a) duplicate each instruction file, (b) use relative
+  symlinks, (c) maintain only the Claude-specific filename.
+- Why: `AGENTS.md` is recognized by Codex and other agent tooling, while a
+  relative symlink keeps one source of truth and works after the repository is
+  moved or cloned.
+- Result: Claude and `AGENTS.md`-aware tools read identical repository and
+  directory-specific instructions without synchronization work. Built
+  2026-07-17 on a branch that went stale before merging; landed directly on
+  main 2026-07-22 after a docs audit found the symlinks missing (12 of 12
+  `CLAUDE.md` directories: root, benchmarks, docs, examples, mcp_ext,
+  modelguard, modelguard/agent, modelguard/detect, modelguard/seed,
+  modelguard/writeback, skill, tests).
+
 ## D-043: Drop the "first ML-reliability skill" claim after checking the upstream queue (2026-07-21)
 - Decided by: Ahmed Saad (requested the review), fix applied by Claude
 - Decision: Remove the "first ML-reliability skill for the DataHub skills registry"
