@@ -12,7 +12,6 @@ from modelguard.seed.scenarios import (
     SCENARIO_PROPERTY,
     SCHEMA_DRIFT,
     STALE_SOURCE,
-    TARGET_LEAKAGE,
     plant_leakage,
     plant_schema_drift,
     plant_stale_source,
@@ -172,7 +171,7 @@ def _sent_column_lineage(client: FakeClient) -> dict[str, list[str]]:
 
 
 def _sent_transform_operations(client: FakeClient) -> dict[str, str]:
-    """The transformOperation the scenario stamped on each edge it wrote."""
+    """The transformOperation on each edge the scenario wrote. Expected empty."""
     mcps = client.entities.updated[0].build()
     marks: dict[str, str] = {}
     for patch in json.loads(mcps[0].aspect.value):
@@ -221,19 +220,29 @@ def test_planting_leakage_restores_the_edge_from_the_label():
     assert result.leaking is True
 
 
-def test_only_the_planted_edge_declares_itself_a_scenario():
-    """The marker names the planted edge, so benign edges are not mislabeled."""
+def test_no_edge_carries_a_scenario_marker():
+    """A marker would fork the edge and make the seeder accumulate a duplicate.
+
+    ``transformOperation`` is part of what GMS keys a fine-grained edge on, so a
+    marked edge and the seeder's unmarked one are two different edges: the next
+    ``modelguard-seed`` adds its own alongside and the column lineage grows. The
+    Week 1 gate's byte-for-byte test is what caught that; this is its offline
+    twin, so the marker cannot come back without something going red first.
+    """
+    for scenario in (plant_leakage, revert_leakage):
+        client = FakeClient()
+        scenario(make_connection(FakeGraph(), client))
+        assert _sent_transform_operations(client) == {}, scenario.__name__
+
+
+def test_planting_writes_exactly_what_the_seeder_wrote():
+    """Planting restores the baseline, so re-seeding afterwards is a no-op."""
     client = FakeClient()
     plant_leakage(make_connection(FakeGraph(), client))
 
-    marks = _sent_transform_operations(client)
-    assert marks == {spec.LEAKAGE_FEATURE: f"{SCENARIO_PROPERTY}:{TARGET_LEAKAGE}"}
-
-
-def test_a_reverted_graph_carries_no_scenario_marker():
-    client = FakeClient()
-    revert_leakage(make_connection(FakeGraph(), client))
-    assert _sent_transform_operations(client) == {}
+    sent = _sent_column_lineage(client)
+    assert sent == dict(spec.COLUMN_LINEAGE)
+    assert len(sent) == len(spec.COLUMN_LINEAGE), "an extra edge would accumulate on reseed"
 
 
 def test_the_leakage_scenario_patches_the_feature_table():

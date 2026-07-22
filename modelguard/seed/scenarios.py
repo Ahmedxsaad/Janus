@@ -285,12 +285,7 @@ class LeakageResult:
     """Whether the graph currently reaches the label from a model feature."""
 
 
-def _set_column_lineage(
-    conn: DataHubConnection,
-    mapping: dict[str, list[str]],
-    *,
-    scenario: str | None,
-) -> None:
+def _set_column_lineage(conn: DataHubConnection, mapping: dict[str, list[str]]) -> None:
     """Replace the feature table's column-level lineage with exactly ``mapping``.
 
     ``client.lineage.add_lineage`` cannot be used to undo an edge: it builds a
@@ -300,28 +295,32 @@ def _set_column_lineage(
     leaves the table-level upstream edge untouched (verified against a live GMS).
 
     The mapping is turned into aspect objects by the SDK's own
-    ``parse_cll_mapping``, the same helper ``add_lineage`` uses, so the scenario
-    cannot drift from how the seeder wrote the edges in the first place.
+    ``parse_cll_mapping``, the same helper ``add_lineage`` uses, so what this
+    writes is byte-for-byte what the seeder would have written.
 
-    ``upstreamLineage`` has no ``customProperties`` field, so the scenario marker
-    that seed/CLAUDE.md rule 5 asks for cannot live on the aspect. It goes on the
-    planted edge's ``transformOperation`` instead, which is the aspect's own field
-    for describing how a column was derived. Marking only the planted edge keeps
-    the benign edges honest, and stamping the *dataset's* custom properties was
-    rejected outright: the schema-drift scenario already owns that field on this
-    same dataset and clears it on revert, so the two would silently erase each
-    other.
+    Why there is no scenario marker
+    -------------------------------
+    seed/CLAUDE.md rule 5 asks every scenario to stamp ``modelguard.scenario``
+    somewhere a reader can find it. This one cannot, and the reason is worth
+    keeping. ``upstreamLineage`` has no ``customProperties``; the dataset's own
+    belong to the schema-drift scenario, which clears them on revert, so sharing
+    them would have the two scenarios erase each other. The remaining candidate,
+    the edge's ``transformOperation``, is part of what GMS keys a fine-grained
+    edge on: a marked edge and the seeder's unmarked one are two *different*
+    edges, so the next ``modelguard-seed`` adds its own alongside and the graph
+    grows a duplicate. That was caught by the Week 1 gate's byte-for-byte
+    idempotency test, not by reasoning, which is why the test exists.
+
+    Nothing is lost. Unlike a stale timestamp or a drifted schema, this state is
+    not ambiguous: the leaking edge is either in the graph or it is not, and the
+    leak is the *seeded baseline* (D-032) rather than an anomaly planted on top
+    of it, so there is no planted-versus-real question to answer.
     """
     edges: list[FineGrainedLineageClass] = parse_cll_mapping(
         upstream=str(spec.source_table_urn()),
         downstream=str(spec.feature_table_dataset_urn()),
         cll_mapping=mapping,
     )
-    if scenario is not None:
-        for edge in edges:
-            if any(spec.LEAKAGE_FEATURE in downstream for downstream in edge.downstreams or []):
-                edge.transformOperation = f"{SCENARIO_PROPERTY}:{scenario}"
-
     builder = DatasetPatchBuilder(str(spec.feature_table_dataset_urn()))
     builder.set_fine_grained_lineages(edges)
     conn.client.entities.update(builder)
@@ -338,7 +337,7 @@ def plant_leakage(conn: DataHubConnection) -> LeakageResult:
     Returns:
         What the feature table's lineage now says.
     """
-    _set_column_lineage(conn, dict(spec.COLUMN_LINEAGE), scenario=TARGET_LEAKAGE)
+    _set_column_lineage(conn, dict(spec.COLUMN_LINEAGE))
     return LeakageResult(
         name=TARGET_LEAKAGE,
         dataset_urn=str(spec.feature_table_dataset_urn()),
@@ -368,7 +367,7 @@ def revert_leakage(conn: DataHubConnection) -> LeakageResult:
         for column, upstreams in spec.COLUMN_LINEAGE.items()
         if column != spec.LEAKAGE_FEATURE
     }
-    _set_column_lineage(conn, clean, scenario=None)
+    _set_column_lineage(conn, clean)
     return LeakageResult(
         name=TARGET_LEAKAGE,
         dataset_urn=str(spec.feature_table_dataset_urn()),

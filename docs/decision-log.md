@@ -57,6 +57,19 @@ Entry template:
   `add_lineage` patches additively and cannot undo an edge.
   `_active_incident_urns` became public `attached_incident_urns`, and was
   renamed because it never filtered to active ones.
+- One bug was introduced and caught in the same session, and it is the reason
+  the Week 1 gate is worth keeping green. The leakage scenario first stamped
+  `transformOperation` on the leaking edge to satisfy seed/CLAUDE.md rule 5's
+  "every scenario declares itself". That field is part of what GMS keys a
+  fine-grained edge on, so the marked edge and the seeder's unmarked one are two
+  *different* edges: the next `modelguard-seed` added its own alongside and the
+  column lineage grew to five. Every unit test still passed, the benchmark still
+  scored 1.00, and `test_seeding_twice_leaves_the_graph_byte_for_byte_identical`
+  failed. The marker was removed rather than worked around: the leak is the
+  seeded baseline, not an anomaly planted on top of it, so there was no
+  planted-versus-real ambiguity for a marker to resolve. An offline twin of that
+  assertion now guards it, since the integration suite needs a live Quickstart
+  and will not run on every change.
 - Not built, and RESULTS.md says so in its own words rather than leaving it to
   be inferred: Jenga corruption injection, the Great Expectations / Evidently /
   naive-lineage baseline comparison, the 10k/100k scale test, `golden/`
