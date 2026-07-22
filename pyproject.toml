@@ -1,9 +1,16 @@
 [build-system]
 # >=83 clears PYSEC-2026-3447, where MANIFEST.in exclusions could be bypassed by
 # Unicode normalization when building an sdist on macOS, so a file meant to be
-# excluded could ship inside one. Not reachable here (Linux, and no sdist is
-# published), but the floor costs nothing and keeps pip-audit clean for anyone
-# who checks before trusting the project.
+# excluded could ship inside one. Not reachable here: Linux, and no sdist is
+# published.
+#
+# This floor applies to the *build* environment, which PEP 517 isolates. It
+# cannot be raised in the runtime environment, because acryl-datahub 1.6.0.13
+# declares setuptools<82.0.0, so `pip install "setuptools>=83"` alongside it
+# reports a dependency conflict. Anyone auditing an environment with the SDK
+# installed will therefore still see that advisory, through no choice of this
+# project's, which is why CI reports the audit rather than failing on it
+# (D-051, and filed as feedback for DataHub).
 requires = ["setuptools>=83"]
 build-backend = "setuptools.build_meta"
 

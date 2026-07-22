@@ -129,6 +129,13 @@ def table_level_leakage(
                 max_hops=config.leakage_max_hops,
                 count=config.lineage_result_cap,
             )
+            # Above two hops DataHub switches to a full-graph search and returns
+            # entities past the cap (D-020), and ModelGuard's own leakage detector
+            # filters them out. The baseline gets the same guard: letting it drown
+            # in distant tables would manufacture false positives out of a DataHub
+            # quirk this repo already knows about, and score them against the
+            # approach rather than against the bug (benchmarks/CLAUDE.md rule 9).
+            if result.hops <= config.leakage_max_hops
         }
         if any(
             _dataset_has_label_column(conn, table, labels)

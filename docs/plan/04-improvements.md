@@ -13,9 +13,13 @@ landed unlogged):
   the modelguard/env.py single-entry-point rule).
 - Adopted in spirit: P2-2, as a marked integration test rather than a separate
   script (D-009).
-- Still open: P1-1, P2-1, P2-5, P3-1 through P3-4. P2-5 (structured logging
-  with run_id) is partial: run_id threads through every write and dedup key
-  (D-013, modelguard/CLAUDE.md rule 4) but there is no structured JSON logger.
+- Adopted and done, later: P2-1 (GitHub Actions CI on every push and pull
+  request, 2026-07-22, D-051). It runs pre-commit rather than its own list of
+  ruff and mypy invocations, so the local hooks and the enforced checks cannot
+  drift, plus the offline test suite and an advisory dependency audit.
+- Still open: P1-1, P2-5, P3-1 through P3-4. P2-5 (structured logging with
+  run_id) is partial: run_id threads through every write and dedup key (D-013,
+  modelguard/CLAUDE.md rule 4) but there is no structured JSON logger.
 
 ## P1-1. Rename the repository from DataHub to modelguard
 The repo is named DataHub but the project is ModelGuard. Judges land on the

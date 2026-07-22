@@ -1,0 +1,80 @@
+# Runs the checks a reviewer would otherwise have to run by hand, on every push
+# and every pull request (docs/plan/04-improvements.md P2-1).
+#
+# What is deliberately NOT here: the integration suite. Those 39 tests need a live
+# DataHub Quickstart, which is a multi-container stack (GMS, MySQL, Kafka,
+# OpenSearch, frontend) wanting more memory than a hosted runner has. Starting it
+# here would buy a slow, flaky job that fails for reasons unrelated to the change
+# under review, and a red build nobody trusts is worse than no build. They stay a
+# local gate, run before a release and before anything merges to main, and the
+# offline suite below is written to be the fast half rather than the weak half.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch makes the first run's answer irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint, types, offline tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          # Pinned, not a range: acryl-datahub's CLI warns above 3.11 and
+          # pyproject caps requires-python there. CI must run what developers run.
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the project and its dev tools
+        run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+
+      # pre-commit rather than a hand-written list of ruff and mypy invocations,
+      # so the hooks developers run locally and the checks CI enforces cannot
+      # drift apart. It also picks up the hygiene hooks: private keys, merge
+      # conflict markers, large files, and the em-dash ban the formatting rules
+      # require and nothing else enforces.
+      - name: Lint, format, types, hygiene
+        run: pre-commit run --all-files --show-diff-on-failure
+
+      - name: Offline tests
+        # -m 'not integration' is already the default in pyproject's addopts;
+        # stated here so a reader of this file knows what did and did not run.
+        run: pytest -m "not integration" -q
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    # Advisory rather than blocking, and the distinction is deliberate. An
+    # advisory against a transitive build tool with no released fix would
+    # otherwise hold every unrelated pull request hostage. Anything reachable at
+    # runtime gets pinned in pyproject instead of tolerated here, which is what
+    # happened with PYSEC-2026-3447 (D-049). This job exists so a new advisory is
+    # seen the day it lands rather than the week before a submission.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the project
+        run: python -m pip install --upgrade pip && pip install -e "." pip-audit
+
+      - name: Audit dependencies for known vulnerabilities
+        run: pip-audit --progress-spinner off

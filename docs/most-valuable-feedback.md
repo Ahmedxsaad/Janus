@@ -136,3 +136,25 @@ zero matches on a graph where the column-level edge plainly exists. For a leakag
 detector, that is the worst way to be wrong: it pronounces a leaking graph clean.
 **Workaround:** read `LineageResult.paths` and never `.urn` for column-level
 comparisons.
+
+## 13. The `setuptools<82.0.0` pin holds users on a version with a published advisory
+
+**Package:** `acryl-datahub` 1.6.0.13.
+**Symptom:** the SDK declares `setuptools<82.0.0`. setuptools 81.0.0 carries
+PYSEC-2026-3447 (`MANIFEST.in` exclusions bypassed by Unicode normalization when
+building an sdist on a normalization-preserving filesystem, so a file meant to be
+excluded can ship inside one; fixed in 83.0.0). Any environment with the SDK
+installed therefore reports a known vulnerability that its own user cannot clear:
+upgrading is refused as a dependency conflict, and pinning down is not an option
+because there is no fixed version below the ceiling. Teams running `pip-audit` in
+CI, which is common in regulated settings and is exactly where DataHub is pitched,
+get a finding they can neither fix nor honestly dismiss.
+**Repro:** `pip install acryl-datahub==1.6.0.13 && pip install "setuptools>=83"`
+reports `acryl-datahub 1.6.0.13 requires setuptools<82.0.0, but you have
+setuptools 83.0.0 which is incompatible`. Then `pip-audit` reports
+PYSEC-2026-3447 against the 81.0.0 it left in place.
+**Workaround:** none that keeps the declared dependency set intact. The advisory
+is not reachable for most consumers (it affects sdist *building*, not use of the
+SDK), so the practical answer is to record it as accepted rather than to pretend
+it was fixed. Raising the ceiling to admit setuptools 83 would remove the finding
+outright.

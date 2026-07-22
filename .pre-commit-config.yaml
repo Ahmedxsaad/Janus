@@ -22,9 +22,12 @@ repos:
         name: mypy
         entry: mypy
         language: system
-        files: ^modelguard/
+        # benchmarks/ is checked too: it is the code that produces the numbers in
+        # RESULTS.md, so a type error there is a wrong published measurement, not
+        # a broken script.
+        files: ^(modelguard|benchmarks)/
         pass_filenames: false
-        args: ["modelguard/"]
+        args: ["modelguard/", "benchmarks/"]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
