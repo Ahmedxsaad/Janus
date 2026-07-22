@@ -9,6 +9,15 @@
 
 ## A. Evaluation & benchmarking - "ModelGuard-Bench"
 
+> **Core landed 2026-07-22** (D-047). `benchmarks/` ships `inject.py` (the labelled trial matrix),
+> `metrics.py` (pure scoring arithmetic), `run_bench.py` (the live harness and renderer) and a
+> generated `RESULTS.md`. Trials run against a **live DataHub**, not fixtures, and the freshness
+> sweep walks the SLA boundary rather than only planting the 30h demo lag: an off-by-one from `>` to
+> `>=` is caught by the trial sitting exactly on the SLA, where the demo scenario alone scores a
+> clean 1.00. **Not built:** A.1's Jenga injection and planted-issue datapacks (the datapacks are
+> warehouse/BI-only and carry no ML entities, D-014), A.3's baselines, A.4's scale test, and A.5's
+> LLM-as-judge and `golden/` regression reports. RESULTS.md states its own limits.
+
 **Problem:** there is no standard benchmark for "data→model incident detection." So we build a small,
 reproducible one - which is itself a differentiator (judges rarely see hackathon projects with a real eval).
 
@@ -139,9 +148,13 @@ territory (`resources.md §10`). Controls:
 
 ## E. Definition of "production-grade" (the checklist judges can verify)
 
-- [ ] `benchmarks/` folder: injection scripts (Jenga-based), `RESULTS.md` with precision/recall + the
-      baseline comparison table, and a scale-test curve.
-- [ ] Deterministic detection with unit tests (positives caught, negatives clean - no false positives).
+- [~] `benchmarks/` folder: injection scripts (Jenga-based), `RESULTS.md` with precision/recall + the
+      baseline comparison table, and a scale-test curve. Partly done (D-047): injection and a measured
+      `RESULTS.md` with precision/recall/F1/FP-rate ship, against a live graph. The Jenga taxonomy, the
+      baseline comparison table and the scale-test curve are **not** built.
+- [x] Deterministic detection with unit tests (positives caught, negatives clean - no false positives).
+      304 offline tests, plus the benchmark's own negative controls: false-positive rate 0.00 measured
+      across every clean trial (D-047).
 - [ ] Idempotent, least-privilege, human-gated write-back; security notes in README.
 - [x] `watch` mode (event-driven) **or** a documented polling fallback; `scan` mode for CI.
       Shipped as the polling fallback (`cli.py watch`, D-039); event-driven MCL/Kafka

@@ -28,3 +28,4 @@ pytest suite (docs/plan/02-implementation-plan.md section 9).
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: offline units, marked integration, idempotency test |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Add rule 6: mutation-check tests, never assert on self-constructed constants |
+| 2026-07-22 | Claude (for Ahmed Saad) | tests/benchmarks/ covers the bench's scoring arithmetic and its ground-truth labels offline; both mutation-checked, and rule 6 applied to the benchmark itself by breaking a detector and confirming RESULTS.md moves (D-047) |

@@ -715,6 +715,11 @@ Concrete, reproducible findings from Phase 0, worth far more than generic praise
 
 ## 9. Testing & verification
 
+> **ModelGuard-Bench core landed 2026-07-22** (D-047), covering the measured half of this section:
+> `python -m benchmarks.run_bench` scores the detectors against a live graph and writes
+> `benchmarks/RESULTS.md`. `quickstart.sh` is still **not** written, so the one-command judge path
+> below remains the seed-plus-scan sequence in the README.
+
 - **Unit** (`tests/`): detectors against fixture graphs - a known-leakage graph must flag exactly the seeded
   feature; a clean graph must flag nothing (no false positives). Schema-diff on a synthetic rename.
 - **Integration:** `quickstart.sh` on a clean machine → seed → inject scenario → `modelguard scan` → assert
