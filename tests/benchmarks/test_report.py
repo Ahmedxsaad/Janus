@@ -160,3 +160,19 @@ def test_a_duplicate_incident_on_rerun_is_reported_against_its_target(second, ex
 
     line = next(line for line in report.splitlines() if "Duplicates created" in line)
     assert expected_marker in line
+
+
+def test_a_missing_comparison_is_omitted_rather_than_half_rendered():
+    """A slow index must not cost a complete benchmark run.
+
+    measure_leakage_approaches returns empty when the graph never reaches the
+    state it planted, because a comparison drawn against the wrong state would be
+    wrong rather than merely missing. The report then simply has no comparison
+    section, which is honest, instead of a table nobody can trust.
+    """
+    report = _report([_outcome(_trial("g", FindingType.TARGET_LEAKAGE, expected=True), True)])
+
+    assert "## Why column-level lineage, measured" not in report
+    # The rest of the report still renders.
+    assert "## Detection" in report
+    assert "## Write-back and idempotency" in report

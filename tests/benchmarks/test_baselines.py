@@ -163,3 +163,42 @@ def test_the_baseline_is_handed_the_same_label_declaration():
 
 def test_the_no_lineage_baseline_cannot_express_leakage_at_all():
     assert no_lineage_leakage(_conn(column_lineage=True), MODEL_URN, CONFIG) == ()
+
+
+def test_the_baseline_honours_the_hop_cap_the_detector_honours():
+    """Fairness: DataHub over-returns past the cap, and ModelGuard filters it (D-020).
+
+    Without the same guard the baseline would inherit distant tables ModelGuard
+    never sees, and any label sitting in one of them would score as a false
+    positive caused by this harness rather than by the approach it stands for.
+    """
+    graph, client = _graph(column_lineage=True)
+
+    # A far-away table, past the cap, holding a column that is genuinely *declared*
+    # to be a label. Giving it a column merely named default_status would prove
+    # nothing: the detector keys on the glossary term, so an undeclared column is
+    # invisible to it and the test would pass whether or not the cap is honoured.
+    distant = "urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.archive,PROD)"
+    graph.set_aspect(distant, schema_metadata({"default_status": "BOOLEAN"}))
+    graph.set_aspect(
+        f"urn:li:schemaField:({distant},default_status)",
+        GlossaryTermsClass(
+            terms=[GlossaryTermAssociationClass(urn=LABEL_TERM_URN)], auditStamp=None
+        ),
+    )
+    client.lineage.results = [
+        lineage_result(TABLE_URN, hops=1, direction="upstream"),
+        lineage_result(distant, hops=CONFIG.leakage_max_hops + 1, direction="upstream"),
+    ]
+
+    flagged = table_level_leakage(make_connection(graph, client), MODEL_URN, CONFIG)
+
+    # Still flags both, but on the strength of loans_raw at one hop, not the
+    # archive past the cap. Removing loans_raw must silence it entirely.
+    client.lineage.results = [
+        lineage_result(distant, hops=CONFIG.leakage_max_hops + 1, direction="upstream")
+    ]
+    beyond_cap_only = table_level_leakage(make_connection(graph, client), MODEL_URN, CONFIG)
+
+    assert set(flagged) == {LEAK_FEATURE_URN, CLEAN_FEATURE_URN}
+    assert beyond_cap_only == (), "a table past the hop cap must not reach the baseline"

@@ -261,7 +261,14 @@ def measure_leakage_approaches(
         now_ms = int(time.time() * 1000)
         trial.plant(conn, trial, now_ms)
         if await_precondition(conn, trial, config, now_ms) is None:
-            raise RuntimeError(f"the graph never reached the {trial.name} state")
+            # A comparison drawn against a graph in the wrong state would be
+            # wrong rather than missing, so it is dropped. Returning empty
+            # rather than raising: this runs last, after every trial has been
+            # scored, and throwing away a complete benchmark because an index
+            # was slow would be a poor trade. The report then says the
+            # comparison was not measured, which is true and visible.
+            print(f"  the graph never reached the {trial.name} state; skipping comparison")
+            return ()
 
         truth = {leaking_urn} if leaking else set()
 

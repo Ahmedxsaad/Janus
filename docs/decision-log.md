@@ -16,6 +16,56 @@ Entry template:
 
 ---
 
+## D-051: CI runs pre-commit rather than its own checks, and reports the dependency audit rather than failing on it (2026-07-22)
+- Decided by: Ahmed Saad (asked to continue, review and test thoroughly), by Claude
+- Decision: `.github/workflows/ci.yml` lands (P2-1, open since 2026-07-09). Two
+  jobs. `check` installs the project and runs `pre-commit run --all-files` then
+  the offline test suite. `audit` runs `pip-audit` and is marked
+  `continue-on-error`. The pre-commit mypy hook now covers `benchmarks/` as well
+  as `modelguard/`.
+- Options considered for the lint step: (a) list ruff, ruff-format and mypy
+  invocations in the workflow, (b) run pre-commit. (b) chosen: (a) duplicates the
+  configuration and lets the checks a developer runs locally drift from the ones
+  CI enforces, which is how a repo ends up with a green build and a failing
+  clone. (b) also picks up the hygiene hooks for free, including `detect-private-key`
+  and the em-dash ban the formatting rules require and nothing else enforces.
+- Why the integration suite is not in CI: those 39 tests need a live Quickstart,
+  a multi-container stack wanting more memory than a hosted runner has. Running
+  it there buys a slow, flaky job failing for reasons unrelated to the change
+  under review, and a red build nobody trusts is worse than no build. They stay a
+  local gate. The workflow says so in a comment rather than leaving the omission
+  to be discovered.
+- Why the audit is advisory: `pip-audit` reports PYSEC-2026-3447 against
+  setuptools 81.0.0, and it turns out **that cannot be fixed here**.
+  `acryl-datahub` 1.6.0.13 declares `setuptools<82.0.0`, while the advisory is
+  fixed in 83.0.0, so `pip install "setuptools>=83"` alongside the SDK is refused
+  as a dependency conflict (reproduced, and the resulting environment still
+  passes 334 tests, so the ceiling looks conservative rather than load-bearing).
+  A blocking job would therefore hold every unrelated pull request hostage to a
+  constraint this project does not own. Anything reachable at runtime gets pinned
+  in pyproject instead, which is what D-049 did. The job exists so a new advisory
+  is seen the day it lands rather than the week before a submission.
+- Result: CI green on the exact commands, verified locally before pushing rather
+  than by watching the first run go red: `pre-commit run --all-files` (11 hooks,
+  all pass), `pytest -m "not integration"` (334), `pip-audit`. The `pyproject`
+  comment that previously implied the advisory was cleared now says plainly that
+  it cannot be, and the SDK ceiling is filed as finding 13 in
+  docs/most-valuable-feedback.md, since a `pip-audit` finding a user can neither
+  fix nor honestly dismiss is worth telling DataHub about.
+- Two bugs in the day-old benchmark code, found by reviewing it rather than by a
+  failing test: (1) `table_level_leakage` did not filter results past the hop cap,
+  though ModelGuard's own leakage detector does (D-020, DataHub over-returns above
+  two hops). On a larger graph the baseline would have inherited distant tables
+  ModelGuard never sees, and any label in one of them would have scored as a false
+  positive caused by this harness rather than by the approach, which is precisely
+  what benchmarks/CLAUDE.md rule 9 forbids. (2) `measure_leakage_approaches` raised
+  when a precondition never landed, discarding a complete benchmark run over a slow
+  index; it now returns empty and the report omits the comparison. The first
+  regression test written for (1) passed against the bug, because the distant table
+  held a column *named* `default_status` that was never *declared* a label, so the
+  detector ignored it either way. Caught by mutation, fixed, and the mutation now
+  kills it.
+
 ## D-050: The central claim becomes a measured number, and the baseline is written to be fair (2026-07-22)
 - Decided by: Ahmed Saad (chose to keep adding depth before thinking about
   submission), built by Claude

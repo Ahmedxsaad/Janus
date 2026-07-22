@@ -665,7 +665,7 @@ incident" workflow.
 ### 8.3 Most Valuable Feedback survey - real bugs found while building [verified]
 
 > **Landed 2026-07-21** (D-041). Assembled into `docs/most-valuable-feedback.md`: the
-> 12 findings below, each with its affected package/version, symptom, minimal repro,
+> 13 findings below, each with its affected package/version, symptom, minimal repro,
 > and workaround. Version strings cross-checked against the installed `acryl-datahub`.
 
 Concrete, reproducible findings from Phase 0, worth far more than generic praise:
