@@ -395,6 +395,15 @@ def _drifted_columns() -> tuple[spec.Column, ...]:
     return tuple(columns)
 
 
+#: Printed after any scenario whose effect reaches a detector through an index
+#: rather than synchronously. Schema drift is exempt: it writes ``schemaMetadata``,
+#: a versioned aspect GMS serves straight back.
+_INDEXING_NOTE = (
+    "[dim]DataHub indexes this asynchronously (about 3s locally); a scan run "
+    "immediately may still report the previous state.[/dim]"
+)
+
+
 def main() -> None:
     """Entry point for the ``modelguard-scenario`` command."""
     import argparse
@@ -445,9 +454,7 @@ def main() -> None:
                 f"{leak.feature_column} derives from "
                 f"{', '.join(leak.upstream_columns)}, which is the label."
             )
-        console.print(
-            "[dim]Lineage is indexed asynchronously; a scan may need a few seconds to agree.[/dim]"
-        )
+        console.print(_INDEXING_NOTE)
         return
 
     if args.scenario == SCHEMA_DRIFT:
@@ -461,12 +468,20 @@ def main() -> None:
             console.print(f"The feature table now carries: {', '.join(drift.field_paths)}.")
         return
 
+    # The freshness scenario writes the operation aspect, which is a timeseries and
+    # therefore reaches a reader through Kafka and Elasticsearch rather than
+    # synchronously. Measured at roughly three seconds on a local Quickstart, in
+    # both directions. Saying so matters: a scan run in that window reports the
+    # value from before the change, which reads as a broken tool rather than as a
+    # graph still catching up, and this is the demo's own command sequence.
     if args.revert:
         result = revert_stale_source(conn)
         console.print(f"[green]Reverted[/green] {result.name} on {result.dataset_urn}")
         console.print("The table now reports a fresh update; a scan will find nothing.")
+        console.print(_INDEXING_NOTE)
         return
 
     result = plant_stale_source(conn, lag_hours=args.lag_hours)
     console.print(f"[yellow]Planted[/yellow] {result.name} on {result.dataset_urn}")
     console.print(f"The table now claims it last changed {result.lag_hours:.1f} hours ago.")
+    console.print(_INDEXING_NOTE)

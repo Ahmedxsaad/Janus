@@ -66,7 +66,14 @@ modelguard scan --table loans_raw    # detect, explain, write back
 
 The scan names the live model at risk, then writes the incident, the
 `model-at-risk` tag, the risk properties, the guarding assertion, and the impact
-report into DataHub. Run it twice: nothing duplicates. Then recover and rescan:
+report into DataHub. Run it twice: nothing duplicates.
+
+One caveat if you paste these as a block rather than typing them: DataHub indexes
+a freshness change asynchronously, about three seconds locally, so a scan run in
+that window still reports the state from before. The scenario command says so when
+it returns. Give it a moment, or rerun the scan.
+
+Then recover and rescan:
 
 ```bash
 modelguard scan --table loans_raw --dry-run   # detect and explain, write nothing
