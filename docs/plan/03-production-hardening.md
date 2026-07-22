@@ -43,6 +43,15 @@ reproducible one - which is itself a differentiator (judges rarely see hackathon
 | **Throughput** | Entities scanned / sec | report; scale test in A.4 |
 
 ### A.3 Baselines to beat (the money slide)
+
+> **Landed 2026-07-22** (D-050), as implementations of the *approach* rather than of the products.
+> `benchmarks/baselines.py` scores table-level lineage and no-lineage quality checks on the same graph
+> and ground truth, per feature. Measured: ModelGuard 1.00 precision / 1.00 recall; table-level 0.25 /
+> **1.00** (it does catch the leak, it cannot say which feature carries it); no-lineage 0.00 recall.
+> The number that matters is the fourth column: table-level still flags **2 features after the leak is
+> fixed**, because it never saw the column edge and so cannot see it removed. No Great Expectations,
+> Deequ, Evidently or NannyML process is run, and RESULTS.md says so rather than implying otherwise.
+
 Run the same injected scenarios through:
 - **Great Expectations / Deequ** - catches the *table* issue but **cannot name the model/deployment at risk** (no lineage).
 - **Evidently / NannyML** - catches *model drift* but **only after** bad data reaches the model; **no upstream root cause**.

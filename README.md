@@ -97,8 +97,32 @@ python -m benchmarks.run_bench          # writes benchmarks/RESULTS.md
 The freshness sweep walks the lag across the SLA boundary rather than only planting the
 obvious 30-hour failure, because that is where a detector actually goes wrong: changing
 one comparison from `>` to `>=` is caught by the trial sitting exactly on the SLA, and
-scores a clean 1.00 under the demo scenario alone. [RESULTS.md](benchmarks/RESULTS.md)
-states what it does not measure, too - there is no baseline comparison and no scale test.
+scores a clean 1.00 under the demo scenario alone.
+
+### Why column-level lineage, measured
+
+The claim everywhere else in these docs is that only cross-boundary, *column-level*
+lineage both roots a failure to the exact upstream column and names the model at risk.
+Here it is a number. The same graph, the same ground truth, scored per **feature**,
+because every approach can tell that a leaking model leaks; the question that separates
+them is *which* of its features leaks, which is what somebody has to go and fix.
+
+| Approach | Precision | Recall | Still alerting after the fix |
+|---|---|---|---|
+| ModelGuard (column-level lineage) | 1.00 | 1.00 | 0 features |
+| Table-level lineage | 0.25 | 1.00 | 2 features |
+| Table quality checks, no lineage | - | 0.00 | 0 features |
+
+Note the middle row's **perfect recall**: table-level lineage does catch the leak. It
+just cannot say which of the two features carries it, because both descend from the same
+labelled table. And having never seen the column edge, it cannot see the column edge
+being removed either, so it keeps alerting on a graph somebody has already fixed. That
+last column is what gets a reliability tool switched off.
+
+These are implementations of an *approach*, handed ModelGuard's own label index so
+nothing is won by starting better informed; no Great Expectations or Evidently process
+was run. [RESULTS.md](benchmarks/RESULTS.md) says so, and states what is still not
+measured: no scale test, and no scoring of narrative quality.
 
 ## OSS contributions
 
