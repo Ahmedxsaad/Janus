@@ -1,0 +1,298 @@
+"""The labelled trials ModelGuard-Bench scores the detectors against.
+
+A trial is one graph state plus the findings that state should produce. Ground
+truth is not a judgement call: it is whatever the injector planted, and every
+trial is built from the same reversible scenarios the demo uses
+(``modelguard.seed.scenarios``), so the benchmark measures the shipped detectors
+rather than a reimplementation of them (benchmarks/CLAUDE.md rule 1).
+
+Why the freshness sweep is the interesting part
+-----------------------------------------------
+Planting a 30-hour lag against a 6-hour SLA and finding it proves almost nothing:
+the answer is never in doubt. What a benchmark owes is the boundary. The sweep
+walks the lag from well inside the SLA to well past it, including values a hair
+either side, so recall and the false-positive rate are measured where a detector
+actually goes wrong rather than where it cannot. A detector that fired on
+everything, or that missed anything under a day, would score perfectly on the
+demo scenario and badly here, which is the point.
+
+Determinism
+-----------
+Every trial is a fixed constant: fixed lags, fixed order, fixed expectations. No
+sampling and no seeded randomness, because there is nothing here worth
+randomising, and a run that cannot be re-derived by reading this file is a run
+whose numbers nobody can check (benchmarks/CLAUDE.md rules 1 and 4).
+
+The precondition, and why it is not the answer
+----------------------------------------------
+DataHub indexes lineage asynchronously: a scan run immediately after a write can
+read the pre-write graph. So each trial waits for the graph to *show the state it
+planted* before the detector is asked anything. That is a precondition on the
+experiment, not a peek at the outcome. The benchmark never waits for a detector
+to produce the expected finding, which would manufacture perfect recall; it waits
+for the world to be in the intended state, then asks once and records the answer.
+A trial whose precondition never lands is reported as an error and excluded from
+the detection metrics rather than silently scored as a miss.
+"""
+
+from __future__ import annotations
+
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from enum import StrEnum
+
+from datahub.metadata.schema_classes import SchemaMetadataClass
+
+from modelguard.client import DataHubConnection
+from modelguard.config import ScanConfig
+from modelguard.detect.blast_radius import freshness_signal
+from modelguard.models import FindingType
+from modelguard.seed import graph_spec as spec
+from modelguard.seed.scenarios import (
+    plant_leakage,
+    plant_schema_drift,
+    plant_stale_source,
+    revert_leakage,
+    revert_schema_drift,
+    revert_stale_source,
+)
+
+#: How long a planted fact may take to become visible through the read path the
+#: detector uses. Lineage converged in about three seconds on a local Quickstart;
+#: this leaves an order of magnitude of headroom before a trial is called an error.
+PRECONDITION_TIMEOUT_S = 45.0
+
+#: Gap between precondition polls. Short enough not to dominate a fast trial.
+POLL_INTERVAL_S = 1.0
+
+
+class Target(StrEnum):
+    """Which entity a trial scans. The two answer different questions."""
+
+    TABLE = "table"
+    MODEL = "model"
+
+
+@dataclass(frozen=True)
+class Trial:
+    """One graph state and the findings it is supposed to produce."""
+
+    name: str
+    family: FindingType
+    """The detector under test. Findings of other types are ignored when scoring:
+    a leakage trial says nothing about whether the table is also stale."""
+    target: Target
+    expected: bool
+    """Whether the detector should fire. This is the ground-truth label."""
+    detail: str
+    """What makes this trial what it is, quoted verbatim into RESULTS.md."""
+    plant: Callable[[DataHubConnection, Trial, int], None] = field(repr=False)
+    """Puts the graph into this trial's state."""
+    lag_hours: float | None = None
+    """For freshness trials: how stale the table is planted to be."""
+
+
+def _plant_freshness(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
+    """Backdate the source table by the trial's lag."""
+    assert trial.lag_hours is not None
+    plant_stale_source(conn, lag_hours=trial.lag_hours, now_ms=now_ms)
+
+
+def _plant_leakage(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
+    """Restore or cut the leaking column-lineage edge."""
+    plant_leakage(conn) if trial.expected else revert_leakage(conn)
+
+
+def _plant_drift(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
+    """Drift the feature table's schema away from training, or restore it."""
+    plant_schema_drift(conn) if trial.expected else revert_schema_drift(conn)
+
+
+#: The lags the sweep walks, in hours, against the default 6 hour SLA. Chosen to
+#: sit either side of the boundary rather than only at the comfortable extremes:
+#: 5.5 and 6.5 are the pair that separates a detector with a correct comparison
+#: from one that is off by an hour, and 6.0 pins the exact boundary, where "at the
+#: SLA" must count as within it.
+SWEEP_LAG_HOURS: tuple[float, ...] = (0.5, 2.0, 4.0, 5.5, 6.0, 6.5, 8.0, 12.0, 30.0, 72.0)
+
+
+def _freshness_trials(sla_hours: float) -> tuple[Trial, ...]:
+    """Walk the freshness lag across the SLA boundary.
+
+    A lag at exactly the SLA is expected *not* to fire: the SLA is the budget, and
+    spending all of it is not yet an overrun.
+    """
+    trials: list[Trial] = []
+    for lag in SWEEP_LAG_HOURS:
+        stale = lag > sla_hours
+        trials.append(
+            Trial(
+                name=f"freshness-lag-{lag:g}h",
+                family=FindingType.UPSTREAM_FRESHNESS,
+                target=Target.TABLE,
+                expected=stale,
+                detail=f"{lag:g}h lag against a {sla_hours:g}h SLA",
+                lag_hours=lag,
+                plant=_plant_freshness,
+            )
+        )
+    return tuple(trials)
+
+
+def _leakage_trials() -> tuple[Trial, ...]:
+    """The flagship detector, both directions.
+
+    The negative is the narrow one: the feature and the label declaration both
+    survive, only the derivation path is cut, so a clean result isolates the
+    lineage signal instead of proving that a feature nobody derives is safe.
+    """
+    return (
+        Trial(
+            name="leakage-planted",
+            family=FindingType.TARGET_LEAKAGE,
+            target=Target.MODEL,
+            expected=True,
+            detail="the model's feature derives from the declared label column",
+            plant=_plant_leakage,
+        ),
+        Trial(
+            name="leakage-reverted",
+            family=FindingType.TARGET_LEAKAGE,
+            target=Target.MODEL,
+            expected=False,
+            detail="same feature and same declared label, derivation cut",
+            plant=_plant_leakage,
+        ),
+    )
+
+
+def _drift_trials() -> tuple[Trial, ...]:
+    """Training-serving schema drift, both directions."""
+    return (
+        Trial(
+            name="drift-planted",
+            family=FindingType.INPUT_SCHEMA_DRIFT,
+            target=Target.MODEL,
+            expected=True,
+            detail="a column retyped, one dropped and one added since training",
+            plant=_plant_drift,
+        ),
+        Trial(
+            name="drift-reverted",
+            family=FindingType.INPUT_SCHEMA_DRIFT,
+            target=Target.MODEL,
+            expected=False,
+            detail="the feature table matches the training-time snapshot",
+            plant=_plant_drift,
+        ),
+    )
+
+
+def build_trials(config: ScanConfig) -> tuple[Trial, ...]:
+    """Return the whole matrix, in a fixed order.
+
+    Args:
+        config: Supplies the freshness SLA the sweep is built around, so the
+            benchmark measures the boundary the scan actually enforces rather
+            than a number hardcoded here.
+    """
+    return _freshness_trials(config.freshness_sla_hours) + _leakage_trials() + _drift_trials()
+
+
+def _freshness_visible(
+    conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int
+) -> bool:
+    """Whether the graph reports the lag this trial planted.
+
+    Reads the same ``operation`` aspect the detector reads, and compares against
+    the planted lag rather than against the SLA, so this cannot accidentally
+    become a test of the verdict.
+    """
+    assert trial.lag_hours is not None
+    signal = freshness_signal(conn, str(spec.source_table_urn()), config, now_ms=now_ms)
+    if signal is None:
+        return False
+    return abs(signal.lag_hours - trial.lag_hours) < 0.05
+
+
+def _leakage_visible(
+    conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int
+) -> bool:
+    """Whether the lineage index reflects the edge this trial planted or cut.
+
+    Asks the same column-lineage query the detector asks, but inspects the
+    *lineage*, not whether a finding was raised.
+    """
+    results = conn.client.lineage.get_lineage(
+        source_urn=str(spec.feature_table_dataset_urn()),
+        source_column=spec.LEAKAGE_FEATURE,
+        direction="upstream",
+        max_hops=1,
+    )
+    reaches_label = any(
+        step.column_name == spec.LABEL_SOURCE_COLUMN
+        for result in results
+        for step in (result.paths or [])
+    )
+    return reaches_label == trial.expected
+
+
+def _drift_visible(conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int) -> bool:
+    """Whether the feature table's live schema is the one this trial wrote.
+
+    ``schemaMetadata`` is versioned, so GMS serves it synchronously; this is a
+    guard against a lost write rather than against an index lag.
+    """
+    schema = conn.graph.get_aspect(str(spec.feature_table_dataset_urn()), SchemaMetadataClass)
+    if schema is None:
+        return False
+    live = {schema_field.fieldPath for schema_field in schema.fields}
+    # Compared against the seeded column set rather than against any column the
+    # scenario happens to add, so this keeps working if the scenario changes which
+    # columns it moves. The planted drift drops one and adds one, so the sets differ.
+    drifted = live != {column.name for column in spec.FEATURE_COLUMNS}
+    return drifted == trial.expected
+
+
+_VISIBILITY: dict[FindingType, Callable[[DataHubConnection, Trial, ScanConfig, int], bool]] = {
+    FindingType.UPSTREAM_FRESHNESS: _freshness_visible,
+    FindingType.TARGET_LEAKAGE: _leakage_visible,
+    FindingType.INPUT_SCHEMA_DRIFT: _drift_visible,
+}
+
+
+def await_precondition(
+    conn: DataHubConnection,
+    trial: Trial,
+    config: ScanConfig,
+    now_ms: int,
+    *,
+    timeout_s: float = PRECONDITION_TIMEOUT_S,
+) -> float | None:
+    """Block until the graph shows the state ``trial`` planted.
+
+    Returns:
+        Seconds waited, or None if the state never became visible. A None is an
+        error in the harness, not a miss by the detector, and the caller reports
+        it separately so it cannot quietly depress recall.
+    """
+    is_visible = _VISIBILITY[trial.family]
+    started = time.monotonic()
+    while time.monotonic() - started < timeout_s:
+        if is_visible(conn, trial, config, now_ms):
+            return time.monotonic() - started
+        time.sleep(POLL_INTERVAL_S)
+    return None
+
+
+def restore_baseline(conn: DataHubConnection, *, now_ms: int | None = None) -> None:
+    """Return the graph to the seeded state: fresh table, leaking edge, no drift.
+
+    Run after the suite so a benchmark leaves the graph the way the demo expects
+    to find it, and between families so one detector's trial cannot set up
+    another's.
+    """
+    revert_stale_source(conn, now_ms=now_ms)
+    plant_leakage(conn)
+    revert_schema_drift(conn)
