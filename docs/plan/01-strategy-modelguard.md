@@ -29,7 +29,7 @@ against DataHub's live docs, GitHub, and blog:
 | Can **open-source** DataHub raise **incidents** programmatically? | **Yes.** `raiseIncident` GraphQL mutation is explicitly available in OSS/self-hosted, designed to be called from Airflow/Prefect/Dagster DAGs. Python SDK wrapper is "coming soon" → call via `graph.execute_graphql()`. | The richest write-back primitive is **OSS-native**. The incident loop is real. |
 | Can OSS **create assertions**? | **Partially.** OSS ships the **Open Data Quality Assertions Spec + Compiler** (YAML → dbt tests / Great Expectations / Snowflake DMFs) and assertion *entities*. `sync_smart_*` / anomaly "smart" assertions are **Cloud-only**. | Ship "guarding assertions" as portable **open-assertions YAML** + assertion entities; do detection ourselves. Disclose the Cloud boundary. |
 | Does the **MCP server** expose assertion / incident / lineage-**write** tools? | **No** (v0.6.0, May 18 2026). Mutations = tags, terms, owners, **domains**, **structured properties**, descriptions, `save_document`. | **Verified gap = our bonus contribution:** a `raise_incident` / `create_assertion` MCP mutation tool, or a skill wrapping the GraphQL. |
-| Does an **ML skill** exist in `datahub-skills`? | **No.** Repo has setup, search, lineage, enrich, quality, connector-planning, connector-pr-review, load-standards. **Zero ML skills.** | `datahub-ml-guard` would be the **first ML skill in the registry** - maximal bonus signal; judges include DataHub PMs. |
+| Does an **ML skill** exist in `datahub-skills`? | **No, as verified in early July 2026.** Repo had setup, search, lineage, enrich, quality, connector-planning, connector-pr-review, load-standards. **Zero ML skills** at that time. **[No longer true, D-043]:** by 2026-07-21 roughly seven overlapping ML-reliability skill PRs were open upstream (drift, trust-score, leakage, RCA), several predating our own submission. | `datahub-ml-guard` was pursued as the **first ML skill in the registry** - that framing did not hold; see D-043 for the differentiator actually shipped (a tested deterministic engine, not a prompt-only skill). |
 | Is "silent ML failure" real / on-message? | **DataHub's own June-2026 blog** frames it verbatim: *silent data failures*, *target leakage* ("needs column-level lineage"), *"$250,000 lost in a single weekend because null values were misread as zeros,"* *"lineage graphs that stop at the warehouse boundary."* | Our villain is **DataHub's own stated problem.** |
 | Is incident-triage-via-MCP already "taken"? | **Partly.** Block runs DataHub MCP + Goose for incident response; Nebius hackathon winner "MediGuard" did healthcare quality guardrails. | Don't ship a generic incident *chatbot*. Differentiate on **ML-boundary crossing** + **preventive** checks. |
 
@@ -115,7 +115,7 @@ there.**
 | **3. Originality** | Beyond out-of-the-box; compose, don't rebuild. | Not text-to-SQL (Analytics Agent), not PII tagging (`enrich`), not a chat triage bot (Block/Goose). **Target-leakage-as-static-graph-analysis** and **training-run-schema-diffing** are genuinely novel. README has an explicit "What we did NOT rebuild" section. |
 | **4. Real-World Usefulness** | Would a real data/ML team see value? | Framed in **money and safety** using DataHub's own numbers ("$250K in a weekend"), a finance credit-risk model scoring live loans (SR 11-7), or a healthcare readmission model. **Metadata-only - no PHI/PII ever reaches the LLM** (a real deploy-blocker removed). SRE-framed (MTTD SLO, blameless impact reports). Excites the **Pinterest** and **Cloudflight** judges. |
 | **5. Submission Quality** | ≤3-min video, README, clear setup. | Cold-open on the pain → agent catches it live → close on the **write-back visible in the DataHub UI**. README with architecture diagram, "reads AND writes" table, `examples/` folder of generated reports + assertion YAML + the Skill. |
-| **Bonus: OSS contribution** | New connectors, **skills**, fixes, RFCs, docs. | `datahub-ml-guard` = first ML skill in the registry (gap verified). Plus a `raise_incident`/`create_assertion` MCP mutation-tool PR (gap verified) or an RFC for first-class "ML incident" workflow. |
+| **Bonus: OSS contribution** | New connectors, **skills**, fixes, RFCs, docs. | `datahub-ml-guard`: not first (the gap closed while we built, D-043), differentiated by a tested deterministic engine behind it. Plus a `raise_incident` MCP mutation-tool PR (gap verified) and an RFC for first-class "ML incident" workflow. |
 | **Stage-1 gate** | Theme fit + real SDK use. | Uses MCP Server + Agent Context Kit + a new Skill against real ML lineage - unambiguous pass. |
 
 **Prize math:** Grand Prize = best overall; Challenge Winners = one per category. Categories 2 & 3 are the
@@ -139,10 +139,12 @@ a Pinterest EM, DataHub PMs) recognizes. Full detail in `03-production-hardening
   lineage) and Evidently/NannyML (drift only, *after* the fact). The money slide: **only** cross-boundary
   column-level lineage both roots the failure to the exact upstream column **and** names the exact model +
   live deployment - *before* it scores.
-- **Scales two ways from one core.** `scan` (batch/CI) and `watch` (event-driven via DataHub's
-  MetadataChangeLog / Kafka) share the identical detect→write engine. At-least-once + idempotent writes
-  (dedup key `(urn, finding, run_id)`) = effectively-once; bounded traversal + batched reads keep cost flat.
-  Grounded in *Designing Data-Intensive Applications* (Ch 11-12).
+- **Scales two ways from one core.** `scan` (batch/CI) and `watch` (interval polling,
+  shipped; event-driven via DataHub's MetadataChangeLog / Kafka is the documented
+  upgrade path) share the identical detect→write engine. At-least-once + idempotent
+  writes (dedup key `(urn, finding, run_id)`) = effectively-once; bounded traversal +
+  batched reads keep cost flat. Grounded in *Designing Data-Intensive Applications*
+  (Ch 11-12).
 - **Secure by design - it writes to a governance graph.** Deterministic detection is prompt-injection-
   resistant (OWASP **LLM01**); every mutation is human-gated, least-privilege-scoped, and parameterized
   (OWASP **LLM06/LLM05**). Quotable privacy property: **ModelGuard reads metadata + profiles, never raw

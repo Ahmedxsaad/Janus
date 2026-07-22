@@ -1,9 +1,9 @@
 # CLAUDE.md - examples
 
 Sample outputs for judges, so they can evaluate quality without running
-anything (recommended by the official rules). Planned artifacts: a Model
-Impact Report, a guarding-assertion YAML, an ODCS input data contract, an
-incident payload JSON.
+anything (recommended by the official rules). Artifacts, all generated and
+committed: a Model Impact Report, a guarding-assertion YAML, an ODCS input
+data contract, an incident payload JSON.
 
 ## Local rules
 
@@ -44,3 +44,4 @@ incident payload JSON.
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: real-output-only and validation rules |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Record the exact command that regenerates the Phase 1 artifacts |
 | 2026-07-16 | Claude (for Ghassen Naouar) | Add the ODCS input contract regeneration + lint command (D-038) |
+| 2026-07-22 | Claude (for Ahmed Saad) | Reword "Planned artifacts" to "Artifacts...generated and committed": all four have existed since 2026-07-13/16 |

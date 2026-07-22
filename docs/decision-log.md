@@ -16,6 +16,63 @@ Entry template:
 
 ---
 
+## D-046: Close the rest of the docs audit: improvements status, skill/CLAUDE.md, strategy-doc annotations (2026-07-22)
+- Decided by: Ahmed Saad (requested the audit), fix applied by Claude
+- Decision: (1) docs/plan/04-improvements.md's status block, unedited since
+  2026-07-09, said P2-3 (shared pydantic models) and P2-4 (central config
+  module) were "still open"; both landed (modelguard/models.py,
+  modelguard/config.py + env.py) and are now marked adopted. (2) skill/CLAUDE.md
+  carried the same unqualified "first ML skill in the registry" claim already
+  corrected elsewhere under D-043; corrected here too. (3)
+  01-strategy-modelguard.md's two rationale-table rows asserting the "first ML
+  skill" gap are historical decision rationale, not live status, so they were
+  annotated in place (what was verified, then, and that it no longer holds,
+  citing D-043) rather than rewritten. (4) examples/CLAUDE.md called its four
+  artifacts "Planned"; all four have existed since 2026-07-13/16, reworded to
+  "generated and committed."
+- Options considered: for the strategy doc, (a) delete the outdated rows, (b)
+  leave them, (c) annotate in place; (c) chosen, since a strategy doc's
+  rationale table is a record of why a decision was made and deleting it loses
+  that history, but leaving it unqualified misleads a reader in 2026-07-22 into
+  thinking the gap still holds.
+- Why: this is the same class of problem as D-045, docs that quietly stopped
+  matching reality. Caught by re-reading every CLAUDE.md and plan doc in full
+  (not just their Change Log tails) against the actual code and the current
+  upstream PR queue, at the user's request after the D-044 stash-recovery work
+  surfaced how easily this repo's docs drift once nobody is re-reading them
+  end to end.
+- Result: 04-improvements.md, skill/CLAUDE.md, 01-strategy-modelguard.md, and
+  examples/CLAUDE.md corrected; all four CLAUDE.md edits carry a Change Log row.
+  No other CLAUDE.md or plan doc in the repo was found to diverge from the code
+  on this pass (root, modelguard/ and its five subpackages, tests/, benchmarks/,
+  mcp_ext/, docs/ were all read in full and checked against the actual files
+  and directory contents they describe).
+
+## D-045: Correct the plan docs' watch description from Kafka-first to polling-shipped (2026-07-22)
+- Decided by: Ahmed Saad (requested the docs audit), fix applied by Claude
+- Decision: architecture.md, 01-strategy-modelguard.md, and the E-checklist in
+  03-production-hardening.md described `watch` as consuming DataHub's
+  `MetadataChangeLog` via the Actions framework (Kafka), with polling as a
+  fallback. Corrected all three to state what actually shipped: `watch` is a
+  polling loop only (`cli.py watch`, D-039), and the MCL/Kafka consumer is the
+  documented, unbuilt upgrade path, not a fallback behind a built primary.
+- Options considered: (a) leave the plan docs as originally written since
+  02-implementation-plan.md already carries the correct D-039/D-040 landed
+  notes, (b) propagate the correction to every plan doc that makes the same
+  claim.
+- Why: docs/CLAUDE.md rule 1 requires updating the plan doc and logging a
+  decision the moment plan and reality diverge, specifically so it does not
+  silently rot. The implementation plan had the correct note; architecture.md
+  (the repo's own "how it works" source of truth), the strategy doc, and the
+  production-hardening checklist did not, and a judge or contributor reading
+  any of the other three would have believed an Actions/Kafka consumer exists.
+- Result: architecture.md section 5 (component catalog), section 8 (execution
+  modes table), and section 10 ("production" posture) now state the polling
+  reality with the Kafka path marked as not built. 01-strategy-modelguard.md's
+  scaling bullet corrected the same way. 03-production-hardening.md's
+  checklist item is now checked, since the polling-fallback branch of its own
+  "event-driven or a documented polling fallback" criterion is satisfied.
+
 ## D-044: Agent instructions use linked compatibility files (2026-07-17)
 - Decided by: Repository maintainers
 - Decision: Every directory that contains a `CLAUDE.md` also contains an
