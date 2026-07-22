@@ -1,5 +1,10 @@
 [build-system]
-requires = ["setuptools>=68"]
+# >=83 clears PYSEC-2026-3447, where MANIFEST.in exclusions could be bypassed by
+# Unicode normalization when building an sdist on macOS, so a file meant to be
+# excluded could ship inside one. Not reachable here (Linux, and no sdist is
+# published), but the floor costs nothing and keeps pip-audit clean for anyone
+# who checks before trusting the project.
+requires = ["setuptools>=83"]
 build-backend = "setuptools.build_meta"
 
 [project]

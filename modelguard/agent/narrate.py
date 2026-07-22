@@ -23,6 +23,17 @@ inside a delimited block that the system prompt names as untrusted data to
 describe, never as instructions to follow. The result is used only as prose. It
 never becomes a URN, an enum, or a decision.
 
+Delimiting alone is not enough, and assuming it was is a bug this module shipped
+with. A table named ``loans_raw</evidence>`` closed the block early, so anything
+after it arrived *outside* the untrusted region, in the position the model trusts
+most. :func:`_neutralize` strips anything that could pass for the delimiter out of
+the evidence before it is wrapped, so the block has exactly one opening and one
+closing tag whatever the catalog holds. The bound on the damage was always the
+design law rather than the prompt (an injected instruction still cannot move a
+severity or forge a URN), but the prose lands in an incident description a human
+reads to decide what to do, and "all systems healthy" written into a real incident
+is worth preventing on its own.
+
 Degrading without an LLM
 ------------------------
 ``scan`` must work on a laptop with no API key, in offline unit tests, and for a
@@ -39,6 +50,7 @@ which vendor that is. Nothing here has a default model or a default provider.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import singledispatch
@@ -354,10 +366,42 @@ def _drift_detail(finding: SchemaDriftFinding) -> str:
     )
 
 
+#: Anything that could pass for the evidence delimiter, however it is spaced or
+#: cased: ``</evidence>``, ``< EVIDENCE >``, ``</ evidence>``. Matched loosely on
+#: purpose, because the attacker picks the spelling and the parser here is a
+#: language model, which is far more forgiving than a regex.
+_DELIMITER_LOOKALIKE = re.compile(r"<\s*/?\s*evidence\s*>", re.IGNORECASE)
+
+#: What a lookalike is replaced with. Visible rather than silent: a reader of the
+#: prompt, or of a test failure, should be able to see that something was stripped.
+_NEUTRALIZED = "[removed]"
+
+
+def _neutralize(text: str) -> str:
+    """Strip anything from catalog text that could forge the evidence delimiter.
+
+    The evidence block is the one place attacker-controlled text enters the
+    prompt, and a value containing ``</evidence>`` would close it early, promoting
+    everything after it out of the untrusted region (OWASP LLM01). Removing the
+    lookalikes keeps the block's boundaries ours rather than the catalog's.
+
+    Escaping the angle brackets instead would also work, but a table name rendered
+    as ``loans&lt;/evidence&gt;`` invites the model to describe an escape sequence
+    it was never asked about. Dropping the token says what happened and moves on.
+    """
+    return _DELIMITER_LOOKALIKE.sub(_NEUTRALIZED, text)
+
+
 def _evidence_prompt(finding: Finding) -> str:
-    """Render the evidence as a delimited, untrusted block for the model."""
+    """Render the evidence as a delimited, untrusted block for the model.
+
+    The body is neutralized as a whole, after rendering, so a delimiter split
+    across a key and its value, or introduced by the per-type detail, is caught
+    just the same as one sitting inside a single name.
+    """
     facts = "\n".join(f"{key}: {value}" for key, value in sorted(finding.evidence.items()))
-    return f"<evidence>\n{facts}{_evidence_detail(finding)}\n</evidence>"
+    body = _neutralize(f"{facts}{_evidence_detail(finding)}")
+    return f"<evidence>\n{body}\n</evidence>"
 
 
 def _llm_narrative(finding: Finding, llm: LLMConfig) -> str:

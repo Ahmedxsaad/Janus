@@ -54,6 +54,15 @@ app = typer.Typer(
     add_completion=False,
     help="A data-to-model reliability agent built on DataHub.",
     no_args_is_help=True,
+    # Typer renders locals into its pretty traceback when this is on, and the
+    # frames that build a connection hold the DataHub token, while the SDK's own
+    # DatahubClientConfig prints the token in its repr (verified against
+    # acryl-datahub 1.6.0.13). An unhandled error would then put a credential on
+    # the terminal and into any CI log that captured it. Typer's default is
+    # already False, which is exactly why this is written down: a security
+    # property that holds because of somebody else's default is one upgrade away
+    # from not holding.
+    pretty_exceptions_show_locals=False,
 )
 
 # soft_wrap: URNs are long and must stay on one line to be copy-pasteable.

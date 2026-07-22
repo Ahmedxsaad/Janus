@@ -117,6 +117,14 @@ Elasticsearch + Kafka - see `resources.md §9`; our job is to traverse a bounded
 
 ## D. Security model (an agent that writes to a governance graph)
 
+> **Reviewed 2026-07-22** (D-049). The controls below were audited against the code rather than assumed,
+> and the LLM01 control was found **incomplete and exploitable**: the evidence block was delimited but its
+> delimiter was not escaped, so a dataset named `loans_raw</evidence>` closed the block early and promoted
+> the rest of its own name *outside* the untrusted region. Fixed, with regression tests that fail against
+> the previous code. Also verified holding: deterministic detection, parameterized GraphQL with bound
+> variables (no interpolation anywhere), no credential in any log, exception, or repr ModelGuard emits, and
+> loud failure on malformed configuration. Full findings and what was rejected are in D-049.
+
 **Threat model:** ModelGuard reads *untrusted* metadata (descriptions, dataset names, doc text authored by
 anyone) and takes *write* actions (incidents, tags, properties). That is exactly OWASP LLM01 + LLM06
 territory (`resources.md §10`). Controls:

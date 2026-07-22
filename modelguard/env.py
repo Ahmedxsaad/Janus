@@ -47,8 +47,17 @@ _loaded = False
 class ConfigError(ValueError):
     """Configuration is missing, or is present but unusable.
 
-    Never carries a configuration *value*: a message here may be logged, and one
-    of these values is a credential.
+    Never carries a *credential*: a message here may be logged, and some of the
+    values this module reads are secrets. Identity values (URLs, keys, provider
+    names) are reported by variable name only, which is why
+    :func:`required_value` takes a hint instead of echoing what it found.
+
+    Algorithm parameters are the deliberate exception. :func:`optional_float` and
+    :func:`optional_int` quote the offending value back, because
+    ``MODELGUARD_MAX_HOPS='3 '`` is a typo nobody can fix from a message that
+    declines to say what was wrong, and a hop cap is not a secret. Anything
+    secret-bearing must go through :func:`required_value` or
+    :func:`optional_value`, never through the numeric readers.
     """
 
 
