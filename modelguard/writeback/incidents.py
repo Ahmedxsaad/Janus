@@ -139,7 +139,7 @@ def _resource_exists(conn: DataHubConnection, resource_urn: str) -> bool:
     return any(field.fieldPath == urn.field_path for field in schema.fields)
 
 
-def _active_incident_urns(conn: DataHubConnection, resource_urn: str) -> list[str]:
+def attached_incident_urns(conn: DataHubConnection, resource_urn: str) -> list[str]:
     """Return the URNs of every incident attached to this resource.
 
     Traverses the ``IncidentOn`` relationship inbound, from the resource to the
@@ -174,7 +174,7 @@ def find_active_incident(
     generated deterministically from the finding, so the same problem detected on
     a later run resolves to the same incident.
     """
-    for urn in _active_incident_urns(conn, resource_urn):
+    for urn in attached_incident_urns(conn, resource_urn):
         info = conn.graph.get_aspect(urn, IncidentInfoClass)
         if info is None:
             continue

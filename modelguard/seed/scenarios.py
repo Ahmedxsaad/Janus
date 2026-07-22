@@ -29,8 +29,13 @@ import time
 from dataclasses import dataclass
 
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
-from datahub.metadata.schema_classes import OperationClass, OperationTypeClass
-from datahub.sdk.dataset import Dataset
+from datahub.metadata.schema_classes import (
+    FineGrainedLineageClass,
+    OperationClass,
+    OperationTypeClass,
+)
+from datahub.sdk.dataset import Dataset, parse_cll_mapping
+from datahub.specific.dataset import DatasetPatchBuilder
 
 from modelguard.client import DataHubConnection
 from modelguard.seed import graph_spec as spec
@@ -46,6 +51,12 @@ STALE_SOURCE = "stale-source-table"
 #: live schema changed after training, so it no longer matches the training-time
 #: snapshot captured on the training run.
 SCHEMA_DRIFT = "input-schema-drift"
+
+#: The leakage scenario: the feature table's leaking column-lineage edge, the one
+#: saying ``prior_default_flag`` derives from the label. The seeder always plants
+#: it (D-032), so before this scenario existed the flagship detector had no
+#: negative control at all: no way to show the graph going clean.
+TARGET_LEAKAGE = "target-leakage"
 
 #: The drift the demo plants on the feature table, chosen to leave the columns the
 #: leakage traversal depends on (applicant_id, prior_default_flag) untouched, so
@@ -260,6 +271,112 @@ def revert_schema_drift(conn: DataHubConnection) -> SchemaDriftResult:
     )
 
 
+@dataclass(frozen=True)
+class LeakageResult:
+    """What the leakage scenario did to the feature table's column lineage."""
+
+    name: str
+    dataset_urn: str
+    feature_column: str
+    """The feature whose derivation the scenario turned on or off."""
+    upstream_columns: tuple[str, ...]
+    """What that feature now declares itself derived from. Empty after a revert."""
+    leaking: bool
+    """Whether the graph currently reaches the label from a model feature."""
+
+
+def _set_column_lineage(conn: DataHubConnection, mapping: dict[str, list[str]]) -> None:
+    """Replace the feature table's column-level lineage with exactly ``mapping``.
+
+    ``client.lineage.add_lineage`` cannot be used to undo an edge: it builds a
+    ``DatasetPatchBuilder`` and calls ``add_fine_grained_upstream_lineage``, which
+    is an *additive* patch, so re-adding a reduced mapping leaves the removed edge
+    in place. Setting the fine-grained list outright is the only way back, and it
+    leaves the table-level upstream edge untouched (verified against a live GMS).
+
+    The mapping is turned into aspect objects by the SDK's own
+    ``parse_cll_mapping``, the same helper ``add_lineage`` uses, so what this
+    writes is byte-for-byte what the seeder would have written.
+
+    Why there is no scenario marker
+    -------------------------------
+    seed/CLAUDE.md rule 5 asks every scenario to stamp ``modelguard.scenario``
+    somewhere a reader can find it. This one cannot, and the reason is worth
+    keeping. ``upstreamLineage`` has no ``customProperties``; the dataset's own
+    belong to the schema-drift scenario, which clears them on revert, so sharing
+    them would have the two scenarios erase each other. The remaining candidate,
+    the edge's ``transformOperation``, is part of what GMS keys a fine-grained
+    edge on: a marked edge and the seeder's unmarked one are two *different*
+    edges, so the next ``modelguard-seed`` adds its own alongside and the graph
+    grows a duplicate. That was caught by the Week 1 gate's byte-for-byte
+    idempotency test, not by reasoning, which is why the test exists.
+
+    Nothing is lost. Unlike a stale timestamp or a drifted schema, this state is
+    not ambiguous: the leaking edge is either in the graph or it is not, and the
+    leak is the *seeded baseline* (D-032) rather than an anomaly planted on top
+    of it, so there is no planted-versus-real question to answer.
+    """
+    edges: list[FineGrainedLineageClass] = parse_cll_mapping(
+        upstream=str(spec.source_table_urn()),
+        downstream=str(spec.feature_table_dataset_urn()),
+        cll_mapping=mapping,
+    )
+    builder = DatasetPatchBuilder(str(spec.feature_table_dataset_urn()))
+    builder.set_fine_grained_lineages(edges)
+    conn.client.entities.update(builder)
+
+
+def plant_leakage(conn: DataHubConnection) -> LeakageResult:
+    """Declare the leaking feature to derive from the label column.
+
+    Restores the seeded state: ``prior_default_flag`` derives from
+    ``default_status``, so a model scan finds target leakage. Planting is
+    idempotent, and it is what the seeder already does, so this is only needed to
+    undo a :func:`revert_leakage`.
+
+    Returns:
+        What the feature table's lineage now says.
+    """
+    _set_column_lineage(conn, dict(spec.COLUMN_LINEAGE))
+    return LeakageResult(
+        name=TARGET_LEAKAGE,
+        dataset_urn=str(spec.feature_table_dataset_urn()),
+        feature_column=spec.LEAKAGE_FEATURE,
+        upstream_columns=tuple(spec.COLUMN_LINEAGE[spec.LEAKAGE_FEATURE]),
+        leaking=True,
+    )
+
+
+def revert_leakage(conn: DataHubConnection) -> LeakageResult:
+    """Cut the leaking feature's derivation from the label, leaving the rest.
+
+    This is the negative control for the flagship detector, and it is deliberately
+    the narrowest possible edit: the feature still exists, the model still consumes
+    it, and the label is still declared. Only the derivation path is gone. So a
+    scan going quiet afterwards isolates the one signal the detector keys on,
+    rather than proving the easier thing that a feature nobody consumes is safe.
+
+    Reverting is how a team actually fixes leakage: the feature gets rebuilt from
+    data available before the outcome is known, and stops descending from the label.
+
+    Returns:
+        What the feature table's lineage now says. ``upstream_columns`` is empty.
+    """
+    clean = {
+        column: upstreams
+        for column, upstreams in spec.COLUMN_LINEAGE.items()
+        if column != spec.LEAKAGE_FEATURE
+    }
+    _set_column_lineage(conn, clean)
+    return LeakageResult(
+        name=TARGET_LEAKAGE,
+        dataset_urn=str(spec.feature_table_dataset_urn()),
+        feature_column=spec.LEAKAGE_FEATURE,
+        upstream_columns=(),
+        leaking=False,
+    )
+
+
 def _drifted_columns() -> tuple[spec.Column, ...]:
     """Return the feature table's columns after the planted drift.
 
@@ -289,7 +406,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Plant or revert a failure ModelGuard detects.")
     parser.add_argument(
         "--scenario",
-        choices=[STALE_SOURCE, SCHEMA_DRIFT],
+        choices=[STALE_SOURCE, SCHEMA_DRIFT, TARGET_LEAKAGE],
         default=STALE_SOURCE,
         help=f"Which failure to plant (default: {STALE_SOURCE}).",
     )
@@ -312,6 +429,26 @@ def main() -> None:
     except DataHubConnectionError as exc:
         console.print(f"[red]{exc}[/red]")
         raise SystemExit(1) from exc
+
+    if args.scenario == TARGET_LEAKAGE:
+        leak = revert_leakage(conn) if args.revert else plant_leakage(conn)
+        verb = "Reverted" if args.revert else "Planted"
+        color = "green" if args.revert else "yellow"
+        console.print(f"[{color}]{verb}[/{color}] {leak.name} on {leak.dataset_urn}")
+        if args.revert:
+            console.print(
+                f"{leak.feature_column} no longer derives from the label; "
+                "a model scan finds no leakage."
+            )
+        else:
+            console.print(
+                f"{leak.feature_column} derives from "
+                f"{', '.join(leak.upstream_columns)}, which is the label."
+            )
+        console.print(
+            "[dim]Lineage is indexed asynchronously; a scan may need a few seconds to agree.[/dim]"
+        )
+        return
 
     if args.scenario == SCHEMA_DRIFT:
         drift = revert_schema_drift(conn) if args.revert else plant_schema_drift(conn)

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 from datahub.metadata.schema_classes import OperationClass, OperationTypeClass
+from datahub.metadata.urns import SchemaFieldUrn
 
 from modelguard.seed import graph_spec as spec
 from modelguard.seed.scenarios import (
     SCENARIO_PROPERTY,
     SCHEMA_DRIFT,
     STALE_SOURCE,
+    plant_leakage,
     plant_schema_drift,
     plant_stale_source,
+    revert_leakage,
     revert_schema_drift,
     revert_stale_source,
 )
@@ -135,3 +139,116 @@ def test_reverting_restores_the_training_schema_and_clears_the_marker():
     assert schema == training
     assert dataset.custom_properties == {}
     assert result.name == SCHEMA_DRIFT
+
+
+# --------------------------------------------------------------------------
+# The target-leakage scenario (P1), the flagship detector's negative control
+# --------------------------------------------------------------------------
+
+
+def _sent_column_lineage(client: FakeClient) -> dict[str, list[str]]:
+    """Decode the column lineage the scenario actually sent to DataHub.
+
+    Reads the built JSON patch rather than any value the scenario handed back, so
+    a scenario that returned the right answer while sending the wrong edges would
+    fail here (tests/CLAUDE.md rule 6).
+    """
+    assert len(client.entities.updated) == 1, "expected exactly one patch"
+    mcps = client.entities.updated[0].build()
+    assert len(mcps) == 1
+    patches = json.loads(mcps[0].aspect.value)
+
+    edges: dict[str, list[str]] = {}
+    for patch in patches:
+        assert patch["path"] == "/fineGrainedLineages"
+        for edge in patch["value"]:
+            for downstream in edge["downstreams"]:
+                column = SchemaFieldUrn.from_string(downstream).field_path
+                edges[column] = [
+                    SchemaFieldUrn.from_string(up).field_path for up in edge["upstreams"]
+                ]
+    return edges
+
+
+def _sent_transform_operations(client: FakeClient) -> dict[str, str]:
+    """The transformOperation on each edge the scenario wrote. Expected empty."""
+    mcps = client.entities.updated[0].build()
+    marks: dict[str, str] = {}
+    for patch in json.loads(mcps[0].aspect.value):
+        for edge in patch["value"]:
+            marker = edge.get("transformOperation")
+            if marker is None:
+                continue
+            for downstream in edge["downstreams"]:
+                marks[SchemaFieldUrn.from_string(downstream).field_path] = marker
+    return marks
+
+
+def test_reverting_leakage_cuts_the_leaking_features_derivation_from_the_label():
+    client = FakeClient()
+    result = revert_leakage(make_connection(FakeGraph(), client))
+
+    assert spec.LEAKAGE_FEATURE not in _sent_column_lineage(client)
+    assert result.upstream_columns == ()
+    assert result.leaking is False
+
+
+def test_reverting_leakage_keeps_every_benign_edge():
+    """The negative control must isolate the label edge, not blank the lineage.
+
+    A revert that dropped all the column lineage would silence the detector for
+    the wrong reason, and the benchmark would score a graph nobody would ship.
+    """
+    client = FakeClient()
+    revert_leakage(make_connection(FakeGraph(), client))
+
+    sent = _sent_column_lineage(client)
+    expected = {
+        column: upstreams
+        for column, upstreams in spec.COLUMN_LINEAGE.items()
+        if column != spec.LEAKAGE_FEATURE
+    }
+    assert sent == expected
+
+
+def test_planting_leakage_restores_the_edge_from_the_label():
+    client = FakeClient()
+    result = plant_leakage(make_connection(FakeGraph(), client))
+
+    assert _sent_column_lineage(client) == dict(spec.COLUMN_LINEAGE)
+    assert result.upstream_columns == (spec.LABEL_SOURCE_COLUMN,)
+    assert result.leaking is True
+
+
+def test_no_edge_carries_a_scenario_marker():
+    """A marker would fork the edge and make the seeder accumulate a duplicate.
+
+    ``transformOperation`` is part of what GMS keys a fine-grained edge on, so a
+    marked edge and the seeder's unmarked one are two different edges: the next
+    ``modelguard-seed`` adds its own alongside and the column lineage grows. The
+    Week 1 gate's byte-for-byte test is what caught that; this is its offline
+    twin, so the marker cannot come back without something going red first.
+    """
+    for scenario in (plant_leakage, revert_leakage):
+        client = FakeClient()
+        scenario(make_connection(FakeGraph(), client))
+        assert _sent_transform_operations(client) == {}, scenario.__name__
+
+
+def test_planting_writes_exactly_what_the_seeder_wrote():
+    """Planting restores the baseline, so re-seeding afterwards is a no-op."""
+    client = FakeClient()
+    plant_leakage(make_connection(FakeGraph(), client))
+
+    sent = _sent_column_lineage(client)
+    assert sent == dict(spec.COLUMN_LINEAGE)
+    assert len(sent) == len(spec.COLUMN_LINEAGE), "an extra edge would accumulate on reseed"
+
+
+def test_the_leakage_scenario_patches_the_feature_table():
+    client = FakeClient()
+    plant_leakage(make_connection(FakeGraph(), client))
+
+    mcps = client.entities.updated[0].build()
+    assert mcps[0].entityUrn == str(spec.feature_table_dataset_urn())
+    assert mcps[0].aspectName == "upstreamLineage"

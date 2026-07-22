@@ -16,6 +16,65 @@ Entry template:
 
 ---
 
+## D-047: ModelGuard-Bench measures a live graph, and the sweep is what makes it mean anything (2026-07-22)
+- Decided by: Ahmed Saad (chose the bench as the next build, and the core scope),
+  built by Claude
+- Decision: `benchmarks/` ships three modules and a generated report.
+  `inject.py` holds the labelled trial matrix, `metrics.py` the pure scoring
+  arithmetic, `run_bench.py` the live harness and the RESULTS.md renderer.
+  Three choices carry the design:
+  (a) **Trials run against a live DataHub**, never against fixture graphs.
+  (b) **The freshness sweep walks the SLA boundary** (0.5h to 72h against a 6h
+  SLA, including 5.5, 6.0 and 6.5) rather than only planting the 30h demo lag.
+  (c) **A trial waits for the graph to show the state it planted, never for the
+  detector to give the expected answer**, and a precondition that never lands is
+  reported as an unscoreable error rather than counted as a miss.
+- Options considered: for (a), scoring against the existing in-memory doubles,
+  which would have run in milliseconds and needed no Docker; rejected because a
+  detector scored on our own fakes measures the fakes, and the first question a
+  judge asks about a benchmark is what it ran against. For (b), reusing the demo
+  scenario alone; rejected as untestable in the sense that matters, see below.
+  For (c), polling until the expected finding appeared, which is the obvious way
+  to handle async indexing and manufactures perfect recall by construction.
+- Why: a benchmark's own credibility has to be demonstrable, so the same rule
+  tests live under (tests/CLAUDE.md rule 6: a green suite proves nothing until a
+  fault kills it) was applied to the benchmark itself. Changing
+  `FreshnessSignal.is_stale` from `>` to `>=`, a one-character off-by-one, was
+  caught by the trial sitting exactly on the SLA: freshness precision fell 1.00
+  to 0.83 and the false-positive rate rose 0.00 to 0.20, past its 0.05 target.
+  Under the demo scenario alone that same bug scores a clean 1.00 and ships. The
+  scoring arithmetic and the ground-truth labels were mutation-checked the same
+  way, six mutations, each killing the offline suite.
+- Result: 14 trials, all correct on the run committed as `benchmarks/RESULTS.md`:
+  precision, recall and F1 of 1.00 per detector, false-positive rate 0.00,
+  blast-radius recall 1/1 naming the live deployment, 0 duplicate incidents on
+  rerun, trust score and band both written. Detector calls median 0.12s;
+  DataHub's index convergence, reported separately so its latency is not blamed
+  on ModelGuard, median 2.85s. 34 new offline tests (304 total).
+  `modelguard/seed/scenarios.py` gained `plant/revert_leakage`, which the
+  flagship detector had no negative control without (the seeder always plants
+  the leak, D-032); it sets the fine-grained lineage outright because
+  `add_lineage` patches additively and cannot undo an edge.
+  `_active_incident_urns` became public `attached_incident_urns`, and was
+  renamed because it never filtered to active ones.
+- One bug was introduced and caught in the same session, and it is the reason
+  the Week 1 gate is worth keeping green. The leakage scenario first stamped
+  `transformOperation` on the leaking edge to satisfy seed/CLAUDE.md rule 5's
+  "every scenario declares itself". That field is part of what GMS keys a
+  fine-grained edge on, so the marked edge and the seeder's unmarked one are two
+  *different* edges: the next `modelguard-seed` added its own alongside and the
+  column lineage grew to five. Every unit test still passed, the benchmark still
+  scored 1.00, and `test_seeding_twice_leaves_the_graph_byte_for_byte_identical`
+  failed. The marker was removed rather than worked around: the leak is the
+  seeded baseline, not an anomaly planted on top of it, so there was no
+  planted-versus-real ambiguity for a marker to resolve. An offline twin of that
+  assertion now guards it, since the integration suite needs a live Quickstart
+  and will not run on every change.
+- Not built, and RESULTS.md says so in its own words rather than leaving it to
+  be inferred: Jenga corruption injection, the Great Expectations / Evidently /
+  naive-lineage baseline comparison, the 10k/100k scale test, `golden/`
+  regression reports, and any scoring of narrative quality.
+
 ## D-046: Close the rest of the docs audit: improvements status, skill/CLAUDE.md, strategy-doc annotations (2026-07-22)
 - Decided by: Ahmed Saad (requested the audit), fix applied by Claude
 - Decision: (1) docs/plan/04-improvements.md's status block, unedited since
