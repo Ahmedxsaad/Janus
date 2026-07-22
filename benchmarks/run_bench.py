@@ -41,6 +41,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from benchmarks import metrics
+from benchmarks.baselines import LEAKAGE_APPROACHES, Approach
 from benchmarks.inject import (
     Trial,
     await_precondition,
@@ -217,6 +218,77 @@ def measure_writeback(conn: DataHubConnection, config: ScanConfig) -> WriteBackC
     )
 
 
+@dataclass(frozen=True)
+class ApproachScore:
+    """How one approach did at naming exactly the leaking features."""
+
+    approach: Approach
+    matrix: metrics.Confusion
+    flagged_when_clean: int
+    """Features still flagged after the leak was removed. The alert-fatigue number."""
+
+
+def measure_leakage_approaches(
+    conn: DataHubConnection, config: ScanConfig
+) -> tuple[ApproachScore, ...]:
+    """Score every approach on the same graph, at feature granularity.
+
+    Scored per feature rather than per model, because "does this model leak" is a
+    question all three get right on a leaking graph. The question that separates
+    them is *which* feature leaks, which is what a data scientist has to act on,
+    and it is only answerable at column granularity.
+
+    Both graph states are scored: the seeded one, where exactly one of the model's
+    two features derives from the label, and the reverted one, where none does. The
+    second is the one that hurts, and it is the one a real team lives in after they
+    fix something.
+    """
+    model_urn = str(spec.model_urn())
+    features = {name: str(spec.feature_urn(name)) for name in spec.MODEL_FEATURES}
+    leaking_urn = features[spec.LEAKAGE_FEATURE]
+
+    observations: dict[str, list[tuple[bool, bool]]] = {
+        approach.key: [] for approach, _ in LEAKAGE_APPROACHES
+    }
+    clean_flags: dict[str, int] = {approach.key: 0 for approach, _ in LEAKAGE_APPROACHES}
+
+    for leaking in (True, False):
+        trial = next(
+            t
+            for t in build_trials(config)
+            if t.family is FindingType.TARGET_LEAKAGE and t.expected is leaking
+        )
+        now_ms = int(time.time() * 1000)
+        trial.plant(conn, trial, now_ms)
+        if await_precondition(conn, trial, config, now_ms) is None:
+            raise RuntimeError(f"the graph never reached the {trial.name} state")
+
+        truth = {leaking_urn} if leaking else set()
+
+        for approach, detector in LEAKAGE_APPROACHES:
+            if detector is None:
+                flagged = {
+                    finding.leak.feature_urn
+                    for finding in leakage_findings(conn, model_urn, config)
+                }
+            else:
+                flagged = set(detector(conn, model_urn, config))
+
+            for urn in features.values():
+                observations[approach.key].append((urn in truth, urn in flagged))
+            if not leaking:
+                clean_flags[approach.key] += len(flagged)
+
+    return tuple(
+        ApproachScore(
+            approach=approach,
+            matrix=metrics.confusion(observations[approach.key]),
+            flagged_when_clean=clean_flags[approach.key],
+        )
+        for approach, _ in LEAKAGE_APPROACHES
+    )
+
+
 def _by_family(outcomes: Sequence[TrialOutcome]) -> dict[FindingType, list[TrialOutcome]]:
     """Group scoreable outcomes by the detector they exercised."""
     grouped: dict[FindingType, list[TrialOutcome]] = {}
@@ -241,6 +313,7 @@ def render_results(
     config: ScanConfig,
     *,
     generated_at: datetime,
+    approaches: Sequence[ApproachScore] = (),
 ) -> str:
     """Render RESULTS.md. Pure: every number comes from the arguments."""
     grouped = _by_family(outcomes)
@@ -326,6 +399,52 @@ def render_results(
     settle = metrics.Latency(
         tuple(o.settle_seconds for o in outcomes if o.settle_seconds is not None)
     )
+    if approaches:
+        lines += [
+            "",
+            "## Why column-level lineage, measured",
+            "",
+            "The same graph, the same ground truth, three ways of reading it. Scored per",
+            "**feature**, not per model: every approach can tell that a leaking model leaks.",
+            "The question that separates them is *which* of its features leaks, which is the",
+            "one a data scientist has to act on.",
+            "",
+            "Two graph states are scored: the seeded one, where exactly one of the model's",
+            "two features derives from the label, and the reverted one, where none does.",
+            "",
+            "| Approach | Precision | Recall | False-positive rate "
+            "| Still alerting after the fix |",
+            "|---|---|---|---|---|",
+        ]
+        for score in approaches:
+            lines.append(
+                f"| {score.approach.name} "
+                f"| {metrics.format_rate(score.matrix.precision)} "
+                f"| {metrics.format_rate(score.matrix.recall)} "
+                f"| {metrics.format_rate(score.matrix.false_positive_rate)} "
+                f"| {score.flagged_when_clean} feature(s) |"
+            )
+        lines += [
+            "",
+            "What each one can see:",
+            "",
+        ]
+        lines += [f"- **{s.approach.name}**: {s.approach.note}." for s in approaches]
+        lines += [
+            "",
+            "The last column is the one that decides whether a tool survives contact with a",
+            "team. An approach that cannot tell which column carries the label also cannot",
+            "tell when somebody has fixed it, so it keeps alerting on a graph that is now",
+            "clean, and gets switched off. Recall alone would have called it excellent.",
+            "",
+            "Read this for what it is. These are implementations of an *approach*, written",
+            "here and handed ModelGuard's own label index and source-column resolution so",
+            "nothing is won by one side starting better informed. No Great Expectations,",
+            "Deequ, Evidently or NannyML process was run, and no claim is made about those",
+            "products' own behaviour. The no-lineage row is true by construction rather than",
+            "by measurement: leakage is a path, and that approach holds no paths.",
+        ]
+
     lines += [
         "",
         "## Latency",
@@ -429,10 +548,20 @@ def main() -> None:
     print("Write-back and idempotency (this one writes)...")
     writeback = measure_writeback(conn, config)
 
+    print("Comparing against approaches without column-level lineage...")
+    approaches = measure_leakage_approaches(conn, config)
+
     print("Restoring the seeded baseline...")
     restore_baseline(conn)
 
-    report = render_results(outcomes, blast, writeback, config, generated_at=datetime.now(UTC))
+    report = render_results(
+        outcomes,
+        blast,
+        writeback,
+        config,
+        generated_at=datetime.now(UTC),
+        approaches=approaches,
+    )
     args.out.write_text(report)
     print(f"\nWrote {args.out}")
 

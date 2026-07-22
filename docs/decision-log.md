@@ -16,6 +16,55 @@ Entry template:
 
 ---
 
+## D-050: The central claim becomes a measured number, and the baseline is written to be fair (2026-07-22)
+- Decided by: Ahmed Saad (chose to keep adding depth before thinking about
+  submission), built by Claude
+- Decision: `benchmarks/baselines.py` scores two approaches without column-level
+  lineage on the same graph, the same trials, and the same ground truth as
+  ModelGuard: table-level lineage, and table quality checks with no lineage at
+  all. Scored per **feature** rather than per model, because every approach gets
+  "does this model leak" right on a leaking graph; the question that separates
+  them is *which* feature leaks, which is the one somebody has to act on.
+- Why: "only cross-boundary, column-level lineage both roots the failure to the
+  exact upstream column and names the model at risk" was the project's central
+  claim and was argued everywhere and measured nowhere. Argued, it is a slogan
+  a reader either accepts or does not. Measured, it is a table.
+- The measurement, per feature over both graph states (leaking, and reverted):
+
+  | Approach | Precision | Recall | FP rate | Still alerting after the fix |
+  |---|---|---|---|---|
+  | ModelGuard (column-level) | 1.00 | 1.00 | 0.00 | 0 features |
+  | Table-level lineage | 0.25 | 1.00 | 1.00 | 2 features |
+  | No lineage | - | 0.00 | 0.00 | 0 features |
+
+- The result is more interesting than the claim was. Table-level lineage scores
+  **perfect recall**: it does catch the leak, and a benchmark reporting recall
+  alone would have called it excellent. What it cannot do is say which of the two
+  features carries the label, because both descend from the same labelled table,
+  and, never having seen the column edge, it cannot see that edge being removed
+  either. So it keeps alerting on a graph somebody has already fixed. That last
+  column, not precision, is what gets a reliability tool muted.
+- Options considered: (a) run real Great Expectations and Evidently processes,
+  (b) implement the *approaches* faithfully, (c) leave the claim argued. (b)
+  chosen. (a) buys heavy dependencies, install risk on a judge's machine, and a
+  comparison against those products' defaults rather than against the idea, and
+  the honest version of (a) is a much larger piece of work than it looks. (c) was
+  rejected once it was clear (b) fits in an afternoon.
+- On integrity, which is the whole risk here: a baseline written to lose proves
+  nothing, and would pass a suite that only ever checked ModelGuard came first.
+  The table-level detector is handed ModelGuard's own label index and its own
+  source-column resolution, and differs in exactly one respect, that it asks
+  lineage questions of tables where ModelGuard asks them of columns. Its tests
+  assert first that it *genuinely detects the leak*, and the mutation check runs
+  both ways: turning it into a strawman that never flags fails three tests, and
+  turning it into a function that always flags fails the fairness test. Both
+  directions of rigging are caught. benchmarks/CLAUDE.md rule 9 records this.
+- Result: RESULTS.md and the README carry the table, both stating plainly that
+  these are implementations of an approach and that no Great Expectations, Deequ,
+  Evidently or NannyML process was run, and that the no-lineage row is true by
+  construction rather than by measurement. 332 offline tests (up from 325), 39
+  integration. Still not built: Jenga injection, the scale test, `golden/`.
+
 ## D-049: A security review found the prompt-injection defence was delimited but not escaped (2026-07-22)
 - Decided by: Ahmed Saad (asked for security and robustness first), review and fixes by Claude
 - Decision: Audit every control the hardening doc section D claims, against the code
