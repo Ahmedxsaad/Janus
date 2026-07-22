@@ -17,7 +17,13 @@ from datahub.metadata.schema_classes import (
     StructuredPropertiesClass,
 )
 
-from modelguard.cli import TableResolutionError, WatchState, _watch_once, resolve_table
+from modelguard.cli import (
+    TableResolutionError,
+    WatchState,
+    _watch_once,
+    app,
+    resolve_table,
+)
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from tests.conftest import (
@@ -248,3 +254,15 @@ def test_recovery_resolves_incident_and_clears_model_risk_state():
         a.propertyUrn != "urn:li:structuredProperty:modelguard.risk_flags"
         for a in properties.properties
     )
+
+
+def test_the_cli_never_renders_locals_into_a_traceback():
+    """Locals in a traceback would print the DataHub token.
+
+    The frames that open a connection hold the raw token, and the SDK's own
+    DatahubClientConfig prints it in its repr, so a pretty traceback carrying
+    locals would put a credential on the terminal and into any CI log. Typer's
+    default is already False; this asserts ModelGuard's own choice, so an upstream
+    change of default cannot quietly turn it back on.
+    """
+    assert app.pretty_exceptions_show_locals is False
