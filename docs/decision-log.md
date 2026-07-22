@@ -16,6 +16,40 @@ Entry template:
 
 ---
 
+## D-048: A test pass over the benchmark found the demo's own command sequence can look broken (2026-07-22)
+- Decided by: Ahmed Saad (asked for thorough testing before moving on), work by Claude
+- Decision: Print an indexing note after every `modelguard-scenario` that changes
+  state a detector reads through an index, and say the same thing in the README's
+  Try-it block. Add the two regression suites the pass showed were missing:
+  `tests/integration/test_scenario_convergence.py` (scenarios must converge, not
+  accumulate) and `tests/benchmarks/test_report.py` (an unscoreable trial is
+  excluded from the metrics and disclosed).
+- Options considered: for the indexing lag, (a) leave it, (b) note it on the
+  command and in the README, (c) have `modelguard-scenario` block until its own
+  write is visible before exiting. (b) chosen now; (c) is the better demo
+  behaviour and is left as an open question, because it changes a command that
+  currently returns immediately and that is a product decision, not a fix.
+- Why: running the README's own sequence end to end, rather than only its parts,
+  showed `modelguard scan` reporting the pre-change state when run within about
+  three seconds of `modelguard-scenario`. The `operation` aspect is a timeseries,
+  so it reaches a reader through Kafka and Elasticsearch; measured at 2.99s to
+  plant and 2.98s to revert on a local Quickstart. Nothing is wrong with the
+  detector, but a judge pasting the block sees a tool that missed an obvious
+  failure, and the demo video is a scored deliverable running that exact sequence.
+  The leakage path already warned; freshness did not, which is why it was only
+  found by running it.
+- Result: `_INDEXING_NOTE` on the freshness and leakage CLI paths (schema drift is
+  exempt: `schemaMetadata` is versioned and served synchronously). README states
+  the caveat. Also verified in this pass, none of which had been checked before:
+  the benchmark is reproducible (two runs identical on every measured outcome
+  bar timestamps and timings); seeding stays byte-for-byte idempotent
+  immediately after a bench run; three revert/plant cycles, a re-seed underneath
+  a reverted graph, and all three scenarios interleaved all leave the column
+  lineage exactly where it started; a forced precondition timeout is excluded
+  from the confusion matrix and disclosed, where counting it would have logged a
+  false positive and dropped precision for a harness fault. 354 tests (315
+  offline, 39 integration), up from 338.
+
 ## D-047: ModelGuard-Bench measures a live graph, and the sweep is what makes it mean anything (2026-07-22)
 - Decided by: Ahmed Saad (chose the bench as the next build, and the core scope),
   built by Claude
