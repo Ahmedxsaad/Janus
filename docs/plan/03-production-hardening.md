@@ -143,7 +143,9 @@ territory (`resources.md §10`). Controls:
       baseline comparison table, and a scale-test curve.
 - [ ] Deterministic detection with unit tests (positives caught, negatives clean - no false positives).
 - [ ] Idempotent, least-privilege, human-gated write-back; security notes in README.
-- [ ] `watch` mode (event-driven) **or** a documented polling fallback; `scan` mode for CI.
+- [x] `watch` mode (event-driven) **or** a documented polling fallback; `scan` mode for CI.
+      Shipped as the polling fallback (`cli.py watch`, D-039); event-driven MCL/Kafka
+      remains the documented upgrade path, not built.
 - [ ] Self-observability (structured logs + metrics) and a stated SLO/MTTD target.
 - [ ] "No raw data to the LLM" privacy property called out explicitly.
 - [ ] Every literature claim in reports/README cites a named source from `resources.md`.

@@ -123,6 +123,14 @@ X ..> L5
 ## 5. Component catalog
 
 ### ① Trigger layer (`agent/`, `cli.py`, `seed/scenarios.py`)
+
+> **Landed 2026-07-16/17** (D-039, D-040). `watch` shipped as the **polling** loop
+> only: `cli.py watch` re-scans on an interval, diffs the finding set against the
+> previous poll, and acts only on a transition (new finding or a recovery), never on
+> every poll. It never depends on Kafka timing. The MCL/Actions consumer sketched
+> below did not ship; it remains the documented upgrade path for when sub-poll-
+> interval latency matters.
+
 - **MCL consumer (`watch`)** - subscribes to DataHub's `MetadataChangeLog` via the Actions framework (Kafka
   consumer group, at-least-once). Filters to interesting aspects: `schemaMetadata`, assertion results,
   `datasetProfile`, `operation`. Emits a `Trigger{entity_urn, change_type}` onto the core. Falls back to
@@ -286,11 +294,11 @@ endlegend
 
 | | `scan` (batch) | `watch` (event-driven) |
 |---|---|---|
-| **Trigger** | cron / CLI / CI | DataHub `MetadataChangeLog` (Kafka) + polling fallback |
-| **Scope** | all models (or one) | only the changed entity's downstream cone (incremental) |
+| **Trigger** | cron / CLI / CI | interval poll (shipped); `MetadataChangeLog` (Kafka) is the documented upgrade path, not built |
+| **Scope** | all models (or one) | re-scans and diffs the finding set against the previous poll (not yet an incremental, changed-entity-only scope) |
 | **Use** | audit-before-promotion, CI gate, demo "before", benchmark | always-on on-call sentinel, demo "3 AM" moment |
 | **Core** | identical detect → reason → write-back | identical |
-| **Build order** | first (bulletproof) | second (adds Kafka; keep polling fallback) |
+| **Build order** | first (bulletproof), shipped | second, shipped as polling only; Kafka/Actions not started |
 
 ---
 
@@ -340,7 +348,8 @@ GMS --> LOG
 - **Demo/judge deployment:** one `quickstart.sh` boots DataHub, loads a datapack, seeds the ML graph, and runs
   `modelguard scan`. Zero external infra except the LLM API key.
 - **"Production" posture:** the same image scales out as stateless workers against a shared DataHub + Postgres
-  run-state; `watch` mode reads the MCL Kafka topic via a consumer group.
+  run-state; `watch` mode polls on an interval today (shipped). Reading the MCL Kafka
+  topic via a consumer group is the documented upgrade path, not yet built.
 
 ---
 

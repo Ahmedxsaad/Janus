@@ -1,8 +1,10 @@
 # CLAUDE.md - skill
 
-OSS contribution: datahub-ml-guard, intended as the first ML skill in the
-datahub-skills registry (gap verified July 2026). Built here, then PRed to
-datahub-project/datahub-skills.
+OSS contribution: datahub-ml-guard. Several ML-reliability skills are already
+open PRs against datahub-skills (drift, trust-score, leakage, RCA); ours is
+differentiated by wrapping a real, tested, deterministic detection engine
+(this repo) rather than an LLM reasoning over lineage from a prompt file
+(D-043). Built here, then PRed to datahub-project/datahub-skills.
 
 ## Local rules
 
@@ -22,3 +24,4 @@ datahub-project/datahub-skills.
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: upstream mirroring and standalone rules |
 | 2026-07-21 | Claude (for Ghassen Naouar) | datahub-ml-guard skill lands: SKILL.md + scripts/ (thin CLI wrappers) + references/. Mirrors the datahub-enrich format (D-041) |
+| 2026-07-22 | Claude (for Ahmed Saad) | Drop the "first ML skill" claim (false: several overlapping skills already open upstream); state the real differentiator, a tested deterministic engine behind it (D-043) |
