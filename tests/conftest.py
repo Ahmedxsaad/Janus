@@ -108,13 +108,24 @@ class FakeGraph:
 
 
 class FakeEntities:
-    """Records entities handed to client.entities.upsert."""
+    """Records entities handed to client.entities.upsert and patch builders to update."""
 
     def __init__(self) -> None:
         self.upserted: list[Any] = []
+        self.updated: list[Any] = []
 
     def upsert(self, entity: Any, **_: Any) -> None:
         self.upserted.append(entity)
+
+    def update(self, patch_builder: Any, **_: Any) -> None:
+        """Record a patch builder, the way the real client accepts one.
+
+        Undoing one column-lineage edge has to go through a patch: add_lineage's
+        own patch is additive, so re-sending a reduced mapping would leave the
+        removed edge in place. The builder is kept whole so a test can build it
+        and assert on the JSON patch that would actually reach GMS.
+        """
+        self.updated.append(patch_builder)
 
 
 class FakeLineage:
