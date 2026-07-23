@@ -57,13 +57,6 @@ jobs:
   audit:
     name: dependency audit
     runs-on: ubuntu-latest
-    # Advisory rather than blocking, and the distinction is deliberate. An
-    # advisory against a transitive build tool with no released fix would
-    # otherwise hold every unrelated pull request hostage. Anything reachable at
-    # runtime gets pinned in pyproject instead of tolerated here, which is what
-    # happened with PYSEC-2026-3447 (D-049). This job exists so a new advisory is
-    # seen the day it lands rather than the week before a submission.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v5
 
@@ -76,5 +69,21 @@ jobs:
       - name: Install the project
         run: python -m pip install --upgrade pip && pip install -e "." pip-audit
 
+      # This job blocks. An audit that cannot fail teaches everyone to ignore it,
+      # and a job wearing a permanent red X teaches the same lesson faster, so a
+      # known-and-unfixable finding is named here rather than tolerated by
+      # letting the whole job fail forever.
+      #
+      # PYSEC-2026-3447 (setuptools, MANIFEST.in exclusions bypassed by Unicode
+      # normalization when building an sdist) is fixed in 83.0.0, and
+      # acryl-datahub 1.6.0.13 declares setuptools<82.0.0. No environment holding
+      # the SDK can satisfy both, so this is not a finding this project can act
+      # on. It is not reachable either: the flaw is in *building* an sdist, and
+      # nothing here builds or publishes one. Reported upstream as finding 13 in
+      # docs/most-valuable-feedback.md.
+      #
+      # Scoped to that one id on purpose. Any other advisory, including a future
+      # one against setuptools, still fails this job. Delete the flag the moment
+      # acryl-datahub raises its ceiling.
       - name: Audit dependencies for known vulnerabilities
-        run: pip-audit --progress-spinner off
+        run: pip-audit --progress-spinner off --ignore-vuln PYSEC-2026-3447
