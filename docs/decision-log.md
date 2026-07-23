@@ -35,16 +35,25 @@ Entry template:
   under review, and a red build nobody trusts is worse than no build. They stay a
   local gate. The workflow says so in a comment rather than leaving the omission
   to be discovered.
-- Why the audit is advisory: `pip-audit` reports PYSEC-2026-3447 against
-  setuptools 81.0.0, and it turns out **that cannot be fixed here**.
-  `acryl-datahub` 1.6.0.13 declares `setuptools<82.0.0`, while the advisory is
-  fixed in 83.0.0, so `pip install "setuptools>=83"` alongside the SDK is refused
-  as a dependency conflict (reproduced, and the resulting environment still
-  passes 334 tests, so the ceiling looks conservative rather than load-bearing).
-  A blocking job would therefore hold every unrelated pull request hostage to a
-  constraint this project does not own. Anything reachable at runtime gets pinned
-  in pyproject instead, which is what D-049 did. The job exists so a new advisory
-  is seen the day it lands rather than the week before a submission.
+- The audit job, and a correction. `pip-audit` reports PYSEC-2026-3447 against
+  setuptools, and **that cannot be fixed here**: `acryl-datahub` 1.6.0.13
+  declares `setuptools<82.0.0` while the advisory is fixed in 83.0.0, so
+  `pip install "setuptools>=83"` alongside the SDK is refused as a dependency
+  conflict (reproduced; the resulting environment still passes 334 tests, so the
+  ceiling looks conservative rather than load-bearing). It first shipped as
+  `continue-on-error: true`, reasoning that a blocking job would hold unrelated
+  pull requests hostage to a constraint this project does not own.
+  **That was wrong, and this same entry argues why**: a job marked
+  continue-on-error still paints a red X on every run, which teaches everyone to
+  ignore the Actions tab faster than a genuinely failing build would. It
+  contradicted the reasoning three paragraphs above about the integration suite,
+  that a red build nobody trusts is worse than no build. Corrected the same day,
+  after Ahmed Saad pointed at the red job: `continue-on-error` is gone and the
+  step passes `--ignore-vuln PYSEC-2026-3447`, so the job blocks again and names
+  the one finding it will not act on, with the reason and the deletion condition
+  in a comment beside it. Scoped to that id: a control run ignoring a different
+  id was verified still to fail on the real one, so any new advisory, including a
+  future setuptools one, turns the job red.
 - Result: CI green on the exact commands, verified locally before pushing rather
   than by watching the first run go red: `pre-commit run --all-files` (11 hooks,
   all pass), `pytest -m "not integration"` (334), `pip-audit`. The `pyproject`
