@@ -1,0 +1,107 @@
+# A reusable GitHub Action, so a team adopts the gate in five lines of YAML rather
+# than by reading the CLI's help. It lives at the repository root because that is
+# where GitHub looks when a workflow says `uses: <owner>/<repo>@<ref>`.
+#
+# Composite rather than Docker: a Docker action would rebuild or pull an image on
+# every run, and this needs a Python environment the caller very often already has.
+# Composite keeps the gate a few seconds of work on a warm runner.
+name: ModelGuard ML Guard
+description: >-
+  Fail a pull request when a change would ship a model with target leakage,
+  training-serving schema drift, or an unsafe upstream, judged from DataHub's
+  column-level lineage.
+author: ModelGuard
+
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  model:
+    description: "Model to gate on: a full mlModel URN, or a name like credit_risk_v3."
+    required: false
+  table:
+    description: "Dataset to gate on: a full dataset URN, or a name like loans_raw."
+    required: false
+  block-at-or-above:
+    description: >-
+      Fail on any finding this severe or worse: critical, high, medium, low.
+      Leave both policy inputs empty to report without enforcing.
+    required: false
+  min-trust:
+    description: Fail when any model's trust score falls below this (0-100).
+    required: false
+  gms-url:
+    description: "DataHub GMS URL, for example http://localhost:8080."
+    required: true
+  gms-token:
+    description: >-
+      DataHub personal access token. Pass a secret, never a literal. Optional
+      against an instance with metadata service authentication disabled.
+    required: false
+  sla-hours:
+    description: "Freshness SLA in hours. Overrides the ModelGuard default."
+    required: false
+  write:
+    description: >-
+      Write findings back to DataHub. Off by default: a gate runs on every push,
+      and one incident per run would fill the graph with findings about branches
+      that never merged.
+    required: false
+    default: "false"
+  version:
+    description: "ModelGuard version specifier to install, for example ==0.1.0."
+    required: false
+    default: ""
+
+outputs:
+  blocked:
+    description: "true when the policy was violated."
+    value: ${{ steps.gate.outputs.blocked }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install ModelGuard
+      shell: bash
+      run: python -m pip install --quiet "modelguard${{ inputs.version }}"
+
+    - name: Run the gate
+      id: gate
+      shell: bash
+      env:
+        # The token reaches the process through the environment, never through a
+        # command line: an argument is visible in the process table and in the
+        # runner's own command echo, and GitHub only masks a secret in log text.
+        DATAHUB_GMS_URL: ${{ inputs.gms-url }}
+        DATAHUB_GMS_TOKEN: ${{ inputs.gms-token }}
+      run: |
+        set -o pipefail
+        args=()
+        [ -n "${{ inputs.model }}" ] && args+=(--model "${{ inputs.model }}")
+        [ -n "${{ inputs.table }}" ] && args+=(--table "${{ inputs.table }}")
+        [ -n "${{ inputs.block-at-or-above }}" ] && args+=(--block-at-or-above "${{ inputs.block-at-or-above }}")
+        [ -n "${{ inputs.min-trust }}" ] && args+=(--min-trust "${{ inputs.min-trust }}")
+        [ -n "${{ inputs.sla-hours }}" ] && args+=(--sla-hours "${{ inputs.sla-hours }}")
+        [ "${{ inputs.write }}" = "true" ] && args+=(--write)
+
+        # The exit code is the product here, so it is captured rather than left to
+        # end the step: 1 means the policy was violated and the step should fail
+        # with a message the author can act on, while 2 means the gate could not
+        # reach a verdict. Both fail the build, but they are reported differently,
+        # because a team that cannot tell them apart learns to ignore both.
+        set +e
+        modelguard gate "${args[@]}"
+        code=$?
+        set -e
+
+        if [ $code -eq 0 ]; then
+          echo "blocked=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "blocked=true" >> "$GITHUB_OUTPUT"
+        if [ $code -eq 2 ]; then
+          echo "::error title=ModelGuard::The gate could not reach a verdict. This is a setup or connectivity failure, not a finding about your model."
+        fi
+        exit $code

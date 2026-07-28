@@ -29,6 +29,13 @@ from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.config import ScanConfig
 from modelguard.detect.trust_score import trust_inputs_from_findings, trust_score
 from modelguard.env import ConfigError
+from modelguard.gate import (
+    EXIT_ERROR,
+    GatePolicy,
+    evaluate,
+    github_annotations,
+    summary,
+)
 from modelguard.llm import LLMConfig, llm_config_from_env
 from modelguard.models import (
     Finding,
@@ -36,6 +43,7 @@ from modelguard.models import (
     LeakageFinding,
     ModelRef,
     SchemaDriftFinding,
+    Severity,
 )
 from modelguard.writeback.incidents import find_active_incident, resolve_incident
 from modelguard.writeback.labels import remove_tag
@@ -804,6 +812,125 @@ def watch(
             time.sleep(interval)
     except KeyboardInterrupt:
         console.print("\n[dim]watch stopped.[/dim]")
+
+
+@app.command()
+def gate(
+    table: Annotated[
+        str | None,
+        typer.Option(
+            "--table", help="Dataset to gate on: a full URN, or a name such as loans_raw."
+        ),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model", help="Model to gate on: a full URN, or a name like credit_risk_v3."
+        ),
+    ] = None,
+    block_at_or_above: Annotated[
+        str | None,
+        typer.Option(
+            "--block-at-or-above",
+            help="Fail on any finding this severe or worse: critical, high, medium, low.",
+        ),
+    ] = None,
+    min_trust: Annotated[
+        float | None,
+        typer.Option(
+            "--min-trust", help="Fail when any model's trust score is below this (0-100)."
+        ),
+    ] = None,
+    write: Annotated[
+        bool,
+        typer.Option(
+            "--write",
+            help="Also write findings back. Off by default: a gate runs on every push.",
+        ),
+    ] = False,
+    sla_hours: Annotated[
+        float | None,
+        typer.Option("--sla-hours", help="Freshness SLA in hours. Overrides the env default."),
+    ] = None,
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Skip the LLM. A gate needs a verdict, not prose."),
+    ] = True,
+    llm_provider: Annotated[
+        str | None, typer.Option("--llm-provider", help="Override MODELGUARD_LLM_PROVIDER.")
+    ] = None,
+    llm_model: Annotated[
+        str | None, typer.Option("--llm-model", help="Override MODELGUARD_LLM_MODEL.")
+    ] = None,
+) -> None:
+    """Fail the build when a change would ship an unsafe model.
+
+    The preventive half of ModelGuard, for a pull request rather than a postmortem.
+    It runs the same detectors ``scan`` runs, judges them against a policy, and
+    answers in an exit code: 0 shippable, 1 blocked, 2 could not tell.
+
+    That third code matters more than it looks. A gate that reported "I could not
+    reach DataHub" as a policy violation would teach the team to read every red
+    build as flakiness, and the first real finding would be waved through with the
+    rest. Setup failures exit 2, always, and never 1.
+
+    Writes nothing unless asked. A gate runs on every push to every branch, most
+    of which never merge, so raising an incident per run would fill the graph with
+    findings about code that does not exist. The write-back belongs on the branch
+    that merged, which is what ``scan`` is for.
+
+    With no policy flag it reports and passes, deliberately: a gate that fails the
+    moment it is installed, before anyone has said what they care about, gets
+    removed the same afternoon.
+    """
+    try:
+        policy = GatePolicy(
+            block_at_or_above=Severity(block_at_or_above) if block_at_or_above else None,
+            min_trust_score=min_trust,
+        )
+    except ValueError as exc:
+        allowed = ", ".join(level.value for level in Severity)
+        console.print(f"[red]{block_at_or_above!r} is not a severity. Use one of: {allowed}.[/red]")
+        raise typer.Exit(code=EXIT_ERROR) from exc
+
+    # Any setup failure is "could not reach a verdict", so _prepare's own exit
+    # codes are remapped onto EXIT_ERROR rather than leaking through as a policy
+    # violation. This is the distinction the whole command rests on.
+    try:
+        conn, config, llm, table_urn, model_urn = _prepare(
+            table=table,
+            model=model,
+            sla_hours=sla_hours,
+            no_llm=no_llm,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+        )
+    except typer.Exit as exc:
+        raise typer.Exit(code=EXIT_ERROR) from exc
+
+    report = run_scan(
+        conn,
+        config,
+        table_urn=table_urn,
+        model_urn=model_urn,
+        llm=llm,
+        dry_run=not write,
+    )
+    verdict = evaluate(report, policy)
+
+    for finding in (write_.finding for write_ in report.writes):
+        _print_finding(finding)
+    for line in github_annotations(verdict):
+        # Printed raw: GitHub reads these as workflow commands and turns them into
+        # inline pull-request annotations. Other CI systems see ordinary output.
+        print(line)
+
+    colour = "red" if verdict.blocked else "green"
+    console.print(f"[{colour}]{summary(verdict)}[/{colour}]")
+    if write:
+        console.print(f"[dim]run id: {report.run_id}[/dim]")
+
+    raise typer.Exit(code=verdict.exit_code)
 
 
 def main() -> None:
