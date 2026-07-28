@@ -1,0 +1,28 @@
+# Keep the build context to what the image actually needs: source, packaging
+# metadata, and the README pyproject's [project] table points readme at. Nothing
+# generated, nothing personal, and nothing that changes on every commit for a
+# reason the image should not be rebuilt over (build artifacts, caches, test runs).
+
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.git/
+.github/
+
+# Personal and machine-specific. Configuration reaches a container through
+# --env-file or -e at run time, never baked into the image (modelguard/CLAUDE.md,
+# no defaults for identity values).
+.env
+.claude/
+
+# Generated or judge-facing artifacts with no bearing on what the image runs.
+benchmarks/RESULTS.md
+examples/
+docs/
+*.md
+!README.md
