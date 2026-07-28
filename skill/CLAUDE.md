@@ -25,3 +25,4 @@ differentiated by wrapping a real, tested, deterministic detection engine
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: upstream mirroring and standalone rules |
 | 2026-07-21 | Claude (for Ghassen Naouar) | datahub-ml-guard skill lands: SKILL.md + scripts/ (thin CLI wrappers) + references/. Mirrors the datahub-enrich format (D-041) |
 | 2026-07-22 | Claude (for Ahmed Saad) | Drop the "first ML skill" claim (false: several overlapping skills already open upstream); state the real differentiator, a tested deterministic engine behind it (D-043) |
+| 2026-07-23 | Claude (for Ahmed Saad) | Prerequisite changes from "clone the ModelGuard repo, pip install -e ." to "pip install modelguard-datahub", now that the package is on PyPI. Closes the modelguard-dependency wrinkle docs/plan/05-oss-delivery.md flagged as an expected reviewer question (D-055) |

@@ -16,6 +16,54 @@ Entry template:
 
 ---
 
+## D-055: The PyPI distribution is modelguard-datahub, not modelguard (2026-07-23)
+- Decided by: Ahmed Saad (chose the name from the options presented), by Claude
+- Decision: `pyproject.toml`'s `[project] name` becomes `modelguard-datahub`. Every
+  installed artifact keeps its existing name: the CLI is still `modelguard`, the
+  import package is still `modelguard`, the console scripts are still
+  `modelguard-mcp`/`modelguard-seed`/`modelguard-scenario`. Only what a user types
+  into `pip install <X>` changes. `[project.urls]`, `authors`, `keywords`, and
+  `classifiers` were added; the project had none before.
+- Why: checked before assuming the obvious name was free. It was not.
+  `https://pypi.org/pypi/modelguard/json` returns 200: an unrelated package already
+  holds the exact name `modelguard` (one release, 0.1.0, summary "TODO", apparently
+  abandoned). PyPI names are global and are never reclaimed because a package looks
+  unused, so publishing under it was never an option, not a matter of asking. Five
+  alternates were checked available before presenting the choice; `-datahub` was
+  chosen over `datahub-` because it reads as "ModelGuard, for DataHub" rather than
+  leading with the sponsor's name.
+- Two real, version-specific bugs found by actually building the package, not by
+  writing the config and assuming it would work: (1) setuptools>=83 implements
+  PEP 639 and raises `InvalidConfigError`, not a warning, when a classic `License
+  :: OSI Approved :: Apache Software License` classifier is present alongside a
+  valid SPDX `license = "Apache-2.0"` expression; the classifier had to go, the
+  license field is now the single source of truth, and a second one that could
+  drift from it would be worse than neither. (2) The system default `python3`
+  (3.14) cannot even resolve the wheel, correctly rejected as `not in '<3.12,>=3.11'`
+  by pip's own metadata check, which is the requires-python pin working as
+  designed rather than a bug; the clean-install test had to be built with the
+  same 3.11.14 interpreter the project's own `.venv` uses.
+- Verified end to end, not just built: `twine check` passes both the sdist and the
+  wheel. Installed the wheel into a genuinely fresh venv (no project code, no
+  cached wheels) and confirmed all four console scripts run, `modelguard gate
+  --help` works, `pip show` reports the license via the modern
+  `License-Expression: Apache-2.0` metadata field, and the `agent`/`mcp` extras
+  are real: importing `mcp` or `langgraph` fails in the base install and succeeds
+  once `[mcp]` is requested.
+- A cross-file consistency bug found and fixed in the same pass: `action.yml`'s
+  own install step still read `pip install modelguard${{ inputs.version }}`, which
+  after this rename would have silently installed the *wrong, unrelated* PyPI
+  package into every CI run using the bundled Action. Caught by grepping the whole
+  repo for the old install pattern after the rename, not by re-reading the Action
+  file from memory.
+- Result: `dist/modelguard_datahub-0.1.0-{py3-none-any.whl,tar.gz}` built and
+  validated (not published: that needs this project's own PyPI account and
+  credentials, which is this session's call to make, not something to do without
+  being asked). `skill/datahub-ml-guard/SKILL.md`'s prerequisite changes from
+  "clone the ModelGuard repo, `pip install -e .`" to a one-line `pip install
+  modelguard-datahub`, closing the "modelguard-dependency wrinkle" the OSS
+  delivery doc flagged as an expected upstream reviewer question (section 8.1).
+
 ## D-054: Docker composes with the Quickstart's network instead of reimplementing it (2026-07-23)
 - Decided by: Ahmed Saad (asked for deployment packaging: Docker, Helm, a hosted VM), by Claude
 - Decision: `Dockerfile` (multi-stage, non-root, pinned to `python:3.11.14-slim`,

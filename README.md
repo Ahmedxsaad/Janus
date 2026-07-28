@@ -64,6 +64,12 @@ modelguard-scenario --lag-hours 30   # a source table silently stops refreshing
 modelguard scan --table loans_raw    # detect, explain, write back
 ```
 
+Not developing on ModelGuard itself, just want the CLI against your own DataHub?
+`pip install modelguard-datahub` (add `[agent]` for `scan --review`, `[mcp]` for
+`modelguard-mcp`). The distribution is named `-datahub`, since the exact name
+`modelguard` was already taken on PyPI by an unrelated package; the commands you
+run are still `modelguard`, `modelguard gate`, `modelguard-mcp`.
+
 The scan names the live model at risk, then writes the incident, the
 `model-at-risk` tag, the risk properties, the guarding assertion, and the impact
 report into DataHub. Run it twice: nothing duplicates.
