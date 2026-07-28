@@ -16,6 +16,40 @@ Entry template:
 
 ---
 
+## D-053: A read-only MCP server, the fourth trigger, hits criterion 1's named surface (2026-07-23)
+- Decided by: Ahmed Saad (asked for a second original feature), by Claude
+- Decision: `modelguard/mcp_server.py` exposes three tools over MCP:
+  `check_leakage`, `check_freshness`, `check_gate`. Each wraps `run_scan` in
+  dry-run and nothing else. `modelguard-mcp` serves them over stdio.
+- Why: the hackathon's judging criteria name the MCP Server explicitly as one of
+  the surfaces criterion 1 (Use of DataHub) rewards, and at runtime ModelGuard
+  used none of them, only the SDK directly. This closes that gap and gives the
+  demo a second mode: instead of a terminal, an operator can ask an MCP client
+  "is credit_risk_v3 leaking?" in plain language and get a real, measured answer.
+- The one design decision that mattered: every tool is read-only, enforced by
+  registering each with `readOnlyHint: true` and calling `run_scan` with
+  `dry_run=True` unconditionally, no flag to turn it off. Not a cautious default,
+  a hard boundary, for the same reason `gate` reads and does not write (D-052):
+  the model making the tool call is not ModelGuard's own narrator gated by
+  `--review`, it is whatever model the MCP client is running, entirely outside
+  this project's control. Handing a tool like that a write capability would let
+  an ordinary conversation turn into an unreviewed mutation of the governance
+  graph, which is exactly what root CLAUDE.md rule 4 and D-027 exist to prevent
+  for the narrator; this extends the same law to a trigger surface neither of
+  those decisions anticipated.
+- Verified live rather than assumed from the annotation: `check_leakage` on the
+  seeded (leaking) model returns the leak path and a 70/100 trust score;
+  `check_gate` with `block_at_or_above=high` returns BLOCKED with the same
+  violation `modelguard gate` prints; `check_freshness` on the reverted table
+  returns clean. `tests/test_mcp_server.py` pins the read-only property against
+  the server's actual registration (`list_tools()`, the same call an MCP client
+  makes), not against the constant in isolation; mutation-checked by dropping the
+  annotation from one tool's registration, which fails the suite.
+- Result: 9 new offline tests, 362 total (up from 353). `mcp` is an optional
+  extra (`pip install -e ".[mcp]"`), not a core dependency, matching how the
+  `agent` extra and the three LLM-provider extras are scoped: the batch scan and
+  gate paths need no MCP runtime at all.
+
 ## D-052: A CI gate makes the "missing CI for ML" tagline literally true (2026-07-23)
 - Decided by: Ahmed Saad (asked for an original feature scoring a new point), by Claude
 - Decision: `modelguard gate` and `modelguard/gate.py` add the preventive half of
