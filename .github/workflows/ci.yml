@@ -169,3 +169,43 @@ jobs:
               exit 1
             }
           done
+
+  deploy-files:
+    name: deploy runbook files are syntactically valid
+    runs-on: ubuntu-latest
+    # No live Azure VM to test against, same reasoning as the docker and helm
+    # jobs above: this proves the files are well-formed, not that a real VM
+    # provisions correctly from them. docs/deploy/azure-vm.md says so too.
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: cloud-init.yaml is valid YAML with the expected top-level shape
+        run: |
+          python3 -c "
+          import yaml
+          with open('deploy/azure/cloud-init.yaml') as f:
+              d = yaml.safe_load(f.read())
+          assert 'runcmd' in d and 'write_files' in d, 'missing expected cloud-config sections'
+          print(f\"{len(d['runcmd'])} runcmd entries, {len(d['write_files'])} write_files entries\")
+          "
+
+      - name: Every runcmd shell fragment is syntactically valid
+        run: |
+          python3 -c "
+          import yaml
+          with open('deploy/azure/cloud-init.yaml') as f:
+              d = yaml.safe_load(f.read())
+          script = '#!/bin/bash\nset -e\n'
+          for cmd in d['runcmd']:
+              if isinstance(cmd, list):
+                  script += ' '.join(f\"'{c}'\" if ' ' in str(c) or '/' in str(c) else str(c) for c in cmd) + '\n'
+              else:
+                  script += cmd + '\n'
+          with open('/tmp/runcmd.sh', 'w') as out:
+              out.write(script)
+          "
+          bash -n /tmp/runcmd.sh
+
+      - name: modelguard-watch.service passes systemd-analyze verify
+        run: |
+          sudo systemd-analyze verify deploy/azure/modelguard-watch.service

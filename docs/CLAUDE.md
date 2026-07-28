@@ -8,6 +8,9 @@ Reference material, not code. Layers:
   plan, resources, and improvement proposals. This is the source of truth for
   what we build.
 - decision-log.md: the running log of decisions (what, options, why, result).
+- deploy/: operational runbooks (the Azure judge-facing demo VM). Unlike
+  plan/, these describe infrastructure that exists and is meant to be
+  followed step by step, not a strategy.
 
 ## Local rules
 
@@ -26,3 +29,4 @@ Reference material, not code. Layers:
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: doc layers and maintenance rules |
+| 2026-07-23 | Claude (for Ahmed Saad) | Add deploy/: the Azure judge-facing demo VM runbook (D-057) |
