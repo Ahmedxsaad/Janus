@@ -22,6 +22,7 @@ Source of truth for what we build:
 | benchmarks/ | ModelGuard-Bench: injection, metrics, baselines, RESULTS.md |
 | tests/ | pytest unit and integration tests |
 | docs/ | hackathon-specs/ (official rules), plan/, decision-log.md |
+| charts/ | Helm chart for `modelguard watch`, the one long-running entry point |
 
 ## Workflow rules
 
@@ -120,3 +121,4 @@ Source of truth for what we build:
 | 2026-07-08 | Claude (for Ahmed Saad) | Git rules: forbid AI attribution (co-author trailers, generated-with lines) in commits and PRs |
 | 2026-07-08 | Claude (for Ahmed Saad) | Note that the no-attribution rule is enforced via .claude/settings.json |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Code rule 6 rewritten: env.py is the sole config entry point, no fallbacks for identity values, all-or-nothing groups, secret hygiene, .env/.env.example parity. Add rule 8: provider-agnostic LLM |
+| 2026-07-23 | Claude (for Ahmed Saad) | Add charts/ to the repository map: the modelguard-watch Helm chart (D-056) |

@@ -16,6 +16,75 @@ Entry template:
 
 ---
 
+## D-056: A Helm chart for exactly one workload, watch, not a chart per command (2026-07-23)
+- Decided by: Ahmed Saad (asked for a Helm chart for the watch daemon), by Claude
+- Decision: `charts/modelguard-watch/` deploys `modelguard watch` as a Kubernetes
+  Deployment. No chart for `scan` or `gate`: both are one-shot, and a Deployment
+  is the wrong primitive for something that is supposed to run once and exit,
+  a `Job` or a CI step already covers that ground. The MCP server speaks stdio
+  to whatever process launches it, not to a cluster; it has no chart either.
+- Why watch and only watch: it is the one ModelGuard entry point that is
+  actually meant to run forever. Writing charts for the other three would have
+  been packaging for its own sake, not for a workload that needs it.
+- Three defensible-looking defaults were rejected after checking what they
+  would actually cost, not on a first read:
+  - **A liveness/readiness probe.** `watch` is a foreground CLI loop with no
+    HTTP or TCP port to ask, and the container's PID 1 is that process
+    directly (the image's own `ENTRYPOINT`). A fabricated exec probe that
+    checked nothing the code exposes would be worse than none: it would look
+    like a health check while actually just re-testing "is the process still
+    a process," which Kubernetes' own exit-triggers-restart behaviour already
+    covers for free.
+  - **`readOnlyRootFilesystem: true` with no `/tmp` mount.** The chart wants
+    this hardening, but nothing in this environment can prove the full
+    dependency chain (acryl-datahub's HTTP stack, langchain, the mcp SDK)
+    never writes a temp file, and there is no cluster here to watch a pod
+    actually fail if one does. An `emptyDir` mounted at `/tmp` costs nothing
+    and removes an entire class of CrashLoopBackOff nobody could debug without
+    cluster access to see the real error, so it stayed rather than being
+    argued away.
+  - **A ServiceAccount with default token automount.** Caught reviewing the
+    chart's own comment: it claimed no Kubernetes API access was needed and
+    then left the token mounted anyway. `automountServiceAccountToken: false`
+    is set at both the ServiceAccount and the pod, since an explicit pod-level
+    value always wins over the ServiceAccount's, so a future edit to either
+    alone cannot silently re-enable it.
+- `existingSecret` is documented and recommended over the chart's own Secret
+  creation, which exists for a local Quickstart demo and says so in both
+  values.yaml and the chart README: values passed via `secrets.*` land in
+  `helm get values` and this release's stored history in plain text.
+- No live cluster exists in this environment (no `kind`, `minikube`, `k3d`, or
+  `kubectl`), so nothing here was proven to actually run a pod. What was
+  verified, with `helm` installed locally for the purpose: `helm lint --strict`
+  passes; a bare `helm template`/`helm install` fails loudly naming each of the
+  three required values in turn (`watch.table`/`model`, `datahub.gmsUrl`,
+  `image.repository`), rather than deploying a pod that would crash-loop on a
+  one-line config mistake; a realistic render produces exactly the three
+  resources the chart is meant to create (ServiceAccount, Secret, Deployment),
+  parsed and asserted on with a real YAML parser, not eyeballed; the
+  `existingSecret`, `--no-llm`, and both-targets-set branches each render what
+  they are supposed to and nothing else. This gap is stated in the chart's own
+  README and CLAUDE.md rather than left to be discovered: `helm template`
+  proves the chart renders correct Kubernetes YAML, not that a pod starts.
+- `.github/workflows/publish-image.yml` lands so the chart has somewhere real
+  to pull from: builds and pushes the existing Dockerfile image to
+  `ghcr.io/<owner>/datahub/modelguard`, gated on a version tag rather than
+  every push to main, since publishing a public image is a visible action that
+  should stay behind a maintainer's deliberate release step even though, unlike
+  a PyPI upload, it is reversible. Nothing was actually pushed in this pass; no
+  tag exists yet to trigger it.
+- `.pre-commit-config.yaml`'s `check-yaml` hook gained an exclusion for
+  `charts/*/templates/`: Helm's `{{ }}` syntax is not YAML on its own and the
+  hook's parser rejects it outright (verified: ran it against the templates
+  before excluding them, watched it fail on all three). `helm lint`/`helm
+  template`, now run by hand and by a new CI job (`helm`) on every push, are
+  the real check for those files; the exclusion routes the check to the tool
+  that understands the format rather than silently dropping it.
+- Result: `charts/modelguard-watch/` (Chart.yaml, values.yaml, four templates,
+  README, CLAUDE.md), `.github/workflows/publish-image.yml`,
+  `.github/workflows/ci.yml` gains a third-party-equivalent `helm` job mirroring
+  the `docker` job's build-only, no-live-target reasoning.
+
 ## D-055: The PyPI distribution is modelguard-datahub, not modelguard (2026-07-23)
 - Decided by: Ahmed Saad (chose the name from the options presented), by Claude
 - Decision: `pyproject.toml`'s `[project] name` becomes `modelguard-datahub`. Every

@@ -127,3 +127,45 @@ jobs:
         run: |
           docker run --rm --entrypoint sh modelguard:ci -c \
             'command -v modelguard-seed && command -v modelguard-mcp'
+
+  helm:
+    name: helm chart lints and renders
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.21.3
+
+      - name: Lint
+        run: helm lint --strict charts/modelguard-watch
+
+      # No live cluster here, same reasoning as the integration suite and the
+      # docker job: this proves the chart renders valid Kubernetes YAML for a
+      # realistic install, not that a pod actually starts. Two renders, not
+      # one: the bare-values render must fail (watch.table/model,
+      # datahub.gmsUrl and image.repository have no default on purpose, see
+      # values.yaml), and a real render must succeed and produce exactly the
+      # three resources this chart is meant to create.
+      - name: A bare install fails loudly on the required values
+        run: |
+          if helm template charts/modelguard-watch >/dev/null 2>&1; then
+            echo "::error::a bare install rendered successfully; the required-value guards in deployment.yaml are not firing"
+            exit 1
+          fi
+
+      - name: A real install renders exactly the expected resources
+        run: |
+          helm template test charts/modelguard-watch \
+            --set image.repository=ghcr.io/example/modelguard \
+            --set image.tag=0.1.0 \
+            --set datahub.gmsUrl=http://datahub-gms:8080 \
+            --set watch.table=loans_raw \
+            > /tmp/rendered.yaml
+          for kind in ServiceAccount Secret Deployment; do
+            grep -q "^kind: $kind\$" /tmp/rendered.yaml || {
+              echo "::error::expected a $kind in the rendered output, found none"
+              exit 1
+            }
+          done

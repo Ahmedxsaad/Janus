@@ -33,6 +33,13 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-yaml
+        # charts/*/templates/ is Go template syntax ({{ .Values.x }}), not
+        # YAML on its own; check-yaml's parser rejects it. `helm lint` and
+        # `helm template` are this project's actual syntax check for those
+        # files (both run against every chart change before it merges), so
+        # this exclusion is not a gap, it is routing the check to the tool
+        # that understands the format.
+        exclude: ^charts/.*/templates/
       - id: check-toml
       - id: end-of-file-fixer
       - id: trailing-whitespace

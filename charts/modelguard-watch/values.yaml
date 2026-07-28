@@ -1,0 +1,88 @@
+# Default values for modelguard-watch.
+
+replicaCount: 1
+# One, deliberately. `watch` holds no state a second replica could shard
+# (findings ride an in-process holder, not a checkpoint store, D-039), so N
+# replicas watching the same target does not corrupt anything, idempotent
+# writes see to that, it just polls DataHub N times for one answer. Raise
+# this only if watching genuinely distinct targets, and use --set-string
+# watch.table=... per install, not this chart's replica count, to do it.
+
+image:
+  # No default registry: baking one in would be a machine-specific fallback of
+  # exactly the kind modelguard/env.py refuses at the application layer,
+  # applied to the chart instead. Built by .github/workflows/publish-image.yml
+  # on every version tag; ghcr.io/<owner>/datahub/modelguard is where that
+  # workflow pushes for this repository specifically.
+  repository: ""
+  tag: ""
+  # Falls back to Chart.appVersion when tag is empty, the standard Helm
+  # convention, so a bare `helm install` after setting only repository still
+  # resolves to a real, versioned image rather than an implicit `:latest`.
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# What to watch. At least one of table/model is required: `modelguard watch`
+# refuses to start with neither (the same rule `scan` and `gate` enforce), so
+# an install with both left empty fails at container start with that message,
+# not with a Kubernetes-level error that hides why.
+watch:
+  table: ""
+  model: ""
+  interval: 30
+  slaHours: ""
+  noLlm: false
+  llmProvider: ""
+  llmModel: ""
+
+datahub:
+  # Required. No default: a missing value must fail loudly at install
+  # (`helm install` errors via the required() check in the Deployment
+  # template), not connect silently to whatever localhost:8080 happens to be
+  # in the cluster.
+  gmsUrl: ""
+
+# Exactly one of these two should be set. existingSecret is the one meant for
+# real use: create the Secret yourself (kubectl, sealed-secrets, External
+# Secrets Operator, whatever the cluster already does for credentials) and
+# only its name and key names come near this chart. secrets.* is the
+# quick-demo path, and using it puts the values in `helm get values` and the
+# release's stored history in plain text: fine for a local Quickstart, wrong
+# for anything real.
+existingSecret: ""
+existingSecretGmsTokenKey: "datahub-gms-token"
+existingSecretLlmApiKeyKey: "modelguard-llm-api-key"
+
+secrets:
+  gmsToken: ""
+  llmProvider: ""
+  llmModel: ""
+  llmApiKey: ""
+
+resources:
+  # A Python process idling in a poll loop, not a training job. Raised only if
+  # profiling this specific deployment shows it is not enough.
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+# No liveness/readiness probe. `watch` is a foreground CLI loop with no HTTP
+# or TCP port to ask, and container PID 1 *is* that process (the Dockerfile's
+# ENTRYPOINT), so Kubernetes' own exit-triggers-restart behaviour already does
+# the one thing a probe here would do: notice the process died. A fabricated
+# exec probe that does not check anything the code actually exposes would be
+# worse than none.
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: true
+  name: ""
