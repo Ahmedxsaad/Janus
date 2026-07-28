@@ -64,7 +64,10 @@ runs:
   steps:
     - name: Install ModelGuard
       shell: bash
-      run: python -m pip install --quiet "modelguard${{ inputs.version }}"
+      # The PyPI distribution is modelguard-datahub, not modelguard: that exact
+      # name was already taken by an unrelated package (D-055). The installed
+      # command is still `modelguard`, which is what every step below runs.
+      run: python -m pip install --quiet "modelguard-datahub${{ inputs.version }}"
 
     - name: Run the gate
       id: gate

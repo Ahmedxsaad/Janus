@@ -15,11 +15,35 @@ requires = ["setuptools>=83"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "modelguard"
+# The *distribution* name, what `pip install` takes, not the package a user
+# imports or the CLI commands they type: [project.scripts] below still installs
+# `modelguard`, `modelguard-mcp`, `modelguard-seed`, `modelguard-scenario`
+# regardless of this name, and [tool.setuptools.packages.find] still finds the
+# `modelguard/` import package under it. It is "-datahub" and not the bare
+# "modelguard" because that exact name is already registered on PyPI by an
+# unrelated, apparently abandoned package (checked 2026-07-23: one release,
+# 0.1.0, summary "TODO"); PyPI names are global and are not reclaimed because a
+# package looks unused, so publishing under it is not an option (D-055).
+name = "modelguard-datahub"
 version = "0.1.0"
 description = "A data-to-model reliability agent built on DataHub"
 readme = "README.md"
 license = "Apache-2.0"
+authors = [{ name = "ModelGuard Contributors" }]
+keywords = ["datahub", "mlops", "data-lineage", "data-quality", "ml-reliability"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    # No "License :: OSI Approved :: Apache Software License" classifier: setuptools
+    # >=83 implements PEP 639 and rejects the classic classifier as redundant once
+    # `license = "Apache-2.0"` above is a valid SPDX expression (verified: building
+    # with both present raises InvalidConfigError, not a warning). The license
+    # field is the single source of truth now; the classifier would be a second one
+    # that could drift from it.
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Quality Assurance",
+]
 requires-python = ">=3.11,<3.12"
 
 # Pins are exact. acryl-datahub's CLI emits a runtime warning on Python above
@@ -71,6 +95,11 @@ dev = [
     "ruff==0.15.21",
     "types-PyYAML==6.0.12.20260518",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Ahmedxsaad/DataHub"
+Repository = "https://github.com/Ahmedxsaad/DataHub"
+Issues = "https://github.com/Ahmedxsaad/DataHub/issues"
 
 [project.scripts]
 # The CLI exposes the batch scan, polling watch, and CI gate commands.

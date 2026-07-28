@@ -41,9 +41,12 @@ schema still matches training.
 ## Prerequisites
 
 - A DataHub instance (a local OSS Quickstart is enough: `datahub docker quickstart`).
-- `pip install -e .` from the ModelGuard repo, which installs the `modelguard` CLI.
-- `DATAHUB_GMS_URL` set (copy `.env.example` to `.env`). No token is needed against the
-  default Quickstart; set `DATAHUB_GMS_TOKEN` only if metadata-service auth is enabled.
+- `pip install modelguard-datahub`, which installs the `modelguard` CLI (the
+  distribution is named `-datahub` on PyPI; the installed commands are still
+  `modelguard`, `modelguard-mcp`, `modelguard-seed`, `modelguard-scenario`).
+- `DATAHUB_GMS_URL` set (`export DATAHUB_GMS_URL=http://localhost:8080` for the
+  default Quickstart). No token is needed against it; set `DATAHUB_GMS_TOKEN`
+  only if metadata-service auth is enabled.
 - For the demo graph (the ML supply chain the datapacks lack), seed it once:
   `scripts/seed_demo.sh`.
 
