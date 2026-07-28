@@ -16,6 +16,58 @@ Entry template:
 
 ---
 
+## D-052: A CI gate makes the "missing CI for ML" tagline literally true (2026-07-23)
+- Decided by: Ahmed Saad (asked for an original feature scoring a new point), by Claude
+- Decision: `modelguard gate` and `modelguard/gate.py` add the preventive half of
+  ModelGuard, with a reusable GitHub Action at `action.yml`. The gate runs the same
+  detectors `scan` runs, judges the result against a `GatePolicy`
+  (`--block-at-or-above <severity>`, `--min-trust <score>`), and answers in an exit
+  code: 0 shippable, 1 blocked, 2 could not tell.
+- Why this and not something else: a survey of the competing hackathon repos (a
+  dozen-plus, plus the datahub-skills PR queue) found every one of them reactive:
+  incident response, root-cause, change briefs, drift RCA. None prevents anything.
+  ModelGuard's own headline is "the missing CI for your ML supply chain", and until
+  this landed that was aspirational, everything it did was after the fact on a graph
+  that already held the mistake. A gate that fails a pull request before a leaking
+  model merges is the one thing the competitive set does not do, it is what the
+  strategy doc named as the differentiator (preventive checks), and it scores
+  Real-World Usefulness and Originality at once. It is also honest: the tagline now
+  describes a command that exists.
+- Three design choices, each defended by a failure mode:
+  1. **Exit 2 is never a finding.** Setup, connectivity, and resolution failures
+     exit 2, never 1. A gate that reported "I could not reach DataHub" as a policy
+     violation would train a team to read every red build as flakiness, and the
+     first real leak would be waved through with the rest. This was verified live:
+     an unreachable GMS and a bad severity string both exit 2 while a real leak
+     exits 1.
+  2. **Read-only by default.** A gate runs on every push to every branch, most of
+     which never merge, so an incident per run would fill the governance graph with
+     findings about code that does not exist, and write-back idempotency does not
+     help because these are genuinely different runs. `--write` exists for teams
+     that decide otherwise. Proven by reading the graph back before and after three
+     gate runs: zero incidents raised, zero properties changed.
+  3. **No policy blocks nothing.** A gate that failed the moment it was installed,
+     before anyone said what they cared about, would be removed the same afternoon,
+     so a bare `modelguard gate` reports and passes, and says it enforced nothing.
+- On the offline/live split, following benchmarks/metrics.py: `gate.py` is pure and
+  the whole policy is a function of a ScanReport, so the arithmetic is checked
+  offline (19 tests, four unsafe-pass mutations each killing the suite: an inverted
+  severity comparison, a strict-instead-of-inclusive threshold, a trust floor off by
+  the boundary, and a blocked verdict returning exit 0). The two claims only a real
+  DataHub can settle, that the verdict tracks the graph and that a run leaves no
+  trace, are three live integration tests.
+- Result: `modelguard gate` and `action.yml` ship. 353 offline tests (up from 334)
+  and 42 integration (up from 39), all green. The full lifecycle was walked by hand
+  as a user would: a leaking model blocks with a GitHub annotation, reverting the
+  leak clears the gate, the trust floor blocks the same model at a higher bar, and
+  both error paths exit 2.
+- Infrastructure note from the same session: the local Quickstart's GMS could not
+  bind port 8080 (a Node process owned it) or 8081 (another owned that too), and a
+  failed bind aborts the container's network attachment, so GMS fell back to public
+  DNS and never came up. Moved GMS to 18080 via DATAHUB_MAPPED_GMS_PORT and pointed
+  .env at it. Not a ModelGuard issue; recorded so the next person who sees the DNS
+  errors does not chase the wrong thing.
+
 ## D-051: CI runs pre-commit rather than its own checks, and reports the dependency audit rather than failing on it (2026-07-22)
 - Decided by: Ahmed Saad (asked to continue, review and test thoroughly), by Claude
 - Decision: `.github/workflows/ci.yml` lands (P2-1, open since 2026-07-09). Two
