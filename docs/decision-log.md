@@ -16,6 +16,65 @@ Entry template:
 
 ---
 
+## D-054: Docker composes with the Quickstart's network instead of reimplementing it (2026-07-23)
+- Decided by: Ahmed Saad (asked for deployment packaging: Docker, Helm, a hosted VM), by Claude
+- Decision: `Dockerfile` (multi-stage, non-root, pinned to `python:3.11.14-slim`,
+  every console script installed) and `docker-compose.yml` (six services, one image,
+  differing only in entrypoint: `modelguard`, `modelguard-watch`, `modelguard-gate`,
+  `modelguard-seed`, `modelguard-scenario`, `modelguard-mcp`).
+- The design choice that mattered: compose attaches to `datahub_network`, the
+  Docker network `datahub docker quickstart` already creates (GMS reachable inside
+  it as `datahub-gms:8080`), declared `external: true` rather than defined. Building
+  a second copy of DataHub's own multi-container stack inside this repo was rejected
+  outright: the hackathon's own Originality criterion says composing shipped
+  features is welcome and rebuilding them from scratch is not, and a duplicated
+  stack would drift the moment DataHub's upstream compose changes. One-time setup
+  (`datahub docker quickstart`), then this file works every time after.
+- A real defect found and fixed before it shipped, not after: the first version let
+  compose default the project name to the repo directory, lowercased ("datahub"),
+  identical to the Quickstart's own project name. Verified live: with that default,
+  `docker compose up -d modelguard-mcp` immediately warned that every
+  datahub-quickstart container was an "orphan container for this project", and an
+  ordinary `docker compose down --remove-orphans` run from this repo, the standard
+  cleanup command, would have stopped the entire Quickstart believing it was
+  cleaning up only ModelGuard's own containers. Fixed with an explicit `name:
+  modelguard` at the top of the file; reverified with `--remove-orphans` that
+  DataHub's containers survive.
+- A second design question resolved empirically rather than assumed: whether
+  `docker compose up` with no service named should start anything. Every service
+  here either needs an explicit `--table`/`--model` (a scan or gate against nothing
+  is a guess, not a reproducible command) or has a real side effect
+  (`modelguard-scenario` plants a failure by default). The first attempt used a
+  hidden `_base` service plus `extends` and an empty-list profile override to try
+  to get "runnable individually, started by nothing"; `docker compose config`
+  resolved that to zero services entirely; a YAML anchor and a plain
+  `profiles: [tools]` on every real service, verified against the installed
+  Compose 5.3.1 in isolation first, does what was intended: `config --services` with
+  no profile lists nothing, `run --rm <service>` and `up <service>` (named
+  explicitly) both work regardless of the active profile.
+- Verified end to end, not just built: the image runs as a non-root user (`uid=999`);
+  all four console scripts are present and on `PATH`; `modelguard-seed` reaches
+  `datahub-gms:8080` over the compose network and seeds; `modelguard gate
+  --block-at-or-above high` on the leaking model exits 1 through both `docker run`
+  and `docker compose run`, with the real process exit code checked separately from
+  a piped `grep`'s, which had silently reported 0 on the first attempt;
+  `modelguard-mcp` starts and stays running (confirmed via a detached container,
+  since the stdio transport blocks on stdin by design and a foreground-attached
+  `docker run` with a 5-second `timeout` hung past it, which is correct MCP
+  behavior, not a defect).
+- CI gains a third job, `docker`: build-only, plus `whoami` and `--help`/`command -v`
+  checks, not a functional test against a live DataHub, for the same reason the
+  integration suite stays off hosted runners. A second defect was caught writing
+  that job before it shipped: `modelguard-seed` and `modelguard-mcp` have no
+  argument parser at all, they connect to DataHub immediately, so a uniform
+  `--help` check across all four scripts would have failed those two on a real,
+  expected `DataHubConnectionError` and reported a packaging problem that did not
+  exist. Split into two steps: `--help` for the two scripts that actually parse
+  arguments first (`modelguard`, `modelguard-scenario`), `command -v` for the two
+  that do not.
+- Result: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, and the `docker`
+  CI job. README gains a "Run it without a Python install" section.
+
 ## D-053: A read-only MCP server, the fourth trigger, hits criterion 1's named surface (2026-07-23)
 - Decided by: Ahmed Saad (asked for a second original feature), by Claude
 - Decision: `modelguard/mcp_server.py` exposes three tools over MCP:
