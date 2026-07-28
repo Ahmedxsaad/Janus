@@ -16,6 +16,69 @@ Entry template:
 
 ---
 
+## D-057: A judge-facing Azure VM keeps GMS off the internet at two independent layers (2026-07-23)
+- Decided by: Ahmed Saad (confirmed the use case: a live demo judges can visit
+  during the judging period, not a personal dev box), by Claude
+- Decision: `docs/deploy/azure-vm.md` (the runbook), `deploy/azure/cloud-init.yaml`
+  (first-boot provisioning), `deploy/azure/modelguard-watch.service` (the
+  systemd unit cloud-init installs). One VM: DataHub Quickstart plus
+  `modelguard watch` running continuously against both the seeded table and
+  model, so the graph keeps reflecting live findings without anyone needing to
+  be online to demonstrate it, satisfying the submission rules' requirement
+  that the project stay available "until the Judging Period ends."
+- The security decision the whole design turns on: a Quickstart's
+  metadata-service authentication is disabled by default, the judge's own
+  out-of-the-box path everywhere else in this repo, which means an
+  unauthenticated GMS answers arbitrary GraphQL writes to anyone who can reach
+  port 8080. Fine on a laptop; not fine on a box reachable from the internet.
+  GMS never gets an inbound rule, at two independent layers: the Azure NSG
+  (only 22 and 9002 opened, nothing else, and Azure NSGs deny by default so
+  the absence of a rule for 8080 is the control) and a host-level `ufw`
+  firewall cloud-init installs doing the same thing again. Two layers because
+  a single misconfigured rule, or a future VNet peering nobody remembers this
+  VM sits behind, should not be the only thing standing between the internet
+  and an unauthenticated write API.
+- A fabricated flag caught before it shipped: the first draft of
+  `cloud-init.yaml` ran `datahub docker quickstart --no-browser`. No such flag
+  exists, checked against the installed CLI's own `--help` rather than
+  assumed. Removed; none was needed; this project has run that exact command
+  headless, with no browser reachable from the shell, repeatedly across the
+  D-052 through D-056 sessions without it ever blocking on one.
+- Why `Restart=always` with a plain backoff instead of a `systemd`
+  ordering dependency on DataHub's own startup: GMS can take well over a
+  minute to become reachable after boot, and getting cross-service ordering
+  exactly right for a multi-container stack that is not itself managed by
+  systemd is fragile. `modelguard watch` already fails fast and loudly with a
+  clear `DataHubConnectionError` when GMS is not yet reachable
+  (`modelguard/client.py`), the same exit-code discipline `modelguard gate`
+  relies on (D-052). Leaning on it here, `RestartSec=15` turning an expected
+  first failure into a self-healing retry, is reuse of a boundary the code
+  already draws correctly, not a shortcut taken because ordering was too much
+  work.
+- Cost guidance is sourced, not guessed: `Standard_B4ms` (~$0.17/hr) and
+  `Standard_D4s_v5` (~$0.19/hr) pricing, and Standard SSD disk pricing,
+  gathered from third-party Azure pricing aggregators via live search in this
+  session, cross-checked across multiple independent sources, explicitly
+  dated and flagged in the runbook as not re-verified against the Azure
+  Portal at guide-writing time, with a link to the real calculator. B-series
+  was chosen over general-purpose specifically because this workload's shape,
+  bursty and mostly idle, is what burstable credit banking is for.
+- Verified without a live VM, and the runbook says so rather than implying
+  otherwise: `cloud-init.yaml`'s YAML structure parsed and asserted on with a
+  real parser; every `runcmd` shell fragment extracted and passed through
+  `bash -n`; `modelguard-watch.service` passed `systemd-analyze verify`
+  (installed locally for the purpose, no VM needed for this particular check).
+  A new CI job, `deploy-files`, runs all three on every push, mirroring the
+  `docker` and `helm` jobs' build-only, no-live-target reasoning. What none of
+  this proves: that `az vm create` with this cloud-init actually produces a
+  working VM. The runbook's own "Verify the demo works" section exists
+  because of that gap, not despite it.
+- Result: `docs/deploy/azure-vm.md`, `deploy/azure/cloud-init.yaml`,
+  `deploy/azure/modelguard-watch.service`, `deploy/CLAUDE.md`, a `deploy-files`
+  CI job. Not run: no Azure resource group was created, nothing was
+  provisioned, no cost was incurred. Provisioning and the first real smoke
+  test are the maintainer's own next step.
+
 ## D-056: A Helm chart for exactly one workload, watch, not a chart per command (2026-07-23)
 - Decided by: Ahmed Saad (asked for a Helm chart for the watch daemon), by Claude
 - Decision: `charts/modelguard-watch/` deploys `modelguard watch` as a Kubernetes

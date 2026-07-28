@@ -1,0 +1,36 @@
+[Unit]
+Description=modelguard watch, continuous
+# No After=docker-quickstart or similar ordering dependency. GMS can take
+# well over a minute to become reachable after boot (JAR extraction, the
+# service-mesh of its own containers coming up), and getting that ordering
+# exactly right is fragile compared to the alternative: modelguard watch
+# fails fast and loudly with a clear DataHubConnectionError when GMS is not
+# yet reachable (modelguard/client.py), and Restart=always with a real
+# RestartSec below turns that into a self-healing retry rather than a
+# one-shot failure. This is the same design law the CLI itself follows:
+# exit 2 (could not tell) is never mistaken for exit 1 (a real finding), so
+# leaning on it here is not a shortcut, it is reusing a boundary the code
+# already draws correctly.
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=azureuser
+WorkingDirectory=/opt/modelguard/DataHub
+# docker compose run (no -d): stays in the foreground for as long as the
+# container runs, so systemd's own process supervision is watching the real
+# thing, not a detached container it has to poll for separately. --rm
+# cleans the container up on every exit, planned or not, so a restart never
+# collides with a leftover container of the same name.
+ExecStart=/usr/bin/docker compose run --rm --name modelguard-watch-live modelguard-watch --table loans_raw --model credit_risk_v3 --interval 30
+ExecStop=/usr/bin/docker compose stop modelguard-watch-live
+Restart=always
+# Not the default (100ms): GMS being briefly unreachable during its own
+# startup is the expected first failure, not an exceptional one, and
+# restarting into the same failure every 100ms would just spam the log
+# without buying anything back.
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

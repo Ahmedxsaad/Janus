@@ -23,6 +23,7 @@ Source of truth for what we build:
 | tests/ | pytest unit and integration tests |
 | docs/ | hackathon-specs/ (official rules), plan/, decision-log.md |
 | charts/ | Helm chart for `modelguard watch`, the one long-running entry point |
+| deploy/ | Cloud-init and systemd for the Azure judge-facing demo VM |
 
 ## Workflow rules
 
