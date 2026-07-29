@@ -8,7 +8,7 @@ description: |
   X for target leakage", "did this model's input schema drift", "score this model's trust",
   "guard this table", or any request to audit the data-to-model boundary in DataHub.
 user-invocable: true
-allowed-tools: Bash(modelguard *), Bash(modelguard-seed), Bash(modelguard-scenario *)
+allowed-tools: Bash(modelguard *), Bash(modelguard-seed), Bash(modelguard-scenario *), Bash(scripts/check_blast_radius.sh *), Bash(scripts/check_leakage.sh *), Bash(scripts/guard.sh *), Bash(scripts/seed_demo.sh)
 ---
 
 # DataHub ML Guard
