@@ -16,6 +16,81 @@ Entry template:
 
 ---
 
+## D-058: A full-repo review found nine real bugs across every layer; all fixed (2026-07-29)
+- Decided by: Ghassen Naouar, applied by Claude
+- Decision: A review of the current implementation (not a single PR's diff)
+  covering detect/, writeback/, agent/, cli.py, tests/, and skill/, found and
+  fixed nine confirmed defects rather than only reporting them:
+  1. `writeback/terms.py` `add_term` returned `False` and wrote nothing
+     whenever the entity had no prior `glossaryTerms` aspect at all (the
+     common case for a freshly leaking feature), unlike `labels.py`'s
+     `add_tag`, which the module's own docstring claims it mirrors exactly.
+     Fixed to treat a missing aspect as an empty list, like `add_tag` does.
+  2. `agent/narrate.py` logged `llm.provider` (the vendor name) on every LLM
+     failure, violating the explicit "the narrator... names no vendor" rule
+     (agent/CLAUDE.md rule 3, root rule 8). An existing test
+     (`tests/agent/test_narrate.py`) asserted the vendor name *should* appear
+     in the log, encoding the violation as expected; the test was wrong and
+     is corrected alongside the fix.
+  3. `writeback/documents.py`'s leak-path markdown fence embedded
+     `leak.path_text` unescaped; a column name containing a backtick run
+     could close the fence early. Sanitized before embedding.
+  4. `modelguard gate` did not wrap `run_scan`/`evaluate` in a try/except: an
+     exception raised mid-scan (e.g. GMS dropping the connection after
+     `_prepare`'s own check passed) propagated out as exit code 1,
+     indistinguishable from a real policy violation, which is exactly the
+     collapse gate.py's own docstring says a gate must never allow. Now
+     remapped to `EXIT_ERROR` (2), matching `_prepare`'s existing remap.
+  5. `modelguard gate`'s `--llm-provider`/`--llm-model` were dead flags:
+     `--no-llm` defaulted to `True` with only a one-directional flag, so
+     there was no way to ever set it `False` from the CLI, and `_resolve_llm`
+     short-circuits to `None` whenever `no_llm` is true. Changed to
+     `--no-llm/--llm` so `--llm` is reachable.
+  6. `detect/graph_reads.py` `live_deployments` issued one `get_aspect` call
+     per deployment (an N+1 read), violating detect/CLAUDE.md rule 3
+     ("Batch graph reads; no N+1 single fetches") verbatim. Batched through
+     `DataHubGraph.get_entities`'s OpenAPI v3 `batchGet`; `tests/conftest.py`'s
+     `FakeGraph` gained a matching `get_entities` reading the same aspect
+     store so no test fixture needed to change shape.
+  7. `detect/blast_radius.py`'s `model_hops` dict comprehension kept
+     whichever occurrence of a duplicate model URN came last in DataHub's
+     response order, not the nearest hop count, when the same model is
+     reachable via more than one path within the hop cap (a real
+     possibility per D-020's own note about post-hop-2 full-graph search).
+     Changed to keep the minimum, restoring the determinism the rest of the
+     module promises.
+  8. `detect/schema_drift.py` used a falsy check (`if not training_schema`)
+     where every other absence check in the same file uses `is None`,
+     silently treating a training-time snapshot legitimately captured as
+     empty (`{}`) the same as no snapshot at all, instead of flagging every
+     current column as newly added.
+  9. `skill/datahub-ml-guard/SKILL.md`'s `allowed-tools` frontmatter granted
+     Bash only for `modelguard`, `modelguard-seed`, `modelguard-scenario`,
+     but the documented Workflow section instructs running
+     `scripts/check_blast_radius.sh`, `scripts/check_leakage.sh`,
+     `scripts/guard.sh`, and `scripts/seed_demo.sh` directly. Added those four
+     patterns so the skill's own permission declaration does not forbid its
+     documented workflow.
+  Also fixed as a drive-by: this machine's untracked `.env` was missing
+  `MODELGUARD_LEAKAGE_MAX_HOPS`, present in `.env.example`; not a repo defect
+  (`.env` is git-ignored) but corrected for the documented parity rule.
+- Options considered: report findings only, versus fix them in place. Fix
+  chosen: every finding was independently verified against the actual file
+  (not taken on a reviewer's word), reproduced against the project's own
+  written rules or an existing test, and the full unit suite (353 tests) was
+  run green after each batch of changes.
+- Why: several of these are the exact failure modes the project's own
+  CLAUDE.md files and decision log already name as unacceptable (vendor
+  leakage, exit-code collapse, N+1 reads, non-deterministic reports);
+  leaving them found-but-unfixed after a "look for gaps and fix them" review
+  would be a worse outcome than not reviewing at all.
+- Result: `modelguard/writeback/terms.py`, `modelguard/agent/narrate.py`,
+  `modelguard/writeback/documents.py`, `modelguard/cli.py`,
+  `modelguard/detect/graph_reads.py`, `modelguard/detect/blast_radius.py`,
+  `modelguard/detect/schema_drift.py`, `skill/datahub-ml-guard/SKILL.md`,
+  `tests/agent/test_narrate.py`, `tests/conftest.py` all changed;
+  `pytest -m "not integration"` green (353 passed).
+
 ## D-057: A judge-facing Azure VM keeps GMS off the internet at two independent layers (2026-07-23)
 - Decided by: Ahmed Saad (confirmed the use case: a live demo judges can visit
   during the judging period, not a personal dev box), by Claude

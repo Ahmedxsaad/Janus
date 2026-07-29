@@ -461,8 +461,7 @@ def narrate(finding: Finding, llm: LLMConfig | None) -> Narrative:
         # 429, an over-long reply: none is worth failing a scan over, because the
         # template says the same thing in worse prose.
         logger.warning(
-            "LLM narration via %s failed (%s); falling back to the template",
-            llm.provider,
+            "LLM narration failed (%s); falling back to the template",
             _safe_reason(exc, llm),
         )
         return Narrative(template_narrative(finding), NarrativeSource.TEMPLATE)

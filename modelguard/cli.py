@@ -854,7 +854,12 @@ def gate(
     ] = None,
     no_llm: Annotated[
         bool,
-        typer.Option("--no-llm", help="Skip the LLM. A gate needs a verdict, not prose."),
+        typer.Option(
+            "--no-llm/--llm",
+            help="Skip the LLM (default: a gate needs a verdict, not prose). Pass "
+            "--llm to narrate violations with prose; only then do --llm-provider "
+            "and --llm-model have anything to override.",
+        ),
     ] = True,
     llm_provider: Annotated[
         str | None, typer.Option("--llm-provider", help="Override MODELGUARD_LLM_PROVIDER.")
@@ -908,15 +913,23 @@ def gate(
     except typer.Exit as exc:
         raise typer.Exit(code=EXIT_ERROR) from exc
 
-    report = run_scan(
-        conn,
-        config,
-        table_urn=table_urn,
-        model_urn=model_urn,
-        llm=llm,
-        dry_run=not write,
-    )
-    verdict = evaluate(report, policy)
+    # Same remapping as _prepare's setup failures, and for the same reason: a GMS
+    # connection dropped mid-traversal is "could not reach a verdict", not a policy
+    # violation. Letting this propagate would exit 1, indistinguishable from a real
+    # finding, which is exactly the collapse this command exists to prevent.
+    try:
+        report = run_scan(
+            conn,
+            config,
+            table_urn=table_urn,
+            model_urn=model_urn,
+            llm=llm,
+            dry_run=not write,
+        )
+        verdict = evaluate(report, policy)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=EXIT_ERROR) from exc
 
     for finding in (write_.finding for write_ in report.writes):
         _print_finding(finding)

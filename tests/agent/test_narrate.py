@@ -194,9 +194,10 @@ def test_a_provider_error_that_echoes_the_key_is_redacted_before_logging(monkeyp
     logged = caplog.text
     assert SECRET not in logged, "the API key was written to the log"
     assert "[redacted]" in logged
-    # The operator still learns what went wrong and which vendor failed.
+    # The operator still learns what went wrong, but never which vendor: the
+    # narrator names no vendor, even in a failure log (agent/CLAUDE.md rule 3).
     assert "RuntimeError" in logged
-    assert "anthropic" in logged
+    assert "anthropic" not in logged
 
 
 def test_the_config_repr_does_not_expose_the_key():

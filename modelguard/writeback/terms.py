@@ -101,9 +101,7 @@ def add_term(
         nothing was written.
     """
     existing = conn.graph.get_aspect(entity_urn, GlossaryTermsClass)
-    if existing is None:
-        return False
-    current = list(existing.terms)
+    current = list(existing.terms) if existing else []
 
     if any(association.urn == term_urn for association in current):
         return False
