@@ -16,6 +16,49 @@ Entry template:
 
 ---
 
+## D-059: The Azure guide's own default did not fit the actual budget (2026-07-29)
+- Decided by: Ahmed Saad (stated the real constraint: $60 total, provisioning
+  from 2026-07-29 through judging ending 2026-08-31), by Claude
+- Decision: `docs/deploy/azure-vm.md`'s defaults change from `Standard_B4ms`
+  run continuously to `Standard_B2ms` (2 vCPU / 8 GiB) with a 64 GiB disk,
+  provisioned now, deallocated after testing, and started again shortly
+  before judging. A new "Pause it between now and judging" section gives the
+  exact `az vm deallocate` / `az vm start` commands, and `az vm resize` is
+  documented as the escalation path if `B2ms` proves too tight.
+- Why the original default did not fit: D-057 chose `B4ms` for the headroom
+  above the project's own stated "2 CPU / 8GB free" Quickstart requirement,
+  and priced it for a ~15-day continuous run at ~$60-70, already at the edge
+  of a $60 budget with no margin. It did not account for two things the
+  guide's own author had not been told when it was written: the actual
+  budget ceiling, and that "today" was 2026-07-29, over two weeks before
+  judging starts on 2026-08-17. Run continuously from provisioning to
+  judging's end, `B4ms` costs roughly $131, over double the budget, on size
+  and runtime choice alone.
+- The two levers, and why one matters more: size (`B2ms` at ~$0.083/hr versus
+  `B4ms` at ~$0.17/hr) roughly halves the compute rate. Not running
+  continuously from today, provisioning now, testing, deallocating until
+  shortly before judging, halves the *hours billed* again, from roughly 33
+  days to roughly 16. Together: `B2ms` run only when needed costs roughly
+  $32 in compute over the same span `B4ms` run continuously costs $131 for,
+  a reduction of about 4x from the two changes combined, not one.
+- The honest tradeoff stated plainly rather than hidden in a smaller
+  headline number: `B2ms`'s 8 GiB has no margin above the stated minimum for
+  a stack running GMS, OpenSearch, and Kafka as three separate JVMs plus
+  MySQL plus `modelguard watch`, and this has not been run on real hardware
+  to confirm it holds up. The guide documents the resize path
+  (`az vm deallocate` then `az vm resize` then `az vm start`, all state
+  preserved) as the answer if it does not, rather than presenting `B2ms` as a
+  risk-free swap.
+- Pricing sourced the same way as D-057: live search, cross-checked across
+  independent third-party aggregators (Holori, Vantage), explicitly dated and
+  flagged as not re-verified against the Azure Portal, with a link to the
+  real calculator.
+- Result: `docs/deploy/azure-vm.md`'s cost table, provisioning command, and a
+  new "Pause it between now and judging" section all updated; the worked
+  example in the guide now runs the actual arithmetic for the dates in play
+  rather than a generic "~15 days" placeholder. Nothing provisioned; no cost
+  incurred.
+
 ## D-058: A full-repo review found nine real bugs across every layer; all fixed (2026-07-29)
 - Decided by: Ghassen Naouar, applied by Claude
 - Decision: A review of the current implementation (not a single PR's diff)
