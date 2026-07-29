@@ -927,7 +927,7 @@ def gate(
             dry_run=not write,
         )
         verdict = evaluate(report, policy)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=EXIT_ERROR) from exc
 
