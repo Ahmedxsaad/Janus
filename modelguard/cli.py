@@ -854,7 +854,12 @@ def gate(
     ] = None,
     no_llm: Annotated[
         bool,
-        typer.Option("--no-llm", help="Skip the LLM. A gate needs a verdict, not prose."),
+        typer.Option(
+            "--no-llm/--llm",
+            help="Skip the LLM (default: a gate needs a verdict, not prose). Pass "
+            "--llm to narrate violations with prose; only then do --llm-provider "
+            "and --llm-model have anything to override.",
+        ),
     ] = True,
     llm_provider: Annotated[
         str | None, typer.Option("--llm-provider", help="Override MODELGUARD_LLM_PROVIDER.")
