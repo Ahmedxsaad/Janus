@@ -160,7 +160,15 @@ def blast_radius(
 
     datasets = sorted(r.urn for r in within_cap if entity_type(r.urn) == _DATASET)
     features = sorted(r.urn for r in within_cap if entity_type(r.urn) == _ML_FEATURE)
-    model_hops = {r.urn: r.hops for r in within_cap if entity_type(r.urn) == _ML_MODEL}
+    # min(), not last-wins: DataHub's full-graph search past hop 2 (see the cap
+    # comment above) can return the same model via more than one path within the
+    # cap, in network-order rather than hop order. A dict comprehension would keep
+    # whichever occurrence happened to come last, reporting a different "N hops
+    # downstream" for the same graph state depending on response order.
+    model_hops: dict[str, int] = {}
+    for r in within_cap:
+        if entity_type(r.urn) == _ML_MODEL:
+            model_hops[r.urn] = min(r.hops, model_hops.get(r.urn, r.hops))
 
     downstream_features = frozenset(features)
     models = tuple(
