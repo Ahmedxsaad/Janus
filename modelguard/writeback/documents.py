@@ -195,7 +195,7 @@ The model is learning from the answer.
 ## The leak path
 
 ```
-{leak.path_text}
+{leak.path_text.replace("`", "'")}
 ```
 
 Every edge above is a declared column-level lineage edge in DataHub. ModelGuard \
