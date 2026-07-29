@@ -141,9 +141,12 @@ def _run_findings(
     findings: list[SchemaDriftFinding] = []
     for dataset_urn in input_urns:
         training_schema = snapshot.get(dataset_urn)
-        if not training_schema:
+        if training_schema is None:
             # This input had no baseline captured, so it cannot be judged. Another
-            # input on the same run still can.
+            # input on the same run still can. A baseline captured as genuinely
+            # empty (`{}`) is positive evidence, not absence, and falls through to
+            # be diffed below: every current column would then be a real ADDED
+            # change relative to a training-time schema of zero columns.
             continue
 
         current_schema = _current_schema(conn, dataset_urn)
