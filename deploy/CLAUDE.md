@@ -34,3 +34,4 @@ branch inside this one.
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-23 | Claude (for Ahmed Saad) | Initial version: azure/cloud-init.yaml, azure/modelguard-watch.service (D-057) |
+| 2026-07-29 | Claude (for Ahmed Saad) | docs/deploy/azure-vm.md's defaults change to Standard_B2ms + 64GB disk + provision-now-pause-until-judging, to actually fit a $60 budget; B4ms run continuously priced out to roughly double it (D-059) |

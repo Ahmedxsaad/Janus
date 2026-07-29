@@ -44,29 +44,50 @@ submission's testing instructions:
 # right after first login.
 ```
 
-## What this costs
+## What this costs, and fitting it into a small budget
 
-| | |
-|---|---|
-| VM (`Standard_B4ms`, 4 vCPU / 16 GiB, burstable) | ~$0.17/hr on-demand, US regions |
-| 128 GiB Standard SSD OS disk | ~$9.60/month, prorated hourly |
-| Public IP (Standard SKU) | ~$0.004/hr while allocated |
+Two independent levers, and the second one matters more than the first.
 
-Figures gathered from third-party Azure pricing aggregators in July 2026 and
-not independently re-verified against the Azure Portal at guide-writing time;
-**check the [Azure pricing calculator](https://azure.microsoft.com/en-us/pricing/calculator/)
-before provisioning**, prices change. For the ~15-day judging window, running
-continuously: roughly **$60-70 total**, most of it compute. Burstable B-series
-was chosen over a general-purpose size like `Standard_D4s_v5` (~$0.19/hr)
-specifically because this workload is bursty and mostly idle (booting, then
-sitting quiet between judge visits, then a poll loop that periodically calls
-out to a local GMS): B-series banks CPU credit during the idle stretches and
-spends it during the bursts, which is exactly this shape of demand.
+**Size.** `Standard_B2ms` (2 vCPU / 8 GiB, burstable) rather than a larger
+size: it matches this project's own stated Quickstart requirement ("about 2
+CPUs / 8 GB free," `README.md`) almost exactly, at roughly half the hourly
+cost of a size with headroom above it (`Standard_B4ms`, 4 vCPU / 16 GiB).
+That is a real, honest tradeoff, not a free upgrade: GMS, OpenSearch, and
+Kafka are each their own JVM, plus MySQL, plus `modelguard watch`, all
+competing for 8 GiB minus OS overhead, and this has not been run on real
+hardware to confirm it holds up under load. If the VM OOMs or thrashes, the
+fix is `az vm resize` to `Standard_B4ms`, not tuning further; both sizes are
+in `values.yaml`-style comments in the commands below so switching is a
+one-line change.
 
-**Azure only bills compute while the VM is running.** `az vm deallocate`
-stops the meter (disk and IP costs continue, both small); `az group delete`
-stops everything, including disk and IP, and is what you want once the
-judging period ends. Both are one command, in [Tear down](#tear-down).
+**When it runs.** Azure only bills compute while a VM is actually running.
+Provisioning today and leaving it up straight through the end of judging
+(Aug 31) pays for every idle hour in between, most of which nobody is
+looking at it. Provisioning now, testing it, then `az vm deallocate` (stops
+the compute meter; the disk and IP stay allocated, so restarting later is one
+command, not a re-provision) until shortly before judging starts, is the
+same VM for a fraction of the runtime. See [Pause it between now and
+judging](#pause-it-between-now-and-judging).
+
+| | Rate | Sourced |
+|---|---|---|
+| `Standard_B2ms` (2 vCPU / 8 GiB, burstable) | ~$0.083/hr | [Holori](https://calculator.holori.com/azure/vm/standard-b2ms), [Vantage](https://instances.vantage.sh/azure/vm/b2ms) |
+| `Standard_B4ms` (4 vCPU / 16 GiB), if B2ms is not enough | ~$0.17/hr | third-party aggregators, cross-checked |
+| 64 GiB Standard SSD OS disk | ~$4.80/month, prorated hourly, bills even while stopped | scaled from the 128 GiB rate (~$9.60/month) |
+| Public IP (Standard SKU) | ~$0.004/hr while allocated, including while stopped | third-party aggregators |
+
+Gathered via live search in July 2026, not independently re-verified against
+the Azure Portal at guide-writing time; **check the [Azure pricing
+calculator](https://azure.microsoft.com/en-us/pricing/calculator/) before
+provisioning**, prices change and vary by region.
+
+**Worked example**, provisioning July 29 for a submission around Aug 10 and
+judging Aug 17-31: roughly 2 days of testing/demo-recording plus the ~14.3-day
+judging window is about 390 compute-hours, `B2ms` at that rate is ~$32; the
+disk and IP run the full ~33 days regardless of VM state, about $5 and $3.
+**Total: roughly $40**, against a $60 budget. Leaving `B4ms` running
+continuously for the same 33 days instead costs roughly $131 on compute
+alone, over double the budget on size and runtime choice alone.
 
 ## Provision it
 
@@ -110,13 +131,21 @@ az network nsg rule create \
 az vm create \
   --resource-group "$RG" --name "$VM" \
   --image Canonical:ubuntu-24_04-lts:server:latest \
-  --size Standard_B4ms \
+  --size Standard_B2ms \
+  --os-disk-size-gb 64 \
   --admin-username azureuser \
   --generate-ssh-keys \
   --nsg modelguard-demo-nsg \
   --public-ip-sku Standard \
   --custom-data deploy/azure/cloud-init.yaml
 ```
+
+Tight on RAM if it OOMs or the frontend starts feeling sluggish under real use
+(see [What this costs](#what-this-costs-and-fitting-it-into-a-small-budget)):
+resize in place rather than reprovisioning, `az vm deallocate` first since resize
+needs the VM stopped, then `az vm resize --resource-group "$RG" --name "$VM"
+--size Standard_B4ms`, then `az vm start`. The disk, the NSG, the IP, and
+everything cloud-init already did all survive a resize untouched.
 
 `az vm create` returns once the VM exists, not once cloud-init has finished
 provisioning it: first boot pulls container images, extracts GMS's WAR, and
@@ -147,14 +176,39 @@ unless already changed), and look for the `loans_raw` incident, the
 assertion, exactly as `README.md`'s own "Try it" walkthrough describes them
 locally.
 
-## Tear down
+## Pause it between now and judging
+
+The budget-fitting move from [What this costs](#what-this-costs-and-fitting-it-into-a-small-budget):
+provision once, test it, submit, then stop paying for compute until shortly
+before judging actually starts.
 
 ```bash
-# Stops billing for compute immediately; disk and IP costs continue, both small.
+# Stops the compute meter. The disk, the NSG, and the public IP all stay
+# allocated (their own small, unavoidable cost, see the table above), so
+# starting again is this one command, not a re-provision.
 az vm deallocate --resource-group "$RG" --name "$VM"
+```
 
+Shortly before Aug 17, 10:00am ET:
+
+```bash
+az vm start --resource-group "$RG" --name "$VM"
+```
+
+`modelguard-watch.service` is `enabled` (not just `started`), so it comes
+back on its own once the VM boots; no need to SSH in and restart anything.
+Give it a few minutes for DataHub's own containers to come up first (`docker
+compose ps` over SSH, or just watch port 9002 start answering), same as after
+the very first boot.
+
+## Tear down
+
+Once judging ends (Aug 31, 5:00pm ET):
+
+```bash
 # Removes everything in the resource group: the VM, its disk, its NSG, its
-# public IP. This is what actually stops the meter once judging ends.
+# public IP. Unlike deallocate, this actually stops every meter, including
+# the small ones that ran the whole time the VM was paused.
 az group delete --resource-group "$RG" --yes --no-wait
 ```
 
