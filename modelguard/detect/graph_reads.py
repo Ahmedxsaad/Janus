@@ -55,7 +55,11 @@ def live_deployments(conn: DataHubConnection, deployment_urns: tuple[str, ...]) 
     live: list[str] = []
     for urn in deployment_urns:
         entry = entities.get(urn, {}).get(aspect_name)
-        if entry is not None and entry[0].status == DeploymentStatusClass.IN_SERVICE:
+        properties = entry[0] if entry is not None else None
+        if (
+            isinstance(properties, MLModelDeploymentPropertiesClass)
+            and properties.status == DeploymentStatusClass.IN_SERVICE
+        ):
             live.append(urn)
     return tuple(live)
 
