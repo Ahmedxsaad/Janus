@@ -37,11 +37,25 @@ def live_deployments(conn: DataHubConnection, deployment_urns: tuple[str, ...]) 
     A deployment whose properties aspect is missing is treated as not live: we
     escalate severity only on positive evidence that traffic is being served
     (detect/CLAUDE.md rule 5).
+
+    Batched in one call regardless of how many deployments a model has
+    (detect/CLAUDE.md rule 3): a blast-radius scan grades every at-risk model,
+    and an N+1 read here would turn one scan into one GMS round trip per
+    deployment of every model in the radius.
     """
+    if not deployment_urns:
+        return ()
+
+    aspect_name = MLModelDeploymentPropertiesClass.ASPECT_NAME
+    entities = conn.graph.get_entities(
+        entity_name=entity_type(deployment_urns[0]),
+        urns=list(deployment_urns),
+        aspects=[aspect_name],
+    )
     live: list[str] = []
     for urn in deployment_urns:
-        properties = conn.graph.get_aspect(urn, MLModelDeploymentPropertiesClass)
-        if properties is not None and properties.status == DeploymentStatusClass.IN_SERVICE:
+        entry = entities.get(urn, {}).get(aspect_name)
+        if entry is not None and entry[0].status == DeploymentStatusClass.IN_SERVICE:
             live.append(urn)
     return tuple(live)
 

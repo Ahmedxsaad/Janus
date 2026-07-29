@@ -106,6 +106,34 @@ class FakeGraph:
     ) -> Any:
         return [_RelatedEntity(urn) for urn in self._related.get(entity_urn, [])]
 
+    def get_entities(
+        self,
+        entity_name: str,
+        urns: list[str],
+        aspects: list[str] | None = None,
+        with_system_metadata: bool = False,
+    ) -> dict[str, dict[str, tuple[Any, Any]]]:
+        """Batch aspect read, mirroring DataHubGraph.get_entities's shape.
+
+        Reads the same ``_aspects`` store ``get_aspect``/``set_aspect`` use, keyed
+        by ``ASPECT_NAME`` rather than a second fixture format, so a test that
+        already did ``graph.set_aspect(urn, SomeAspect(...))`` needs no change to
+        also be readable through the batched call graph_reads.live_deployments
+        makes (detect/CLAUDE.md rule 3: no N+1 single fetches).
+        """
+        wanted = set(aspects or [])
+        result: dict[str, dict[str, tuple[Any, Any]]] = {}
+        for urn in urns:
+            entity_aspects: dict[str, tuple[Any, Any]] = {}
+            for (stored_urn, aspect_type), value in self._aspects.items():
+                if stored_urn != urn:
+                    continue
+                name = getattr(aspect_type, "ASPECT_NAME", None)
+                if name in wanted:
+                    entity_aspects[name] = (value, None)
+            result[urn] = entity_aspects
+        return result
+
 
 class FakeEntities:
     """Records entities handed to client.entities.upsert and patch builders to update."""
