@@ -40,3 +40,4 @@ branch inside this one.
 | 2026-07-29 | Claude (for Ahmed Saad) | cloud-init.yaml's git clone uses a __GITHUB_CLONE_TOKEN__ placeholder (repo stays private for now); real token substituted only outside git and revoked after first provision (D-062) |
 | 2026-07-29 | Claude (for Ahmed Saad) | A real VM boot found write_files racing azureuser's own creation, cascading into a Permission Denied git clone. .env write moves into runcmd, write_files removed (D-063) |
 | 2026-07-29 | Claude (for Ahmed Saad) | Custom domain + HTTPS via Caddy verified live (`https://modelguard.ahmedxsaad.me`); fixed the frontend password-change instructions to the real user.props mechanism; azure/Caddyfile.template added (D-064) |
+| 2026-07-30 | Claude (for Ahmed Saad) | Found OpenSearch had OOM-crashed and stayed dead 6h with no restart policy, silently breaking search while health checks kept passing; cloud-init.yaml now sets restart: unless-stopped on all datahub-* containers (D-065) |
