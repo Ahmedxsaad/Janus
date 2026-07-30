@@ -16,6 +16,217 @@ Entry template:
 
 ---
 
+## D-064: Custom domain and HTTPS via Caddy, added after the demo verified live (2026-07-29)
+- Decided by: Ahmed Saad (wanted the URL to not be a raw IP)
+- Decision: Reverse-proxy the DataHub frontend behind Caddy on
+  `https://modelguard.ahmedxsaad.me`, with Caddy handling automatic Let's
+  Encrypt certificate issuance and renewal. Documented as a new, optional,
+  manual post-provision section in `docs/deploy/azure-vm.md`; not folded into
+  `cloud-init.yaml` since the domain does not exist at provisioning time.
+  Also fixed the frontend password-change instructions in the same guide:
+  the in-app "Reset password" flow does not work on a bare Quickstart at
+  all (confirmed live, `Failed to generate password reset token for user`),
+  because it needs `DATAHUB_TOKEN_SERVICE_SIGNING_KEY`, which Quickstart
+  never sets. The real credential is a flat `user.props` file baked into the
+  frontend container, edited directly and the container restarted to reload
+  it.
+- Options considered: (a) Azure's own DNS name label on the public IP (still
+  not the user's domain), (b) nginx + certbot, (c) Caddy.
+- Why Caddy over nginx+certbot: one binary, one config block, automatic
+  certificate acquisition and renewal built in, no separate certbot
+  cron/timer to maintain. Verified live: `tls-alpn-01` challenge succeeded
+  and `https://modelguard.ahmedxsaad.me` returned `HTTP/2 200` with a real
+  issued certificate within seconds of DNS, the two new NSG rules, and Caddy
+  all being in place together.
+- Why DNS had to be "DNS only" not proxied: Cloudflare's proxy (orange
+  cloud) fronts the connection with Cloudflare's own IPs, which breaks the
+  `tls-alpn-01` domain-ownership check, since that check needs a direct TLS
+  connection to the VM itself. Diagnosed live: the DNS-only setting was
+  required for the certificate step to succeed; caught before it became a
+  silent failure, not after.
+- A real footgun, caught and fixed during this same session: the Cloud
+  Shell `MY_IP` lookup for restricting the SSH NSG rule
+  (`curl -s https://ifconfig.me`) returned Cloud Shell's own outbound IP,
+  not the user's, and silently locked the user's own machine out of SSH.
+  Confirmed by attempting an SSH connection immediately after and watching
+  it time out, then fixed by re-running the same rule update with the
+  correct IP. Worth remembering for any future NSG rule scoped "to me": run
+  the IP lookup from the machine that will actually connect, not from
+  whatever shell happens to be issuing the `az` command.
+- Result: `docs/deploy/azure-vm.md` updated: password-change instructions
+  fixed to the real mechanism, a new "Add a custom domain and HTTPS
+  (optional)" section, the Files list, and the top disclaimer rewritten from
+  "not verified end to end" to "verified live" with an honest caveat that
+  the fixed `cloud-init.yaml` (D-063) was verified by its replacement steps
+  run manually, not by a from-scratch boot of the fixed file itself.
+  `deploy/azure/Caddyfile.template` added (placeholder domain, substituted
+  outside git the same way the GitHub token placeholder works, D-062).
+
+---
+
+## D-063: A real VM boot found a write_files race; .env moves into runcmd (2026-07-29)
+- Decided by: Claude, from a live cloud-init failure on the user's first
+  actually-provisioned VM
+- Decision: `deploy/azure/cloud-init.yaml`'s `write_files` block is removed;
+  the `.env` file is now written by a `runcmd` step immediately after the
+  `git clone`, with no `owner:` field needed since `sudo -u azureuser` writes
+  it directly as that user.
+- Options considered: (a) keep write_files but drop its owner: field and add
+  a separate chown in runcmd, (b) move the whole write to runcmd, (c) make
+  the earlier chown /opt/modelguard recursive (-R) to fix ownership without
+  moving the write.
+- Why: `cloud-init status --long` on the real VM showed `write_files` failed
+  with `OSError('Unknown user or group: "getpwnam(): name not found:
+  'azureuser'"')` at 17 seconds into boot: write_files runs in an earlier
+  cloud-init stage than user_groups has necessarily finished in, so
+  `owner: "azureuser:azureuser"` raced the account's own creation. Worse,
+  the module still created `/opt/modelguard/DataHub` as root before failing,
+  and the later `chown azureuser:azureuser /opt/modelguard` in runcmd is not
+  recursive, so that pre-existing subdirectory stayed root-owned; the git
+  clone into it then failed with Permission Denied as `azureuser`, a second,
+  cascading failure from the same root cause (confirmed on the VM:
+  `/opt/modelguard/DataHub` was `drwxr-xr-x root root`, empty, no `.git`).
+  Option (c) alone would have fixed the clone but not the original
+  write_files race; option (b) removes the race entirely because runcmd
+  guarantees both azureuser and the cloned repo already exist, and it also
+  fixes the empty-vs-non-empty-destination problem git clone would otherwise
+  hit if the directory still existed from an earlier write.
+- Result: `deploy/azure/cloud-init.yaml` updated. This bug shipped through
+  every earlier syntax check in `deploy/CLAUDE.md` rule 2 (`bash -n` on
+  runcmd fragments, a real YAML parser on structure) because those checks
+  cannot catch a cross-module ordering race, only a real boot does, exactly
+  the gap the guide's "Not verified end to end" disclaimer names. The live
+  VM itself was recovered manually over SSH (re-clone, write .env, seed,
+  install the systemd unit) rather than re-provisioned, to avoid a second
+  cost/time hit; the fixed file only benefits the next fresh provision.
+
+---
+
+## D-062: A placeholder token, substituted only outside git, unblocks cloning the private repo (2026-07-29)
+- Decided by: Ahmed Saad (declined making the repo public before submission)
+- Decision: `deploy/azure/cloud-init.yaml`'s `git clone` uses a placeholder,
+  `__GITHUB_CLONE_TOKEN__`, in the tracked file. A real fine-grained GitHub
+  token (scoped to this repo, Contents: Read-only) is substituted only in
+  the copy of the file's contents pasted into the Azure Portal's Custom Data
+  box, never committed, and revoked right after the first successful
+  provision. Documented as a new "Cloning a private repo during
+  provisioning" section in `docs/deploy/azure-vm.md`.
+- Options considered: (a) make the repo public now (simplest, required by
+  the hackathon rules eventually regardless, `docs/hackathon-specs/03-submission-requirements.md`
+  lines 8-11, but declined for now), (b) embed a long-lived token directly in
+  the tracked cloud-init.yaml (violates root CLAUDE.md code rule 6d and 5,
+  secrets never in tracked files), (c) placeholder substituted only outside
+  git, short-lived by policy (revoke after first clone).
+- Why: The clone happens during an unattended first boot with no
+  interactive login possible, so some credential has to reach it; the repo
+  being private is the user's explicit, current choice, not a mistake to
+  route around silently. A placeholder keeps the tracked file secret-free
+  (matching every other credential in this project, D-shaped by root
+  CLAUDE.md code rule 6), while scoping the real token to read-only on one
+  repo and revoking it immediately after the clone bounds the exposure
+  window to something close to the boot time itself, not the whole judging
+  period. Disclosed plainly rather than assumed safe: cloud-init writes
+  runcmd values into `/var/log/cloud-init-output.log` and its own on-disk
+  state in plaintext, so the token sits readable-by-root on the VM until
+  revoked; revocation, not disk hygiene, is what actually closes that.
+- Result: `cloud-init.yaml` updated with the placeholder and a header comment
+  explaining it is not a secret and must never be replaced in the tracked
+  file. `docs/deploy/azure-vm.md` gained a "Cloning a private repo during
+  provisioning" section between the security section and the cost section,
+  with the token-generation, substitution, and revoke-after-verify steps,
+  and a note that the whole section becomes unnecessary once the repo goes
+  public (which the hackathon rules require by submission regardless).
+
+---
+
+## D-061: D-060 was wrong, its price was a Spot bid; revert to B2as_v2 (2026-07-29)
+- Decided by: Ahmed Saad (hit a quota-blocked size in the portal and shared
+  the screenshot); root cause and correction by Claude
+- Decision: `docs/deploy/azure-vm.md` reverts from `Standard_D2as_v5`
+  (D-060) to `Standard_B2as_v2`, both in `francecentral`, on Regular
+  (pay-as-you-go) pricing, Spot explicitly never used.
+- Options considered: (a) request an Azure quota increase for the `Dasv5`
+  family to keep `D2as_v5`, (b) fall back to a same-price sibling like
+  `D2as_v6`/`D2as_v7`, (c) revert to `B2as_v2`.
+- Why: `D2as_v5` showed as "Insufficient quota - family limit" in the portal,
+  and its listed price there ($73.73/month, ~$0.101/hr) did not match the
+  $0.01866/hr D-060 had trusted as the real portal rate. The $0.01866 figure
+  came from a portal session where Azure Spot instance was toggled on
+  without it being noticed (the "Maximum price you want to pay per hour"
+  field, only shown when Spot is active, referenced that exact number as the
+  Spot floor). Spot pricing floats with unused datacenter capacity and is
+  unrelated to the usual B-series-versus-D-series cost relationship, which
+  is the actual explanation for D-060's "every D-series generation undercuts
+  B-series" observation, not a genuine regional or subscription pricing
+  quirk. Spot also draws from a separate, smaller quota pool than standard
+  VMs, which is why it was quota-blocked on this student subscription.
+  Options (a) and (b) both still leave the guide implicitly dependent on
+  Spot-adjacent capacity and quota that is not guaranteed, and neither
+  addresses that Spot itself is the wrong tool here regardless of price: a
+  judge-facing demo that must stay reachable through the judging window
+  cannot tolerate Azure evicting the VM to reclaim capacity, which the guide
+  had already ruled out on reliability grounds before this quota error
+  surfaced. `B2as_v2` is the size the account already defaulted to, is not
+  quota-blocked, and its $0.0765/hr rate was confirmed in an earlier,
+  Spot-free portal screenshot (plain "Cost per hour" column, no Spot field
+  open), so it is trusted over the D-series figures.
+- Result: `docs/deploy/azure-vm.md` reverted: size, cost table (now stating
+  explicitly to confirm Spot is off before trusting a portal number), and the
+  worked example (~$15 back to ~$38, still comfortably under the $60
+  budget). Region stays `francecentral` since the corrected `B2as_v2` rate
+  is also sourced from that region. The resize escalation path changed from
+  a D-series size back to `Standard_B4as_v2`, with an added caveat that a
+  family's vCPU quota is often shared across its sizes, so a larger size in
+  the same family is not guaranteed available even when the smaller one is.
+  Lesson for future portal-sourced pricing in this repo: confirm "Display
+  cost" is Hourly/Regular and that Azure Spot instance is off before citing
+  a number from the size picker as a standard rate.
+
+---
+
+## D-060: Real portal pricing beats web-search estimates, switch to D2as_v5 (2026-07-29)
+
+- Superseded by D-061: the $0.01866/hr this entry cited was an Azure Spot
+  bid price, not the standard rate, and `D2as_v5` turned out to be
+  quota-blocked on the subscription this was provisioned under.
+- Decided by: Ahmed Saad (shared real Azure Portal VM-size-picker screenshots
+  for their actual subscription and region)
+- Decision: `docs/deploy/azure-vm.md` switches from `Standard_B2ms` in
+  `eastus` (D-059, a web-search estimate) to `Standard_D2as_v5` in
+  `francecentral` (real Azure Portal pricing for the user's actual
+  subscription, "Azure for Students", and region).
+- Options considered: (a) keep `B2ms`/`eastus` as documented, (b) switch to
+  `B2as_v2` (same specs as `B2ms`, same family, Azure's own "Popular" pick in
+  the portal, still web-search-adjacent territory), (c) switch to `D2as_v5`.
+- Why: The user's portal screenshots showed every D-series generation (v3
+  through v7) priced at roughly $0.019-0.027/hr in `francecentral` on their
+  subscription, while both B-series v2 options (`B2as_v2`, `B2s_v2`) priced
+  at $0.077-0.085/hr, a consistent 3-4x gap across the whole size list, not
+  one outlier row. That consistency is why it was trusted over D-057's and
+  D-059's earlier web-search figures (Holori, Vantage), which reflect
+  generic/US pricing and evidently do not hold for this subscription and
+  region. `D2as_v5` matches `B2as_v2` spec for spec (2 vCPU, 8 GiB, 4 data
+  disks, 3750 IOPS, no local temp disk) at roughly a quarter of the price,
+  and is non-burstable (fixed, sustained CPU, no credit bank to exhaust),
+  which is a better fit than burstable for a box running three JVMs plus
+  MySQL plus `modelguard watch` concurrently. No reserved-instance or Spot
+  toggle was visible in the screenshots (`Display cost: Hourly` shown
+  explicitly), so this is trusted as on-demand pricing, not a commitment
+  rate.
+- Result: `docs/deploy/azure-vm.md` updated: size, region (`eastus` to
+  `francecentral`, since the sourced price is region-specific), the cost
+  table (now citing the portal directly, subscription and region named), and
+  the worked example (~$40 to ~$15 for the same ~390-hour provision-test-pause
+  window, ~$25 even run continuously for the full ~33 days). The resize
+  escalation path changed from `B4ms` to a 4 vCPU / 16 GiB D-series size
+  (`D4as_v5`), its exact price not sourced here, flagged to check before
+  switching. Disk and public-IP rates were not re-verified against the
+  portal and remain the earlier web-search estimates; flagged explicitly in
+  the guide. The guide already carries a region-dependency caveat pointing
+  back to the VM size picker if provisioning happens somewhere else.
+
+---
+
 ## D-059: The Azure guide's own default did not fit the actual budget (2026-07-29)
 - Decided by: Ahmed Saad (stated the real constraint: $60 total, provisioning
   from 2026-07-29 through judging ending 2026-08-31), by Claude

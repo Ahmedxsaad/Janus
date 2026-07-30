@@ -1,0 +1,11 @@
+# Reverse proxy for the DataHub frontend, with automatic HTTPS via Let's
+# Encrypt. Not applied by cloud-init.yaml: the domain does not exist at
+# provisioning time. Copy this file's contents, replace the placeholder
+# below with the real (sub)domain, and paste the result into
+# /etc/caddy/Caddyfile on the VM per docs/deploy/azure-vm.md's "Add a custom
+# domain and HTTPS" section. Never commit the real domain here; a domain name
+# is not a secret, but this file is a template, not a per-deployment record.
+
+__DOMAIN__ {
+    reverse_proxy localhost:9002
+}
