@@ -200,3 +200,31 @@ def schema_drift_findings(
         findings.extend(_run_findings(conn, model, run_urn, config))
 
     return tuple(sorted(findings, key=lambda finding: finding.dataset_name))
+
+
+def schema_drift_candidate_resources(
+    conn: DataHubConnection,
+    model_urn: str,
+    config: ScanConfig,
+) -> tuple[str, ...]:
+    """Return every input dataset this detector could raise a drift incident on.
+
+    Present whether or not the dataset is currently drifting: an input with a
+    captured training-time snapshot is a resource ``schema_drift_findings``
+    could name, which is exactly what reconciliation needs to check whether a
+    previously-raised incident on it is now stale.
+    """
+    properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
+    if properties is None or not properties.trainingJobs:
+        return ()
+
+    resources: list[str] = []
+    for run_urn in properties.trainingJobs:
+        snapshot = _training_snapshot(conn, run_urn, config.training_schema_property)
+        if snapshot is None:
+            continue
+        inputs = conn.graph.get_aspect(run_urn, DataProcessInstanceInputClass)
+        for dataset_urn in list(inputs.inputs or []) if inputs else []:
+            if snapshot.get(dataset_urn) is not None:
+                resources.append(dataset_urn)
+    return tuple(resources)

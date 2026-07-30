@@ -25,16 +25,25 @@ import time
 import uuid
 from dataclasses import dataclass, field
 
+from datahub.metadata.schema_classes import (
+    IncidentInfoClass,
+    IncidentStateClass,
+    MLModelPropertiesClass,
+)
+from datahub.metadata.urns import DatasetUrn, SchemaFieldUrn
+
 from modelguard.agent.narrate import Narrative, incident_description, narrate
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
-from modelguard.detect.blast_radius import blast_radius, finding_for
-from modelguard.detect.leakage import leakage_findings
-from modelguard.detect.schema_drift import schema_drift_findings
+from modelguard.detect.blast_radius import blast_radius, downstream_models, finding_for
+from modelguard.detect.graph_reads import model_ref
+from modelguard.detect.leakage import feature_source_column, leakage_findings
+from modelguard.detect.schema_drift import schema_drift_candidate_resources, schema_drift_findings
 from modelguard.detect.trust_score import trust_inputs_from_findings, trust_score
 from modelguard.llm import LLMConfig
 from modelguard.models import (
     Finding,
+    FindingType,
     FreshnessFinding,
     LeakageFinding,
     ModelRef,
@@ -49,8 +58,14 @@ from modelguard.writeback.assertions import (
     upsert_guarding_assertion,
 )
 from modelguard.writeback.documents import DocumentWrite, publish_impact_report
-from modelguard.writeback.incidents import IncidentWrite, raise_incident
-from modelguard.writeback.labels import add_tag, ensure_tag
+from modelguard.writeback.incidents import (
+    IncidentWrite,
+    attached_incident_urns,
+    find_active_incident,
+    raise_incident,
+    resolve_incident,
+)
+from modelguard.writeback.labels import add_tag, ensure_tag, remove_tag
 from modelguard.writeback.properties import (
     RISK_FLAGS,
     RUN_ID,
@@ -59,8 +74,9 @@ from modelguard.writeback.properties import (
     assign_properties,
     define_properties,
     read_properties,
+    remove_properties,
 )
-from modelguard.writeback.terms import add_term, ensure_term
+from modelguard.writeback.terms import add_term, ensure_term, remove_term
 
 #: Description attached to the tag entity the first time it is created.
 AT_RISK_TAG_DESCRIPTION = (
@@ -351,6 +367,113 @@ def _detect(
     return findings, warnings
 
 
+def _recovery_message(run_id: str) -> str:
+    """The message stamped on an incident this reconciliation resolves."""
+    return f"Recovered by ModelGuard run {run_id}; the finding is no longer present."
+
+
+def _reconcile_stale_findings(
+    conn: DataHubConnection,
+    config: ScanConfig,
+    *,
+    table_urn: str | None,
+    model_urn: str | None,
+    findings: list[Finding],
+    run_id: str,
+) -> None:
+    """Resolve any stale ModelGuard incident and clear the risk it named.
+
+    A stale incident is one this scan's target could raise, but did not raise
+    this run. Graph-driven, not memory-driven: this asks the graph what is
+    already
+    active on the resources ``table_urn``/``model_urn`` could name, the same
+    way ``raise_incident``'s own dedup does, rather than diffing against a
+    previous run's in-memory typed report. A process that never saw the
+    finding raised in the first place, a fresh ``watch`` after a restart, a
+    plain ``scan``, ``watch --once``, can therefore still resolve it. Before
+    this, only a single uninterrupted ``watch`` process that both raised and
+    later re-observed a finding could ever resolve it; every other path left
+    a fixed problem's incident, tag, and trust score open forever (D-067).
+
+    Called only from ``run_scan``'s write path: resolving an incident is a
+    write, so a dry run (including ``gate`` without ``--write``) must never
+    reach this.
+    """
+    current_keys = {(finding.resource_urn, finding.incident_type) for finding in findings}
+    recovered_flags: dict[str, set[str]] = {}
+    recovered_models: dict[str, ModelRef] = {}
+
+    def record(model: ModelRef, finding_type: FindingType) -> None:
+        recovered_models[model.urn] = model
+        recovered_flags.setdefault(model.urn, set()).add(str(finding_type))
+
+    if table_urn is not None and (table_urn, "FRESHNESS") not in current_keys:
+        title = f"Stale upstream data in {DatasetUrn.from_string(table_urn).name}"
+        incident = find_active_incident(conn, table_urn, "FRESHNESS", title)
+        if incident is not None:
+            resolve_incident(conn, incident, _recovery_message(run_id))
+            for at_risk in downstream_models(conn, table_urn, config):
+                record(at_risk, FindingType.UPSTREAM_FRESHNESS)
+
+    if model_urn is not None:
+        model = model_ref(conn, model_urn)
+        properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
+
+        # Leakage: every feature's source column is a candidate resource. The
+        # incident's title also names the label reached, which is not
+        # reconstructable once the leak is gone, so this matches by prefix
+        # rather than find_active_incident's exact-title match.
+        for feature_urn in (properties.mlFeatures or []) if properties else []:
+            source_column = feature_source_column(conn, feature_urn)
+            if source_column is None or (source_column, "FIELD") in current_keys:
+                continue
+            field_path = SchemaFieldUrn.from_string(source_column).field_path
+            prefix = f"Target leakage: {field_path} derives from label "
+            for incident_urn in attached_incident_urns(conn, source_column):
+                info = conn.graph.get_aspect(incident_urn, IncidentInfoClass)
+                if info is None or info.status.state != IncidentStateClass.ACTIVE:
+                    continue
+                if info.type != "FIELD" or info.title is None or not info.title.startswith(prefix):
+                    continue
+                resolve_incident(conn, incident_urn, _recovery_message(run_id))
+                remove_term(conn, feature_urn, config.leakage_risk_term_urn)
+                record(model, FindingType.TARGET_LEAKAGE)
+
+        # Schema drift: every training input with a captured snapshot, title
+        # fully known (no measurement in it), so this reuses the exact dedup
+        # lookup raise_incident itself uses.
+        for dataset_urn in schema_drift_candidate_resources(conn, model_urn, config):
+            if (dataset_urn, "DATA_SCHEMA") in current_keys:
+                continue
+            title = f"Training-serving schema drift in {DatasetUrn.from_string(dataset_urn).name}"
+            incident = find_active_incident(conn, dataset_urn, "DATA_SCHEMA", title)
+            if incident is not None:
+                resolve_incident(conn, incident, _recovery_message(run_id))
+                record(model, FindingType.INPUT_SCHEMA_DRIFT)
+
+    # One read-modify-write per affected model, after every resolve above, so
+    # a model whose leakage and drift both recovered this run is cleared once
+    # rather than raced across two partial writes.
+    for urn, model in recovered_models.items():
+        existing_flags = {str(flag) for flag in read_properties(conn, urn).get(RISK_FLAGS, [])}
+        remaining = existing_flags - recovered_flags[urn]
+        if remaining:
+            assign_properties(conn, urn, {RISK_FLAGS: sorted(remaining), RUN_ID: [run_id]})
+            continue
+        remove_properties(conn, urn, {RISK_FLAGS})
+        remove_tag(conn, urn, f"urn:li:tag:{config.model_at_risk_tag}")
+        score = trust_score(trust_inputs_from_findings((), model), config)
+        assign_properties(
+            conn,
+            urn,
+            {
+                TRUST_SCORE: [float(score.value)],
+                TRUST_BAND: [str(score.band)],
+                RUN_ID: [run_id],
+            },
+        )
+
+
 def run_scan(
     conn: DataHubConnection,
     config: ScanConfig,
@@ -425,6 +548,18 @@ def run_scan(
     # After every per-finding write, so each model's risk flags are already on the
     # graph when the trust score reads and merges alongside them.
     _persist_trust(conn, trust)
+
+    # After this run's own writes, so reconciliation reads risk flags that
+    # already include anything just raised above, and never fights the write
+    # it is standing next to.
+    _reconcile_stale_findings(
+        conn,
+        config,
+        table_urn=table_urn,
+        model_urn=model_urn,
+        findings=findings,
+        run_id=run_id,
+    )
 
     return ScanReport(
         run_id=run_id,

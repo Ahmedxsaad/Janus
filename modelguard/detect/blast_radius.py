@@ -123,34 +123,23 @@ def _model_at_risk(
     )
 
 
-def blast_radius(
+def _downstream_traversal(
     conn: DataHubConnection,
-    failing_table_urn: str,
+    table_urn: str,
     config: ScanConfig,
-    *,
-    now_ms: int | None = None,
-) -> BlastRadius | None:
-    """Return everything a failing table endangers, or None when it is healthy.
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[ModelAtRisk, ...]]:
+    """Walk a table's downstream lineage: datasets, features, and at-risk models.
 
-    The freshness check gates the traversal: a fresh table has no blast radius to
-    compute. This is the deterministic predicate the LLM is never allowed to
-    make, and the reason a scan of a healthy graph writes nothing.
-
-    Args:
-        conn: An open connection.
-        failing_table_urn: The dataset suspected of having stopped refreshing.
-        config: Freshness SLA and hop cap.
-        now_ms: The instant to measure staleness against. Defaults to now.
-
-    Returns:
-        The blast radius when the table is stale, otherwise None.
+    Unconditional on staleness. ``blast_radius`` below gates this on the table
+    actually being stale, since that is the deterministic predicate the LLM is
+    never allowed to make. ``downstream_models`` calls it directly, staleness
+    aside, because reconciling a *recovered* finding needs exactly this list:
+    which models this table's incident could have flagged, so their risk state
+    can be cleared once the table is fresh again and there is no stale table
+    left to traverse a fresh ``blast_radius`` from.
     """
-    signal = freshness_signal(conn, failing_table_urn, config, now_ms=now_ms)
-    if signal is None or not signal.is_stale:
-        return None
-
     results = conn.client.lineage.get_lineage(
-        source_urn=failing_table_urn,
+        source_urn=table_urn,
         direction="downstream",
         max_hops=config.max_hops,
         count=config.lineage_result_cap,
@@ -180,13 +169,58 @@ def blast_radius(
             key=ModelAtRisk.sort_key,
         )
     )
+    return tuple(datasets), tuple(features), models
+
+
+def downstream_models(
+    conn: DataHubConnection,
+    table_urn: str,
+    config: ScanConfig,
+) -> tuple[ModelAtRisk, ...]:
+    """Return every model downstream of a table, regardless of its freshness.
+
+    Used only for reconciliation: when a freshness incident on ``table_urn``
+    resolves, this is how a caller learns which models' risk flags and tags to
+    re-check, without a stale table to traverse a fresh ``blast_radius`` from.
+    """
+    _, _, models = _downstream_traversal(conn, table_urn, config)
+    return models
+
+
+def blast_radius(
+    conn: DataHubConnection,
+    failing_table_urn: str,
+    config: ScanConfig,
+    *,
+    now_ms: int | None = None,
+) -> BlastRadius | None:
+    """Return everything a failing table endangers, or None when it is healthy.
+
+    The freshness check gates the traversal: a fresh table has no blast radius to
+    compute. This is the deterministic predicate the LLM is never allowed to
+    make, and the reason a scan of a healthy graph writes nothing.
+
+    Args:
+        conn: An open connection.
+        failing_table_urn: The dataset suspected of having stopped refreshing.
+        config: Freshness SLA and hop cap.
+        now_ms: The instant to measure staleness against. Defaults to now.
+
+    Returns:
+        The blast radius when the table is stale, otherwise None.
+    """
+    signal = freshness_signal(conn, failing_table_urn, config, now_ms=now_ms)
+    if signal is None or not signal.is_stale:
+        return None
+
+    datasets, features, models = _downstream_traversal(conn, failing_table_urn, config)
 
     return BlastRadius(
         signal=signal,
         failing_table_urn=failing_table_urn,
         failing_table_name=DatasetUrn.from_string(failing_table_urn).name,
-        downstream_datasets=tuple(datasets),
-        downstream_features=tuple(features),
+        downstream_datasets=datasets,
+        downstream_features=features,
         models=models,
     )
 
