@@ -674,8 +674,7 @@ def test_a_stale_schema_drift_incident_resolves_with_no_prior_process_state():
         incident_urn=incident_urn,
         incident_type="DATA_SCHEMA",
         title=(
-            "Training-serving schema drift in ecommerce.public.customer_features "
-            "for Credit Risk v3"
+            "Training-serving schema drift in ecommerce.public.customer_features for Credit Risk v3"
         ),
     )
     graph.emitted.clear()
