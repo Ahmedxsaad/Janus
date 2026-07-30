@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -51,6 +52,7 @@ from tests.conftest import (
     column_path,
     lineage_result,
     make_connection,
+    make_schema_drift_finding,
 )
 
 FEATURE_TABLE = (
@@ -820,16 +822,19 @@ def test_a_drift_incident_raised_for_another_model_is_left_alone():
             ),
         }
     )
-    # The live incident belongs to a different model, which still drifts.
+    # The live incident belongs to a different model, which still drifts. Its
+    # title is taken from the production Finding.title of a v4 drift finding
+    # rather than written out here, so this test tracks the real dedup key: when
+    # the title named only the dataset, this was byte-for-byte the title the v3
+    # scan below looks up, and the v3 recovery closed v4's live incident.
+    v3 = make_schema_drift_finding()
+    v4_title = replace(v3, model=replace(v3.model, name="Credit Risk v4")).title
     active_incident(
         graph,
         resource_urn=FEATURE_TABLE_URN,
         incident_urn="urn:li:incident:v4-drift",
         incident_type="DATA_SCHEMA",
-        title=(
-            "Training-serving schema drift in ecommerce.public.customer_features "
-            "for Credit Risk v4"
-        ),
+        title=v4_title,
     )
     graph.emitted.clear()
 
