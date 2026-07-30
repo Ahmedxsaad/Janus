@@ -477,7 +477,16 @@ def _run_review(
         if auto:
             console.print("\n[dim]--auto-approve: writing without prompting.[/dim]")
             return True
-        return typer.confirm("\nWrite these findings back to DataHub?", default=False)
+        # A clean preview still reaches this prompt, because a clean scan is what
+        # resolves a recovered target's incident and clears the risk it left on
+        # the graph. Asking about "these findings" when there are none would be a
+        # lie about what is being approved.
+        question = (
+            "\nResolve anything on the graph this scan found to be fixed?"
+            if preview.clean
+            else "\nWrite these findings back to DataHub?"
+        )
+        return typer.confirm(question, default=False)
 
     try:
         report = run_agent(

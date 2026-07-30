@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
 import pytest
 
 from modelguard.models import ChangeKind, ModelAtRisk, SchemaChange, Severity, severity_rank
-from tests.conftest import DEPLOYMENT_URN, make_finding, make_schema_drift_finding
+from tests.conftest import (
+    DEPLOYMENT_URN,
+    MODEL_URN,
+    make_finding,
+    make_schema_drift_finding,
+)
 
 DIGIT = re.compile(r"\d")
 
@@ -64,6 +70,22 @@ def test_the_drift_title_names_the_dataset_and_keeps_the_columns_in_evidence():
     assert "a: INT -> STR" in many.evidence["drifted_fields"]
     assert many.evidence["retyped"] == "1"
     assert many.evidence["removed"] == "1"
+
+
+def test_two_models_drifting_on_one_dataset_do_not_share_a_dedup_key():
+    """Drift is a property of the (model, dataset) pair, not of the dataset.
+
+    The title is the dedup key, and the incident attaches to the dataset. A title
+    naming only the dataset made two models' drift on a shared input one and the
+    same incident: the second model's finding was deduplicated into silence, and
+    whichever model recovered first resolved the other's live incident (D-070).
+    """
+    v3 = make_schema_drift_finding()
+    v4 = replace(v3, model=replace(v3.model, urn=f"{MODEL_URN}_v4", name="Credit Risk v4"))
+
+    assert v3.resource_urn == v4.resource_urn, "both incidents land on the same dataset"
+    assert v3.title != v4.title
+    assert "Credit Risk v4" in v4.title
 
 
 # --------------------------------------------------------------------------

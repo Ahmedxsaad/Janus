@@ -502,12 +502,20 @@ class SchemaDriftFinding(Finding):
 
     @property
     def title(self) -> str:
-        """A pure function of the dataset name.
+        """A pure function of the dataset name and the model that trained on it.
 
         The drifted columns, which can grow between scans, live in the evidence,
         not the dedup key.
+
+        The model belongs in the title because drift is a property of the pair,
+        not of the dataset: it is the gap between *this* model's training-time
+        snapshot and the dataset's current schema. Two models trained on the
+        same input at different times genuinely disagree about whether it
+        drifted. Naming only the dataset collapsed both into one incident, so
+        the second model's drift was silently deduplicated away and either
+        model's recovery resolved the other's live incident (D-070).
         """
-        return f"Training-serving schema drift in {self.dataset_name}"
+        return f"Training-serving schema drift in {self.dataset_name} for {self.model.name}"
 
     @property
     def evidence(self) -> Mapping[str, str]:

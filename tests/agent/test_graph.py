@@ -25,6 +25,7 @@ from tests.conftest import (
     TABLE_URN,
     FakeClient,
     FakeGraph,
+    active_incident,
     lineage_result,
     make_connection,
 )
@@ -156,16 +157,26 @@ def test_auto_approve_writes_only_when_explicitly_requested():
     assert len(graph.graphql_calls) == 1
 
 
-def test_a_clean_scan_never_prompts_and_writes_nothing():
-    """A fresh table has nothing to approve: the interrupt is skipped entirely."""
+def _fresh() -> tuple[FakeGraph, FakeClient]:
+    """The stale fixture with the table made fresh (1h lag against a 6h SLA)."""
     graph, client = _stale()
-    # Make the table fresh (1h < 6h SLA); reuse the rest of the fixture.
     graph._timeseries[(TABLE_URN, OperationClass)] = OperationClass(
         timestampMillis=NOW_MS,
         operationType=OperationTypeClass.UPDATE,
         lastUpdatedTimestamp=NOW_MS - 1 * HOUR,
         actor="urn:li:corpuser:datahub",
     )
+    return graph, client
+
+
+def test_a_clean_scan_prompts_because_it_may_still_have_a_recovery_to_write():
+    """A clean scan is the recovery path, so it is gated like any other write.
+
+    Nothing is stale here and no incident is open, so approving writes nothing.
+    The point is that the approval is asked for at all: the same run against a
+    graph that does hold a stale incident is what resolves it (D-070).
+    """
+    graph, client = _fresh()
     prompted = {"called": False}
 
     def approve(_preview) -> bool:
@@ -175,6 +186,52 @@ def test_a_clean_scan_never_prompts_and_writes_nothing():
     report = _run(graph, client, approve)
 
     assert report.clean is True
-    assert prompted["called"] is False, "a clean scan must not ask for approval"
+    assert prompted["called"] is True, "a clean scan can still write a recovery"
     assert graph.emitted == []
     assert graph.graphql_calls == []
+
+
+def test_a_declined_clean_scan_resolves_nothing():
+    """Declining a clean scan leaves the stale incident open. The gate is real."""
+    graph, client = _fresh()
+    active_incident(
+        graph,
+        resource_urn=TABLE_URN,
+        incident_urn="urn:li:incident:stale-table",
+        incident_type="FRESHNESS",
+        title="Stale upstream data in ecommerce.public.loans_raw",
+    )
+    graph.emitted.clear()
+
+    report = _run(graph, client, lambda _preview: False)
+
+    assert report.clean is True
+    assert [q for q, _ in graph.graphql_calls if "updateIncidentStatus" in q] == []
+
+
+def test_an_approved_clean_scan_resolves_a_stale_incident_on_the_agent_path():
+    """The agent path reconciles exactly as run_scan does (D-070).
+
+    Before this, ``scan --review``/``--auto-approve`` routed a clean scan
+    straight to decline, so a fixed problem's incident stayed ACTIVE forever on
+    the one path a human had explicitly approved writes on.
+    """
+    graph, client = _fresh()
+    incident_urn = "urn:li:incident:stale-table"
+    active_incident(
+        graph,
+        resource_urn=TABLE_URN,
+        incident_urn=incident_urn,
+        incident_type="FRESHNESS",
+        title="Stale upstream data in ecommerce.public.loans_raw",
+    )
+    graph.emitted.clear()
+
+    report = _run(graph, client, lambda _preview: True)
+
+    assert report.clean is True
+    resolved = [
+        variables for query, variables in graph.graphql_calls if "updateIncidentStatus" in query
+    ]
+    assert len(resolved) == 1
+    assert resolved[0]["urn"] == incident_urn

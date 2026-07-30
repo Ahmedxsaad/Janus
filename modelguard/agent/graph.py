@@ -27,9 +27,9 @@ one call. The checkpointer
 serializes whatever the state holds, and it does not know ModelGuard's finding and
 report dataclasses, so carrying them in the state serializes them on every hop and
 warns that unregistered types will be blocked in a future release. The state
-therefore carries only two booleans (whether anything was found, whether it was
-approved); the findings, narratives, and reports live in an in-process holder the
-node closures share. That is sound precisely because the checkpointer is the
+therefore carries only one boolean (whether the caller approved the writes); the
+findings, narratives, and reports live in an in-process holder the node closures
+share. That is sound precisely because the checkpointer is the
 in-memory :class:`~langgraph.checkpoint.memory.MemorySaver`: a paused run resumes
 within the same ``run_agent`` call, in the same process, so the holder is always
 there. A durable checkpointer is intentionally out of scope for this synchronous
@@ -56,6 +56,7 @@ from modelguard.agent.pipeline import (
     TrustWrite,
     _detect,
     _persist_trust,
+    _reconcile_stale_findings,
     _trust_scores,
     _write_back,
     new_run_id,
@@ -81,14 +82,13 @@ class ApprovalRequiredError(PermissionError):
 
 
 class ScanState(TypedDict, total=False):
-    """The only things the checkpointed graph state carries: control flow.
+    """The only thing the checkpointed graph state carries: control flow.
 
-    Both are plain booleans so the checkpointer serializes them natively. Every
-    rich object a node produces lives in :class:`_RunArtifacts` instead (see the
-    module docstring for why).
+    A plain boolean so the checkpointer serializes it natively. Every rich object
+    a node produces lives in :class:`_RunArtifacts` instead (see the module
+    docstring for why).
     """
 
-    has_findings: bool
     approved: bool
 
 
@@ -149,7 +149,8 @@ def build_scan_graph(
         """The report a caller sees before approving: findings and prose, no writes.
 
         Identical in shape to a ``--dry-run`` report. When the scan found nothing
-        this is the clean report, and the graph never reaches the interrupt.
+        this is the clean report, which the caller is still asked to approve: a
+        clean scan can carry a recovery to write.
         """
         return ScanReport(
             run_id=run_id,
@@ -175,7 +176,7 @@ def build_scan_graph(
         artifacts.findings = findings
         artifacts.warnings = warnings
         artifacts.trust = _trust_scores(findings, config)
-        return {"has_findings": bool(findings)}
+        return {}
 
     def _reason_node(state: ScanState) -> ScanState:
         """Draft the prose for each finding. The only node the LLM runs in."""
@@ -196,12 +197,28 @@ def build_scan_graph(
         return {"approved": bool(decision)}
 
     def _write_node(state: ScanState) -> ScanState:
-        """Perform every mutation, then persist the trust scores. Idempotent."""
+        """Perform every mutation, then persist the trust scores. Idempotent.
+
+        Mirrors ``run_scan``'s write path exactly, reconciliation included: the
+        agent is a different trigger for the same core, not a different core. It
+        is reached with no findings too, which is the recovery case, a target
+        whose problem is fixed still has an incident, a tag, and a trust score to
+        clear (D-070).
+        """
         writes = tuple(
             _write_back(conn, finding, narrative, config, run_id, observed_at)
             for finding, narrative in zip(artifacts.findings, artifacts.narratives, strict=True)
         )
         _persist_trust(conn, artifacts.trust)
+        _reconcile_stale_findings(
+            conn,
+            config,
+            table_urn=table_urn,
+            model_urn=model_urn,
+            findings=artifacts.findings,
+            run_id=run_id,
+            observed_at=observed_at,
+        )
         artifacts.report = ScanReport(
             run_id=run_id,
             table_urn=table_urn,
@@ -219,10 +236,6 @@ def build_scan_graph(
         artifacts.report = artifacts.preview or _preview()
         return {}
 
-    def _after_reason(state: ScanState) -> str:
-        """Skip the interrupt entirely when there is nothing to approve."""
-        return "approval" if state["has_findings"] else "decline"
-
     def _after_approval(state: ScanState) -> str:
         return "write" if state["approved"] else "decline"
 
@@ -235,9 +248,13 @@ def build_scan_graph(
 
     graph.add_edge(START, "detect")
     graph.add_edge("detect", "reason")
-    graph.add_conditional_edges(
-        "reason", _after_reason, {"approval": "approval", "decline": "decline"}
-    )
+    # Every run reaches the interrupt, a clean one included. A clean scan is not
+    # a no-op: it is how a recovery is written, resolving the incident and
+    # clearing the tag and score of a target whose problem is now fixed. Routing
+    # it straight to decline is what left the agent path unable to resolve
+    # anything (D-070), and reconciliation is a mutation, so it goes through the
+    # same approval gate as every other write (agent/CLAUDE.md rule 2).
+    graph.add_edge("reason", "approval")
     graph.add_conditional_edges(
         "approval", _after_approval, {"write": "write", "decline": "decline"}
     )
@@ -263,9 +280,14 @@ def run_agent(
 
     The graph runs detect and reason, then pauses at the approval interrupt and
     hands ``approve`` the preview report. Approve returns True and the writes land;
-    return False and nothing is written and the preview is what comes back. A clean
-    scan never reaches the interrupt: there is nothing to approve, and it returns
-    the clean report having written nothing.
+    return False and nothing is written and the preview is what comes back.
+
+    A clean scan pauses too. It has no finding to write, but it is the run that
+    resolves a recovered target's incident and clears the tag and trust score it
+    left behind, and that is a mutation like any other, so it is gated like any
+    other. The preview reports what was found, not what will be resolved: seeing
+    the pending recoveries first would mean splitting reconciliation into a read
+    phase and an apply phase, which is the upgrade path if it matters (D-070).
 
     Args:
         conn: An open connection.
@@ -280,8 +302,7 @@ def run_agent(
         now_ms: The instant to measure staleness against. Defaults to now.
 
     Returns:
-        The written report when approved, or the unwritten preview when declined or
-        when the scan was clean.
+        The written report when approved, or the unwritten preview when declined.
 
     Raises:
         AgentUnavailableError: LangGraph is not installed.

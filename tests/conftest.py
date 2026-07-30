@@ -7,6 +7,10 @@ from typing import Any
 
 import pytest
 from datahub.metadata.schema_classes import (
+    AuditStampClass,
+    IncidentInfoClass,
+    IncidentStateClass,
+    IncidentStatusClass,
     OtherSchemaClass,
     SchemaFieldClass,
     SchemaFieldDataTypeClass,
@@ -419,3 +423,28 @@ def graph() -> FakeGraph:
 @pytest.fixture
 def conn(graph: FakeGraph) -> DataHubConnection:
     return make_connection(graph)
+
+
+def active_incident(
+    graph: FakeGraph,
+    *,
+    resource_urn: str,
+    incident_urn: str,
+    incident_type: str,
+    title: str,
+) -> None:
+    """Pre-seed an active incident as if some earlier, now-gone run raised it.
+
+    The fixture behind every reconciliation test: it is how a graph that already
+    carries a finding, raised by a process that no longer exists, is set up.
+    """
+    stamp = AuditStampClass(time=0, actor="urn:li:corpuser:datahub")
+    graph._related[resource_urn] = [incident_urn]
+    graph._aspects[(incident_urn, IncidentInfoClass)] = IncidentInfoClass(
+        type=incident_type,
+        entities=[resource_urn],
+        title=title,
+        description="body",
+        status=IncidentStatusClass(state=IncidentStateClass.ACTIVE, lastUpdated=stamp),
+        created=stamp,
+    )
