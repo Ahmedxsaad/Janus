@@ -27,7 +27,6 @@ from rich.console import Console
 from modelguard.agent.pipeline import FindingWrites, ScanReport, run_scan
 from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.config import ScanConfig
-from modelguard.detect.trust_score import trust_inputs_from_findings, trust_score
 from modelguard.env import ConfigError
 from modelguard.gate import (
     EXIT_ERROR,
@@ -41,22 +40,9 @@ from modelguard.models import (
     Finding,
     FreshnessFinding,
     LeakageFinding,
-    ModelRef,
     SchemaDriftFinding,
     Severity,
 )
-from modelguard.writeback.incidents import find_active_incident, resolve_incident
-from modelguard.writeback.labels import remove_tag
-from modelguard.writeback.properties import (
-    RISK_FLAGS,
-    RUN_ID,
-    TRUST_BAND,
-    TRUST_SCORE,
-    assign_properties,
-    read_properties,
-    remove_properties,
-)
-from modelguard.writeback.terms import remove_term
 
 app = typer.Typer(
     add_completion=False,
@@ -400,74 +386,14 @@ def _finding_signature(report: ScanReport) -> frozenset[FindingSignature]:
 
 @dataclass
 class WatchState:
-    """In-process state needed to reconcile a finding that has recovered."""
+    """In-process state used to skip a write when nothing has changed.
+
+    Resolving a finding that recovered no longer depends on this: run_scan's
+    own reconciliation is graph-driven, not a diff against a remembered
+    report, so it works even on a process's very first poll.
+    """
 
     signature: frozenset[FindingSignature] | None = None
-    report: ScanReport | None = None
-
-
-def _reconcile_recovery(
-    conn: DataHubConnection,
-    previous: ScanReport,
-    config: ScanConfig,
-) -> None:
-    """Resolve recovered incidents and remove only the risk that recovered.
-
-    The previous dry-run report contains the typed finding and model references
-    that are no longer present in a clean scan. Other tags, terms, and risk flags
-    are preserved. A trust score is recomputed only when no ModelGuard risk flags
-    remain, using the model's current ownership fact and no active findings.
-    """
-    recovered_models: dict[str, ModelRef] = {}
-    recovery_run_id = f"recovery-{int(time.time() * 1000)}"
-
-    for write in previous.writes:
-        finding = write.finding
-        incident = find_active_incident(
-            conn, finding.resource_urn, str(finding.incident_type), finding.title
-        )
-        if incident is not None:
-            resolve_incident(
-                conn,
-                incident,
-                f"Recovered by ModelGuard poll {recovery_run_id}; "
-                "the finding is no longer present.",
-            )
-
-        if isinstance(finding, LeakageFinding):
-            remove_term(conn, finding.leak.feature_urn, config.leakage_risk_term_urn)
-
-        for model in finding.models_at_risk:
-            recovered_models[model.urn] = model
-            properties = read_properties(conn, model.urn)
-            flags = {str(flag) for flag in properties.get(RISK_FLAGS, [])}
-            remaining = flags - {str(finding.finding_type)}
-            if remaining:
-                assign_properties(
-                    conn,
-                    model.urn,
-                    {RISK_FLAGS: sorted(remaining), RUN_ID: [recovery_run_id]},
-                )
-            else:
-                remove_properties(conn, model.urn, {RISK_FLAGS})
-
-    for model_urn, model in recovered_models.items():
-        properties = read_properties(conn, model_urn)
-        remaining_flags = properties.get(RISK_FLAGS, [])
-        if remaining_flags:
-            continue
-
-        remove_tag(conn, model_urn, f"urn:li:tag:{config.model_at_risk_tag}")
-        score = trust_score(trust_inputs_from_findings((), model), config)
-        assign_properties(
-            conn,
-            model_urn,
-            {
-                TRUST_SCORE: [float(score.value)],
-                TRUST_BAND: [str(score.band)],
-                RUN_ID: [recovery_run_id],
-            },
-        )
 
 
 def _announce_watch_change(
@@ -497,13 +423,16 @@ def _watch_once(
 ) -> frozenset[FindingSignature]:
     """Poll once: detect, and write back only when the set of findings has changed.
 
-    A dry scan detects without writing; only a changed, non-empty finding set
-    triggers the real write-back. Re-writing an unchanged finding every poll would
-    be safe (the writes are idempotent) but noisy and pointless, so a steady state
-    stays quiet. Returns the current signature, which the caller carries into the
-    next poll.
+    A dry scan detects without writing; only a changed finding set triggers the
+    real write-back, which raises whatever this poll newly found and resolves
+    whatever this scan's target no longer reproduces (run_scan's own
+    reconciliation, not a mechanism unique to watch: it fires the same way
+    whether the previous finding was raised by this exact process, an earlier
+    one before a restart, or a plain scan). Re-writing an unchanged finding
+    every poll would be safe (the writes are idempotent) but noisy and
+    pointless, so a steady state stays quiet. Returns the current signature,
+    which the caller carries into the next poll.
     """
-    previous_report = state.report if state is not None else None
     preview = run_scan(
         conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm, dry_run=True
     )
@@ -516,15 +445,12 @@ def _watch_once(
         return signature
 
     _announce_watch_change(previous, signature, preview)
+    written = run_scan(conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm)
     if signature:
-        written = run_scan(conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm)
         _print_writes_section(written)
-    elif previous and previous_report is not None:
-        _reconcile_recovery(conn, previous_report, config)
 
     if state is not None:
         state.signature = signature
-        state.report = preview
     return signature
 
 

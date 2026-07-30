@@ -6,11 +6,15 @@ import pytest
 from datahub.metadata.schema_classes import (
     AssertionInfoClass,
     AssertionRunEventClass,
+    AuditStampClass,
     BooleanTypeClass,
     DeploymentStatusClass,
     GlobalTagsClass,
     GlossaryTermAssociationClass,
     GlossaryTermsClass,
+    IncidentInfoClass,
+    IncidentStateClass,
+    IncidentStatusClass,
     MLFeaturePropertiesClass,
     MLModelDeploymentPropertiesClass,
     MLModelPropertiesClass,
@@ -22,7 +26,9 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
     StructuredPropertiesClass,
     StructuredPropertyDefinitionClass,
+    StructuredPropertyValueAssignmentClass,
 )
+from datahub.metadata.urns import StructuredPropertyUrn
 
 from modelguard.agent.pipeline import FindingWrites, ScanReport, new_run_id, run_scan
 from modelguard.config import ScanConfig
@@ -512,3 +518,194 @@ def test_a_leakage_only_scan_never_claims_a_freshness_assertion_was_written():
     assert len(report.writes) == 1
     assert report.writes[0].finding.finding_type is FindingType.TARGET_LEAKAGE
     assert report.assertion_yaml == ""
+
+
+# --------------------------------------------------------------------------
+# Reconciling a stale incident: graph-driven, not a diff against a process's
+# own prior report (D-067). Every test below calls run_scan exactly once,
+# with no earlier call and no carried-over state, on a graph state where the
+# incident was raised by something else entirely, proving reconciliation does
+# not depend on this process having been the one that raised it.
+# --------------------------------------------------------------------------
+
+
+def _active_incident(
+    graph: FakeGraph,
+    *,
+    resource_urn: str,
+    incident_urn: str,
+    incident_type: str,
+    title: str,
+) -> None:
+    """Pre-seed an active incident as if some earlier, now-gone run raised it."""
+    stamp = AuditStampClass(time=0, actor="urn:li:corpuser:datahub")
+    graph._related[resource_urn] = [incident_urn]
+    graph._aspects[(incident_urn, IncidentInfoClass)] = IncidentInfoClass(
+        type=incident_type,
+        entities=[resource_urn],
+        title=title,
+        description="body",
+        status=IncidentStatusClass(state=IncidentStateClass.ACTIVE, lastUpdated=stamp),
+        created=stamp,
+    )
+
+
+def test_a_stale_freshness_incident_resolves_with_no_prior_process_state():
+    """A plain, one-shot run_scan resolves an incident it never raised itself."""
+    graph = _graph(lag_hours=1.0)  # within the 6h default SLA: currently fresh
+    client = _client()
+    incident_urn = "urn:li:incident:orphaned-freshness"
+    _active_incident(
+        graph,
+        resource_urn=TABLE_URN,
+        incident_urn=incident_urn,
+        incident_type="FRESHNESS",
+        title="Stale upstream data in ecommerce.public.loans_raw",
+    )
+    graph.set_aspect(MODEL_URN, GlobalTagsClass(tags=[]))
+    graph.emitted.clear()
+
+    report = run_scan(
+        make_connection(graph, client),
+        ScanConfig(),
+        table_urn=TABLE_URN,
+        llm=None,
+        now_ms=NOW_MS,
+    )
+
+    assert report.clean
+    resolved = [
+        variables for query, variables in graph.graphql_calls if "updateIncidentStatus" in query
+    ]
+    assert len(resolved) == 1
+    assert resolved[0]["urn"] == incident_urn
+    assert resolved[0]["input"]["state"] == IncidentStateClass.RESOLVED
+
+
+def test_a_stale_leakage_incident_resolves_and_clears_the_models_risk_state():
+    """A plain run_scan resolves a leakage incident with no leak path today."""
+    graph = _graph(lag_hours=1.0)
+    graph.set_aspect(
+        LEAK_FEATURE_URN,
+        MLFeaturePropertiesClass(
+            sources=[FEATURE_TABLE_URN],
+            customProperties={SOURCE_COLUMN_PROPERTY: LEAK_COLUMN_URN},
+        ),
+    )
+    # No lineage_by_column entry for the leaking column: leak_path finds nothing.
+    client = FakeClient()
+    incident_urn = "urn:li:incident:orphaned-leakage"
+    _active_incident(
+        graph,
+        resource_urn=LEAK_COLUMN_URN,
+        incident_urn=incident_urn,
+        incident_type="FIELD",
+        title="Target leakage: prior_default_flag derives from label default_status",
+    )
+    graph.set_aspect(
+        MODEL_URN,
+        StructuredPropertiesClass(
+            properties=[
+                StructuredPropertyValueAssignmentClass(
+                    propertyUrn=str(StructuredPropertyUrn(RISK_FLAGS)),
+                    values=[str(FindingType.TARGET_LEAKAGE)],
+                )
+            ]
+        ),
+    )
+    graph.emitted.clear()
+    graph.graphql_calls.clear()
+
+    report = run_scan(
+        make_connection(graph, client),
+        ScanConfig(),
+        model_urn=MODEL_URN,
+        llm=None,
+        now_ms=NOW_MS,
+    )
+
+    assert report.clean
+    resolved = [
+        variables for query, variables in graph.graphql_calls if "updateIncidentStatus" in query
+    ]
+    assert len(resolved) == 1
+    assert resolved[0]["urn"] == incident_urn
+
+    properties = graph.get_aspect(MODEL_URN, StructuredPropertiesClass)
+    assert properties is not None
+    risk_flags_urn = str(StructuredPropertyUrn(RISK_FLAGS))
+    assert all(p.propertyUrn != risk_flags_urn for p in properties.properties)
+
+
+def test_a_stale_schema_drift_incident_resolves_with_no_prior_process_state():
+    """A plain run_scan resolves a drift incident once the schema matches again."""
+    import json
+
+    from datahub.metadata.schema_classes import (
+        DataProcessInstanceInputClass,
+        DataProcessInstancePropertiesClass,
+    )
+
+    run_urn = "urn:li:dataProcessInstance:credit_risk_v3_run"
+    matching = {"applicant_income": "NUMBER", "prior_default_flag": "BOOLEAN"}
+    graph = FakeGraph(
+        {
+            (MODEL_URN, MLModelPropertiesClass): MLModelPropertiesClass(
+                name="Credit Risk v3",
+                deployments=[DEPLOYMENT_URN],
+                trainingJobs=[run_urn],
+            ),
+            (DEPLOYMENT_URN, MLModelDeploymentPropertiesClass): (
+                MLModelDeploymentPropertiesClass(status=DeploymentStatusClass.IN_SERVICE)
+            ),
+            (run_urn, DataProcessInstancePropertiesClass): DataProcessInstancePropertiesClass(
+                name="credit_risk_v3_run",
+                created=AuditStampClass(time=0, actor="urn:li:corpuser:datahub"),
+                customProperties={
+                    ScanConfig().training_schema_property: json.dumps({FEATURE_TABLE_URN: matching})
+                },
+            ),
+            (run_urn, DataProcessInstanceInputClass): DataProcessInstanceInputClass(
+                inputs=[FEATURE_TABLE_URN]
+            ),
+            (FEATURE_TABLE_URN, SchemaMetadataClass): SchemaMetadataClass(
+                schemaName="customer_features",
+                platform="urn:li:dataPlatform:snowflake",
+                version=0,
+                hash="",
+                platformSchema=OtherSchemaClass(rawSchema=""),
+                fields=[
+                    SchemaFieldClass(
+                        fieldPath=path,
+                        type=SchemaFieldDataTypeClass(type=BooleanTypeClass()),
+                        nativeDataType=native,
+                    )
+                    for path, native in matching.items()
+                ],
+            ),
+        }
+    )
+    incident_urn = "urn:li:incident:orphaned-drift"
+    _active_incident(
+        graph,
+        resource_urn=FEATURE_TABLE_URN,
+        incident_urn=incident_urn,
+        incident_type="DATA_SCHEMA",
+        title="Training-serving schema drift in ecommerce.public.customer_features",
+    )
+    graph.emitted.clear()
+
+    report = run_scan(
+        make_connection(graph, FakeClient()),
+        ScanConfig(),
+        model_urn=MODEL_URN,
+        llm=None,
+        now_ms=NOW_MS,
+    )
+
+    assert report.clean
+    resolved = [
+        variables for query, variables in graph.graphql_calls if "updateIncidentStatus" in query
+    ]
+    assert len(resolved) == 1
+    assert resolved[0]["urn"] == incident_urn

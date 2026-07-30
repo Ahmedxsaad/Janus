@@ -68,12 +68,37 @@ def test_leakage_and_drift_only_lands_on_watch():
     assert DEDUCTION_FRESHNESS_LAG not in score.deductions
 
 
-def test_a_single_owned_leakage_finding_stays_healthy_band_boundary():
-    # 100 - 20 (leakage) = 80, which is healthy (>= 70).
-    inputs = trust_inputs_from_findings([make_leakage_finding()], _ref(has_owner=True))
+def test_a_single_owned_leakage_finding_scores_high_but_bands_watch():
+    # 100 - 20 (leakage) = 80, which points alone would call healthy (>= 70),
+    # but a live leaking model is CRITICAL: gate blocks it, so the band must
+    # not call it healthy too. See _SEVERITIES_THAT_CAP_HEALTHY.
+    inputs = trust_inputs_from_findings([make_leakage_finding(live=True)], _ref(has_owner=True))
     score = trust_score(inputs, CONFIG)
     assert score.value == 80
+    assert score.band == TrustBand.WATCH
+
+
+def test_a_non_live_schema_drift_finding_keeps_the_healthy_band():
+    # A model with no deployment at all makes schema drift MEDIUM, not HIGH
+    # (SchemaDriftFinding.severity's own non-live case): a training-time
+    # concern, not a live model scoring drifted inputs, so no cap fires.
+    inputs = trust_inputs_from_findings(
+        [make_schema_drift_finding(live=False)], _ref(has_owner=True)
+    )
+    score = trust_score(inputs, CONFIG)
+    assert score.value == 85
     assert score.band == TrustBand.HEALTHY
+
+
+def test_a_live_schema_drift_finding_also_caps_the_band_at_watch():
+    # 100 - 15 (drift) = 85, comfortably healthy on points, but a live model
+    # scoring drifted inputs is HIGH severity and must not read as healthy.
+    inputs = trust_inputs_from_findings(
+        [make_schema_drift_finding(live=True)], _ref(has_owner=True)
+    )
+    score = trust_score(inputs, CONFIG)
+    assert score.value == 85
+    assert score.band == TrustBand.WATCH
 
 
 def test_freshness_deduction_scales_with_lag_over_sla():

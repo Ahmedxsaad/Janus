@@ -16,6 +16,66 @@ Entry template:
 
 ---
 
+## D-067: Trust band ignores severity, and stale incidents never resolve outside a lucky continuous watch process (2026-07-30)
+- Decided by: Ahmed Saad (asked for real, thorough testing of the product
+  itself, not just the Azure infrastructure: "test our product like a team
+  using it would")
+- Decision: found and fixed two real bugs via a local, isolated DataHub
+  Quickstart (never touching the judge-facing VM), each reproduced live,
+  fixed, then re-reproduced to confirm the fix, per this session's own
+  standard of verifying against a live system rather than assuming.
+  1. **Trust band ignored severity.** `trust_score()` banded a model purely
+     on its weighted point total, so a live, critical-severity leakage
+     finding (20 points) plus an unowned model (10 points) landed at exactly
+     70, the healthy floor, labeled `healthy` even though `gate
+     --block-at-or-above high` correctly blocked the same model as
+     `critical`. `modelguard/detect/trust_score.py` now caps the band at
+     `WATCH` whenever the worst finding rolled into the score is `CRITICAL`
+     or `HIGH` (a live-serving model's severities), regardless of the point
+     total. `MEDIUM` (a non-live model) is deliberately excluded: nothing is
+     lying to production traffic yet.
+  2. **A resolved finding's incident could stay open forever.** Reproduced
+     live twice: (a) planted leakage, let `scan` raise it, reverted the
+     scenario, ran `scan` again ("No finding, healthy"), queried the
+     incident directly, still `ACTIVE`; (b) same setup, but recovered with a
+     brand-new `watch --once` process instead, printed `"recovered: no
+     findings."`, incident still `ACTIVE` regardless. Root cause: D-040's
+     recovery only ever diffed against a `WatchState` held in the same
+     process's memory, so `scan`, `gate --write`, `watch --once`, and any
+     `watch` restart (the exact case `Restart=always` and this session's own
+     D-065 fix make more likely, not less) could raise a finding but never
+     resolve it, even after the underlying problem was fixed.
+- Options considered for the resolution fix: (a) persist watch's in-memory
+  state to a local file or the graph itself and keep diffing against it, (b)
+  make reconciliation graph-driven: ask the graph what is already active on
+  the resources this scan's target could name, the same way `raise_incident`
+  already dedups, and resolve whatever is active but not reproduced this
+  run; (c) chosen. Why (b) over (a): the graph is already the durable state
+  store every other write in this project uses; introducing a second,
+  side-channel state store (a file, or a duplicate property) is another
+  thing that can go stale or disagree with the graph, exactly the class of
+  bug this fix exists to close.
+- Result: `modelguard/detect/blast_radius.py` gains `downstream_models`, the
+  same traversal `blast_radius` already does, minus the staleness gate, so a
+  *recovered* table's incident can still find which models to clear risk
+  from. `modelguard/detect/schema_drift.py` gains
+  `schema_drift_candidate_resources`. `modelguard/agent/pipeline.py` gains
+  `_reconcile_stale_findings`, called from `run_scan`'s write path (never
+  from `--dry-run`, resolving is a write) for all three finding types,
+  matching D-040's own cleanup scope (incident resolved, leakage-risk term
+  removed, risk flags reduced, tag and trust score cleared once a model's
+  flags are fully empty). `cli.py`'s `_watch_once` simplifies to always call
+  `run_scan`'s write path on any signature change, deleting the now-redundant
+  in-memory-only `_reconcile_recovery` and `WatchState.report` entirely,
+  rather than keeping two reconciliation paths side by side. Confirmed live,
+  twice: the exact `scan` and `watch --once` reproductions above both now
+  resolve the incident and clear the model's tag and risk flags. 3 new
+  offline tests added (mutation-checked per tests/CLAUDE.md rule 6: reverted
+  the fix, confirmed all 3 go red, restored it), 2 for trust_score, 367
+  offline and 42 integration tests pass.
+
+---
+
 ## D-066: Rebuilt the VM from scratch to actually prove cloud-init.yaml works cold (2026-07-30)
 - Decided by: Ahmed Saad (D-065's fix was only ever applied to a running VM;
   wanted proof the fixed `cloud-init.yaml` itself works from a genuine cold
