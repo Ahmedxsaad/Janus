@@ -17,6 +17,16 @@
 # their documented shape and the embedded shell logic was checked for syntax,
 # but the full first-boot sequence has not been watched run for real. Do a
 # smoke test after the first provision; docs/deploy/azure-vm.md says so too.
+#
+# __GITHUB_CLONE_TOKEN__ below is a placeholder, not a secret: this repo is
+# private, so the git clone needs a credential. Never replace this placeholder
+# with a real token in this tracked file. Substitute it only in the copy of
+# this file's contents you paste into the Azure Portal's Custom Data box (not
+# tracked anywhere), per docs/deploy/azure-vm.md. cloud-init writes runcmd
+# values into /var/log/cloud-init-output.log and its own on-disk state in
+# plaintext, so the token will sit readable-by-root on the VM after boot;
+# scope it to read-only on this one repo and revoke it right after the first
+# successful provision, once the clone has already happened.
 
 package_update: true
 package_upgrade: true
@@ -59,7 +69,27 @@ runcmd:
   - chown azureuser:azureuser /opt/modelguard
   - >-
     sudo -u azureuser git clone --depth 1
-    https://github.com/Ahmedxsaad/DataHub.git /opt/modelguard/DataHub
+    https://__GITHUB_CLONE_TOKEN__@github.com/Ahmedxsaad/DataHub.git
+    /opt/modelguard/DataHub
+
+  # The .env write used to live in write_files, which cloud-init runs in an
+  # early stage, before Azure has necessarily finished creating azureuser: an
+  # owner: "azureuser:azureuser" there can race the account's own creation
+  # and fail with "Unknown user or group", and (worse) it pre-creates the
+  # target directory as root, which then makes the git clone above fail with
+  # Permission Denied since azureuser cannot write into a root-owned
+  # directory. Written here instead, right after the clone, once both
+  # azureuser and the cloned repo already exist, so neither race is
+  # possible, and before modelguard-seed below needs it. No
+  # DATAHUB_GMS_TOKEN: the Quickstart this VM boots has metadata-service
+  # authentication disabled (see the header comment), so writes go through
+  # unauthenticated, exactly as they do in every other environment this
+  # project has been run in. There is no key to leak here because none was
+  # ever asked for.
+  - >-
+    sudo -u azureuser bash -c
+    "echo DATAHUB_GMS_URL=http://localhost:8080 > /opt/modelguard/DataHub/.env"
+  - chmod 600 /opt/modelguard/DataHub/.env
 
   # Boots the full DataHub stack (GMS, MySQL, Kafka, OpenSearch, frontend) on
   # datahub_network, the same network docker-compose.yml in this repo attaches
@@ -86,15 +116,3 @@ runcmd:
   - cp /opt/modelguard/DataHub/deploy/azure/modelguard-watch.service /etc/systemd/system/
   - systemctl daemon-reload
   - systemctl enable --now modelguard-watch.service
-
-write_files:
-  - path: /opt/modelguard/DataHub/.env
-    owner: "azureuser:azureuser"
-    permissions: "0600"
-    # DATAHUB_GMS_TOKEN is deliberately absent: the Quickstart this VM boots
-    # has metadata-service authentication disabled (see the header comment),
-    # so writes go through unauthenticated, exactly as they do in every other
-    # environment this project has been run in. There is no key to leak here
-    # because none was ever asked for.
-    content: |
-      DATAHUB_GMS_URL=http://localhost:8080

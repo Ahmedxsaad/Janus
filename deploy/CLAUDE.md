@@ -35,3 +35,8 @@ branch inside this one.
 |---|---|---|
 | 2026-07-23 | Claude (for Ahmed Saad) | Initial version: azure/cloud-init.yaml, azure/modelguard-watch.service (D-057) |
 | 2026-07-29 | Claude (for Ahmed Saad) | docs/deploy/azure-vm.md's defaults change to Standard_B2ms + 64GB disk + provision-now-pause-until-judging, to actually fit a $60 budget; B4ms run continuously priced out to roughly double it (D-059) |
+| 2026-07-29 | Claude (for Ahmed Saad) | docs/deploy/azure-vm.md's size/region change to Standard_D2as_v5 in francecentral, real Azure Portal pricing beats the earlier web-search estimate by roughly 3-4x for identical specs (D-060) |
+| 2026-07-29 | Claude (for Ahmed Saad) | Reverted: D-060's price was an Azure Spot bid, not standard, and D2as_v5 was quota-blocked. Back to Standard_B2as_v2 in francecentral, Spot never used (D-061) |
+| 2026-07-29 | Claude (for Ahmed Saad) | cloud-init.yaml's git clone uses a __GITHUB_CLONE_TOKEN__ placeholder (repo stays private for now); real token substituted only outside git and revoked after first provision (D-062) |
+| 2026-07-29 | Claude (for Ahmed Saad) | A real VM boot found write_files racing azureuser's own creation, cascading into a Permission Denied git clone. .env write moves into runcmd, write_files removed (D-063) |
+| 2026-07-29 | Claude (for Ahmed Saad) | Custom domain + HTTPS via Caddy verified live (`https://modelguard.ahmedxsaad.me`); fixed the frontend password-change instructions to the real user.props mechanism; azure/Caddyfile.template added (D-064) |
