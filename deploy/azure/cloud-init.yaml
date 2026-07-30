@@ -100,6 +100,19 @@ runcmd:
   # blocked on one.
   - sudo -u azureuser datahub docker quickstart
 
+  # Quickstart's own compose file starts every container with no restart
+  # policy, so a crash leaves it dead until someone notices and intervenes
+  # by hand. Observed for real on the live demo VM: OpenSearch OOM-crashed
+  # ("unable to create native thread") under this VM's memory pressure and
+  # sat dead for 6 hours while GMS and the frontend kept answering health
+  # checks, making search/browse silently broken the whole time (D-065).
+  # unless-stopped self-heals a crash in seconds instead. Matched by name
+  # prefix rather than a fixed list, since quickstart's own container names
+  # are not this project's to pin down.
+  - >-
+    bash -c
+    "docker ps -a --format '{{.Names}}' | grep '^datahub-' | xargs -r docker update --restart unless-stopped"
+
   # Waits for GMS rather than assuming quickstart's own return means it is
   # ready to accept writes: quickstart returns once containers are up, not
   # once GMS has finished extracting its WAR and serving /config (observed

@@ -16,6 +16,57 @@ Entry template:
 
 ---
 
+## D-065: OpenSearch silently OOM-crashed for 6 hours on the live VM; restart policy added (2026-07-30)
+- Decided by: Ahmed Saad (pushed back that D-063/D-064's "verified live" claim
+  was not actually a full test: SSH had never been checked, and nothing had
+  probed container health, only that the frontend URL loaded)
+- Decision: SSH'd into the live VM (via a temporary NSG addition, see the
+  footgun note below) and checked every claim in `docs/deploy/azure-vm.md`
+  directly rather than trusting the earlier write-up. Found
+  `datahub-opensearch-1` had crashed 6 hours earlier with
+  `OutOfMemoryError: unable to create native thread` (the VM's 8GB RAM is
+  shared across MySQL, Kafka, OpenSearch, GMS, the frontend, datahub-actions,
+  and the modelguard-watch container), and had no restart policy, so it
+  stayed dead. GMS and the frontend kept answering health checks the whole
+  time, so search/browse was silently broken with nothing outwardly showing
+  it. Fixed live (`docker update --restart unless-stopped` on all quickstart
+  containers) and added the same fix to `cloud-init.yaml`'s `runcmd` so a
+  fresh provision does not carry the same gap forward.
+- Options considered for the underlying capacity issue: (a) keep
+  `Standard_B2as_v2`, rely on the restart policy as a safety net, (b) upsize
+  to a VM with more RAM (e.g. `Standard_B4as_v2`), (c) tune down JVM heap
+  sizes for Kafka/OpenSearch/GMS to fit 8GB more comfortably.
+- Why (a): stays within the $60 budget; the restart policy turns a crash from
+  a multi-hour silent outage into a ~30 second self-heal, which was the
+  actual failure mode observed, not a hard capacity wall. (b) and (c) both
+  remain live options if a crash recurs during judging.
+- What was actually verified live in this pass, each checked directly rather
+  than assumed: `docker ps -a` (found the crashed container), `ufw status`
+  plus an external probe (GMS still unreachable from outside), a real
+  `POST /logIn` (got back a valid session cookie for
+  `urn:li:corpuser:datahub`), a real GMS search query for `loans_raw`
+  (returned 2 dataset entities, one with `hasActiveIncidents`), and
+  `journalctl` for `modelguard-watch.service` (actively logging
+  `"no change (2 open finding(s))"` on its normal cadence).
+- A repeat of the D-064 footgun, caught faster this time: my sandbox's
+  outbound IP and the user's real machine IP turned out to be the same
+  address, so the SSH NSG rule update that looked like it might have locked
+  the user out (`sourceAddressPrefixes` came back empty because the existing
+  rule was stored as a singular `sourceAddressPrefix`, so the update replaced
+  rather than appended) in fact left the rule correct by coincidence.
+  Worth remembering: querying the plural field on a rule stored as the
+  singular field silently returns empty, and an update built from that empty
+  value drops the existing value rather than erroring.
+- Result: `deploy/azure/cloud-init.yaml` gets a new `runcmd` step setting
+  `restart: unless-stopped` on every `datahub-*` container right after
+  quickstart starts them. `docs/deploy/azure-vm.md`'s disclaimer needs a
+  correction: the previous "verified live" pass did not include container
+  health, and this pass closes that gap. Still not verified: a from-scratch
+  `az vm create` run of the current `cloud-init.yaml` (open question for a
+  future session).
+
+---
+
 ## D-064: Custom domain and HTTPS via Caddy, added after the demo verified live (2026-07-29)
 - Decided by: Ahmed Saad (wanted the URL to not be a raw IP)
 - Decision: Reverse-proxy the DataHub frontend behind Caddy on

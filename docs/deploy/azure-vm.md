@@ -8,20 +8,34 @@ the submission rules' requirement to "provide access to a working Project for
 judging... available free of charge and without restriction... until the
 Judging Period ends" (`docs/hackathon-specs/03-submission-requirements.md`).
 
-**Verified live**, 2026-07-29, on `Standard_B2as_v2` in `francecentral`:
+**Verified live**, 2026-07-30, on `Standard_B2as_v2` in `francecentral`:
 provisioning, seeding, the watch service finding real incidents, the NSG and
-`ufw` layers, the frontend password change, and a custom domain over HTTPS
-(`https://modelguard.ahmedxsaad.me`) all confirmed working end to end. One
-real bug was found and fixed this way (D-063: `write_files` racing
-`azureuser`'s own creation, cascading into a failed `git clone`) that no
-amount of syntax-checking would have caught. One caveat: that specific fix
-was verified by running its replacement steps manually on the VM that hit
-the bug, not by a from-scratch `az vm create` against the now-fixed
-`cloud-init.yaml`; a fresh provision should still work identically, since the
-fix only reordered existing steps, but that exact sequence has not been
-re-run from a cold boot. **Still do the smoke test in [Verify the demo
-works](#verify-the-demo-works)** on any new VM before telling anyone a new
-URL is live: this file describes what worked once, not a guarantee.
+`ufw` layers, the frontend password change and an actual login, a real GMS
+search query returning real data, and a custom domain over HTTPS
+(`https://modelguard.ahmedxsaad.me`) all confirmed working end to end, each
+checked directly over SSH rather than assumed from the UI loading. Two real
+bugs were found and fixed this way that no amount of syntax-checking would
+have caught:
+
+- D-063: `write_files` racing `azureuser`'s own creation, cascading into a
+  failed `git clone`.
+- D-065: this VM's 8GB RAM is shared across the whole DataHub stack plus
+  `modelguard-watch`, and OpenSearch OOM-crashed under that pressure with no
+  restart policy, so it stayed dead for 6 hours while GMS and the frontend
+  kept answering health checks, silently breaking search/browse the whole
+  time. `cloud-init.yaml` now sets `restart: unless-stopped` on every
+  `datahub-*` container so a crash self-heals in seconds instead. This is a
+  mitigation, not a capacity fix: the VM can still run tight under
+  concurrent load, and a recurrence is possible during judging.
+
+One caveat that still holds: everything above was verified by SSHing into
+and repairing the VM that hit these bugs, not by a from-scratch
+`az vm create` against the now-fixed `cloud-init.yaml`. A fresh provision
+should work identically, since both fixes only reordered or added steps, but
+that exact sequence has not been re-run from a cold boot. **Still do the
+smoke test in [Verify the demo works](#verify-the-demo-works)** on any new
+VM before telling anyone a new URL is live: this file describes what worked
+on one specific VM, not a guarantee.
 
 ## The one security decision that matters here
 
