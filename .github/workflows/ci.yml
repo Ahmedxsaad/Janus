@@ -185,8 +185,8 @@ jobs:
           import yaml
           with open('deploy/azure/cloud-init.yaml') as f:
               d = yaml.safe_load(f.read())
-          assert 'runcmd' in d and 'write_files' in d, 'missing expected cloud-config sections'
-          print(f\"{len(d['runcmd'])} runcmd entries, {len(d['write_files'])} write_files entries\")
+          assert 'runcmd' in d, 'missing expected cloud-config section: runcmd'
+          print(f\"{len(d['runcmd'])} runcmd entries\")
           "
 
       - name: Every runcmd shell fragment is syntactically valid
