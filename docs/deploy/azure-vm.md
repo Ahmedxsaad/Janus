@@ -28,14 +28,24 @@ have caught:
   mitigation, not a capacity fix: the VM can still run tight under
   concurrent load, and a recurrence is possible during judging.
 
-One caveat that still holds: everything above was verified by SSHing into
-and repairing the VM that hit these bugs, not by a from-scratch
-`az vm create` against the now-fixed `cloud-init.yaml`. A fresh provision
-should work identically, since both fixes only reordered or added steps, but
-that exact sequence has not been re-run from a cold boot. **Still do the
-smoke test in [Verify the demo works](#verify-the-demo-works)** on any new
-VM before telling anyone a new URL is live: this file describes what worked
-on one specific VM, not a guarantee.
+**The from-scratch gap is now closed too** (D-066, 2026-07-30): the VM was
+deleted and recreated via the Portal wizard from the current, fixed
+`cloud-init.yaml`, with a fresh `azureuser`, a fresh OS disk, and a new
+public IP (the static IP's zone didn't match this deployment, so DNS was
+repointed rather than reattaching it). Cold-init finished in 557 seconds with
+zero errors: Docker installed, the repo cloned, the full Quickstart stack
+booted, seeding and the scenario ran, and `modelguard-watch.service` raised a
+real incident within seconds of boot. All 7 `datahub-*` containers, including
+OpenSearch, came up healthy with `restart: unless-stopped` already applied,
+confirming D-065's fix actually takes effect on a cold boot and not just when
+patched onto a running VM. The two manual post-steps (Caddy/HTTPS, the
+frontend password) still need to be redone after any fresh provision, since
+neither is in `cloud-init.yaml` by design; both were redone here and verified
+with a real `POST /logIn` and an external HTTPS probe, both returning 200.
+
+**Still do the smoke test in [Verify the demo works](#verify-the-demo-works)**
+on any new VM regardless: this file describes what worked on the VMs it has
+actually been run on, not a guarantee for all future provisions.
 
 ## The one security decision that matters here
 

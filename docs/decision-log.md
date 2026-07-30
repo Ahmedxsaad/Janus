@@ -16,6 +16,44 @@ Entry template:
 
 ---
 
+## D-066: Rebuilt the VM from scratch to actually prove cloud-init.yaml works cold (2026-07-30)
+- Decided by: Ahmed Saad (D-065's fix was only ever applied to a running VM;
+  wanted proof the fixed `cloud-init.yaml` itself works from a genuine cold
+  boot, not an assumption that reordering steps was equivalent)
+- Decision: deleted the live VM (keeping the NSG and, intentionally, offering
+  to keep the static public IP) and recreated it via the Portal wizard from
+  the current `cloud-init.yaml`, unmodified except for a fresh GitHub token
+  substitution. Options considered: (a) full delete and recreate via the
+  Portal wizard, (b) `az vm reimage` in place (same IP, reruns cloud-init,
+  but does not exercise the Portal wizard steps the runbook documents), (c)
+  wipe app state over SSH and replay `runcmd` manually (cheapest, but does
+  not test Azure's own first-boot cloud-init mechanism, the exact thing
+  D-063 was about). Chose (a): it is the only option that proves the
+  runbook itself, not just the shell logic inside one file, works for
+  someone who has never touched this VM before.
+- A real footgun during setup, caught before it cost anything: the existing
+  static public IP (`datahub-ip`, Standard SKU) could not be reattached
+  because it was pinned to Availability Zone 1 and did not appear as
+  selectable in the new VM's Networking tab even after matching the zone
+  setting. Rather than debug Azure's zone-matching further, let the wizard
+  allocate a new public IP and repointed the Cloudflare A record instead,
+  the same one-line fix used the first time the domain was set up.
+- Result: cold-init completed in 557 seconds with zero errors (Docker
+  install, clone, full Quickstart boot, seed, scenario, `modelguard-watch`
+  enablement, all in one unattended run). All 7 `datahub-*` containers came
+  up healthy, including OpenSearch, and all 7 already carried
+  `restart: unless-stopped`, confirming D-065's fix is real and not an
+  artifact of patching a running VM. `modelguard-watch.service` raised a
+  real incident within seconds of boot. The two manual post-steps not
+  covered by `cloud-init.yaml` (Caddy/HTTPS, frontend password) were redone
+  and verified live: a real `POST /logIn` returned a valid session cookie, an
+  external HTTPS probe returned 200 on the first attempt (certificate already
+  issued by the time DNS finished propagating). `docs/deploy/azure-vm.md`'s
+  disclaimer updated to state the from-scratch gap is closed; no code files
+  changed, since this ran the existing `cloud-init.yaml` unmodified.
+
+---
+
 ## D-065: OpenSearch silently OOM-crashed for 6 hours on the live VM; restart policy added (2026-07-30)
 - Decided by: Ahmed Saad (pushed back that D-063/D-064's "verified live" claim
   was not actually a full test: SSH had never been checked, and nothing had
