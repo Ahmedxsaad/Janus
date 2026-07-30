@@ -16,6 +16,42 @@ Entry template:
 
 ---
 
+## D-068: Redeployed the live VM onto D-067's fixes; found ExecStop is broken (2026-07-30)
+- Decided by: Ahmed Saad ("do it yourself"), after noticing the judge-facing VM
+  had cloned the repo before D-067 merged and so was still running the trust-band
+  and stale-incident bugs it fixed
+- Decision: `git pull`'d main onto the VM (a fresh short-lived fine-grained PAT
+  used only in the live SSH command, never written to the VM's git config, revoked
+  right after, same convention as D-062), rebuilt `modelguard:local` (`docker
+  compose build modelguard-watch`, since `docker compose run` does not
+  auto-rebuild on its own), and restarted `modelguard-watch.service`.
+- A real hiccup along the way: the restart failed once with a container-name
+  conflict (`modelguard-watch-live` already in use). `journalctl` showed why:
+  `ExecStop=/usr/bin/docker compose stop modelguard-watch-live` errors with
+  `no such service`, because a container started via `docker compose run` is not
+  tracked as a stoppable "service" the way `docker compose up` output is. The
+  container still stops (systemd's own SIGTERM to the main PID reaches it,
+  confirmed by `Main process exited status=130`), but its `--rm` cleanup is
+  asynchronous, and a restart issued immediately after can race a new container
+  trying to claim the same name before the old one has finished being removed.
+  Fixed the immediate blocker with `docker rm -f`. Not fixed: under normal
+  `Restart=always` operation (a real crash, `RestartSec=15`), 15 seconds is
+  comfortably enough for the async cleanup to finish, which is why this never
+  surfaced before; it only showed up here because of an immediate, zero-delay
+  manual restart. Left as a known minor gap rather than fixed, since it is not
+  actually blocking anything under real operating conditions.
+- Result: verified the *running* image, not just the pulled source, actually
+  carries both fixes, by executing a one-off container against the rebuilt image
+  and importing `_SEVERITIES_THAT_CAP_HEALTHY` and `_reconcile_stale_findings`
+  directly rather than trusting that a successful `docker compose build` implies
+  the new code is what is actually running. No new scenario was planted on the
+  live demo to re-prove the fix behaviorally: both bugs were already reproduced
+  and re-verified live against a local, isolated Quickstart in D-067, and
+  injecting more test data into the judge-facing graph to prove it twice was not
+  worth the risk of leaving clutter behind.
+
+---
+
 ## D-067: Trust band ignores severity, and stale incidents never resolve outside a lucky continuous watch process (2026-07-30)
 - Decided by: Ahmed Saad (asked for real, thorough testing of the product
   itself, not just the Azure infrastructure: "test our product like a team
