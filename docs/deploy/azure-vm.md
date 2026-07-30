@@ -21,7 +21,7 @@ the bug, not by a from-scratch `az vm create` against the now-fixed
 fix only reordered existing steps, but that exact sequence has not been
 re-run from a cold boot. **Still do the smoke test in [Verify the demo
 works](#verify-the-demo-works)** on any new VM before telling anyone a new
-URL is live — this file describes what worked once, not a guarantee.
+URL is live: this file describes what worked once, not a guarantee.
 
 ## The one security decision that matters here
 
