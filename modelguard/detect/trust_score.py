@@ -40,9 +40,21 @@ from modelguard.models import (
     LeakageFinding,
     ModelRef,
     SchemaDriftFinding,
+    Severity,
     TrustBand,
     TrustScore,
+    severity_rank,
 )
+
+#: Severities a live-serving model's finding can carry that must never be
+#: reported alongside a HEALTHY band. Points alone (trust_weight_leakage=20,
+#: trust_weight_missing_owner=10) can land a critical, actively-lying leakage
+#: finding at exactly 70, the healthy floor: gate correctly blocks it as
+#: critical while the trust score would otherwise call it healthy, a
+#: contradiction a judge can trivially reproduce by running scan and gate
+#: back to back. MEDIUM (a non-live model's finding) is deliberately excluded:
+#: nothing is currently lying to production traffic.
+_SEVERITIES_THAT_CAP_HEALTHY = frozenset({Severity.CRITICAL, Severity.HIGH})
 
 #: The names under which each deduction is recorded on the score, so a reader can
 #: see exactly what cost the model its points. Stable strings: they appear in the
@@ -69,6 +81,11 @@ class TrustInputs:
     freshness_lag_ratio: float
     """Worst upstream lag over its SLA, clamped to [0, 1]. Zero when not checked."""
     missing_owner: bool
+    worst_severity: Severity | None = None
+    """The most severe finding rolled into this score, or None when there is
+    none. Defaults to None so a directly-constructed TrustInputs (as the
+    detector's own tests do for the freshness-only cases) does not have to
+    name a severity it is not testing."""
 
 
 def trust_inputs_from_findings(
@@ -90,8 +107,13 @@ def trust_inputs_from_findings(
     has_leakage = False
     has_schema_drift = False
     lag_ratio = 0.0
+    worst_severity: Severity | None = None
 
     for finding in findings:
+        if worst_severity is None or severity_rank(finding.severity) < severity_rank(
+            worst_severity
+        ):
+            worst_severity = finding.severity
         if isinstance(finding, FreshnessFinding):
             has_upstream_failure = True
             signal = finding.blast_radius.signal
@@ -108,6 +130,7 @@ def trust_inputs_from_findings(
         has_schema_drift=has_schema_drift,
         freshness_lag_ratio=lag_ratio,
         missing_owner=not model.has_owner,
+        worst_severity=worst_severity,
     )
 
 
@@ -152,4 +175,12 @@ def trust_score(inputs: TrustInputs, config: ScanConfig) -> TrustScore:
         deductions[DEDUCTION_MISSING_OWNER] = config.trust_weight_missing_owner
 
     value = round(max(0.0, min(100.0, 100.0 - sum(deductions.values()))))
-    return TrustScore(value=value, band=_band(value, config), deductions=deductions)
+    band = _band(value, config)
+
+    # Points alone can leave a critical or high-severity finding inside the
+    # healthy band (see _SEVERITIES_THAT_CAP_HEALTHY). gate's severity policy
+    # and this band must never disagree about whether a model is fine to ship.
+    if band is TrustBand.HEALTHY and inputs.worst_severity in _SEVERITIES_THAT_CAP_HEALTHY:
+        band = TrustBand.WATCH
+
+    return TrustScore(value=value, band=band, deductions=deductions)
