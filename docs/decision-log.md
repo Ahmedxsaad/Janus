@@ -16,6 +16,125 @@ Entry template:
 
 ---
 
+## D-070: A review of D-067's reconciliation found five real defects in it; all fixed (2026-07-30)
+- Decided by: Ghassen Naouar, applied by Claude
+- Decision: A careful pass over the reconciliation code D-067 landed (and D-069
+  reviewed without finding these) turned up five defects, each with a concrete
+  failure path, all now fixed with a regression test that was confirmed to go
+  red against the pre-fix code (tests/CLAUDE.md rule 6):
+  1. **Partial recovery wiped a still-failing model.** A risk flag names a
+     finding *type*, but a model can carry one type from several resources: two
+     stale upstream tables, two leaking features. Reconciliation subtracted the
+     recovered type wholesale, so a scan that resolved one leaking feature while
+     re-raising another in the same run stripped the model's risk flags and
+     at-risk tag and overwrote the trust score `_persist_trust` had written
+     seconds earlier with a from-scratch "no findings" 90/healthy. A live,
+     leaking model read as healthy in the UI. A flag may now only be dropped
+     when this run raised no finding of that type for that model.
+  2. **The LangGraph agent path could not resolve anything.** `_write_node`
+     called `_write_back` and `_persist_trust` but never reconciliation, and a
+     clean scan was routed straight to decline, so `scan --review` and
+     `--auto-approve` left a fixed problem's incident open forever: exactly the
+     bug D-067 fixed for `run_scan`, still live on the one path where a human
+     had explicitly approved writes. Every run now reaches the interrupt, a
+     clean one included, and the write node reconciles.
+  3. **One model's recovery resolved another's live drift incident.** The drift
+     incident attaches to the dataset and its title named only the dataset, but
+     drift is a property of the (model, dataset) pair: it is the gap between
+     *this* model's training-time snapshot and the current schema. Two models
+     trained on one input at different times collapsed into a single incident,
+     so the second model's drift was deduplicated into silence and either
+     model's recovery closed the other's. The title now names the model too.
+  4. **A recovered table's guarding assertion stayed red forever.** The
+     assertion's last run event was the FAILURE the stale scan wrote;
+     `record_assertion_result`'s SUCCESS branch was unreachable from any
+     production path. Recovery now records the passing run.
+  5. **A trust score left stale by a partial recovery.** Documented rather than
+     recomputed, in code: scoring the remaining flags would need the findings
+     behind them, which a scan of a different target never produced, and a flag
+     string carries no severity to rebuild one from. The score stays as the last
+     scan that did see those findings left it, which errs low and self-corrects.
+     Erring low never advertises a failing model as healthy.
+- Options considered: for (1), diffing per resource instead of per type (that
+  is the D-067 side-channel state store again, rejected) versus intersecting
+  against this run's own findings (chosen, no new state). For (2), reconciling
+  outside the approval gate so a clean scan stays silent (rejected: a resolve is
+  a mutation, and agent/CLAUDE.md rule 2 gates every mutation) versus routing
+  clean scans through the interrupt (chosen). For (3), searching for other
+  models that still drift on the dataset before resolving (a traversal per
+  reconcile, and it still cannot tell whose incident it is) versus putting the
+  model in the dedup key (chosen, one line, and it makes the two incidents
+  genuinely distinct records).
+- Why: every one of these is the same shape as the bug D-067 existed to fix, a
+  finding that is fixed in the world but stays open on the graph, or its
+  mirror image, a finding that is real but reads as clean. Both destroy the
+  trust in the tool that the whole project sells. They were reachable from the
+  demo path, not theoretical: (1) fires on any model with two leaking features,
+  which the seeded scenario is one edit away from.
+- Result: `modelguard/agent/pipeline.py`, `modelguard/agent/graph.py`, and
+  `modelguard/models.py` fixed; regression tests in `tests/agent/test_pipeline.py`,
+  `tests/agent/test_graph.py`, and `tests/test_models.py`, each verified red
+  against a pre-fix worktree; `active_incident` promoted to `tests/conftest.py`
+  now that three test modules seed one. `pytest -m "not integration"` green
+  (373 passed), ruff and mypy clean. No live Quickstart on this machine, so the
+  42 integration tests were not re-run.
+  **Migration note:** the drift title change (3) means drift incidents raised by
+  an earlier version, whose title names only the dataset, no longer match the
+  dedup lookup. On an instance carrying one (the judge VM), a scan raises a new
+  incident beside it and cannot resolve the old one. Resolve those by hand once,
+  or re-seed the demo graph. Deliberately no legacy-title compatibility code:
+  one demo instance is not worth permanent branch in the dedup path.
+
+---
+
+## D-069: Another full-repo review, focused on D-067's reconciliation code; one dev-env gap fixed, one design tradeoff documented (2026-07-30)
+- Decided by: Ghassen Naouar, applied by Claude
+- Decision: Reviewed the current implementation for gaps, focusing on the
+  highest-risk, least-battle-tested code: `_reconcile_stale_findings`
+  (agent/pipeline.py) and the trust-band cap (detect/trust_score.py) that
+  D-067 landed hours earlier. Traced every title/resource_urn reconstruction
+  in the reconciliation code against the matching `Finding.title` property
+  (freshness, leakage, schema drift) and confirmed all three match exactly, so
+  the exact-title incident lookups do not silently miss. Also re-ran the full
+  offline suite, ruff, and mypy.
+  1. **Fixed:** this machine's `.venv` was missing the `mcp` package, so
+     `tests/test_mcp_server.py` failed collection (`ModuleNotFoundError`) and
+     `modelguard-mcp` could not run at all. `pyproject.toml` already lists
+     `mcp` under both the `mcp` and `dev` extras; the venv had drifted from it.
+     Not a repo defect (`.venv` is git-ignored), reinstalled to match the
+     documented dependency set, same class of drive-by as D-058's `.env` fix.
+  2. **Fixed:** a stray line break in `_reconcile_stale_findings`'s docstring
+     split "already active" across two lines ("already" alone on its own
+     line), a cosmetic artifact from an earlier edit.
+  3. **Documented, not fixed:** `_reconcile_stale_findings`'s leakage branch
+     walks the model's *current* `mlModelProperties.mlFeatures` to find
+     candidate source columns to reconcile. If a feature is ever removed from
+     a model entirely (rather than its lineage severed, which is how
+     `seed/scenarios.py`'s `revert_leakage` and this project's own scenario
+     model fix a leak), any incident still attached to that feature's old
+     source column has no way back into the reconciliation walk and stays
+     open forever. This is the same failure shape D-067 fixed for the
+     watch-only recovery path, but reappearing at one more layer down.
+- Options considered: (a) persist a durable record of every resource a
+  finding has ever named, so a removed feature's incident stays reachable, (b)
+  leave it, since D-067 already rejected a side-channel state store in favor
+  of "ask the graph what a scan's target could name" and a durable record here
+  is exactly that side-channel, recreated for one edge case; (c) chosen: (b),
+  documented in the code and here rather than left to rot silently.
+- Why: the project's own seeded scenarios and D-067's reproductions only ever
+  sever a feature's lineage, never remove the feature from the model, so this
+  gap has no reproduction path in the demo or the benchmark today. Building a
+  durable-state fix for a path nothing in this repo exercises would be the
+  exact over-scoping the risk register already warns against, and it reopens
+  a design question D-067 settled hours ago. Flagging it here means it is not
+  forgotten if a real deployment ever does remove a leaking feature outright.
+- Result: `modelguard/agent/pipeline.py` docstring fixed;
+  `pytest -m "not integration"` green (367 passed), ruff and mypy clean. No
+  live DataHub Quickstart on this machine to re-run the 42 integration tests
+  (2.2Gi free RAM, 14G free disk at review time); offline coverage only.
+
+---
+
 ## D-068: Redeployed the live VM onto D-067's fixes; found ExecStop is broken (2026-07-30)
 - Decided by: Ahmed Saad ("do it yourself"), after noticing the judge-facing VM
   had cloned the repo before D-067 merged and so was still running the trust-band
