@@ -16,7 +16,7 @@ from datahub.metadata.schema_classes import (
     MLModelPropertiesClass,
     OwnershipClass,
 )
-from datahub.metadata.urns import Urn
+from datahub.metadata.urns import MlModelUrn, Urn
 
 from modelguard.client import DataHubConnection
 from modelguard.models import ModelRef
@@ -96,7 +96,13 @@ def model_ref(
     if properties is None:
         properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
     deployments = tuple(properties.deployments or []) if properties else ()
-    name = (properties.name if properties and properties.name else None) or model_urn
+    # DataHub's own mlflow ingestion leaves mlModelProperties.name unset, so the
+    # fallback is what a real, ingested model actually reads as. The URN's name
+    # segment is short and recognisable ("telco_churn_1"); the whole URN in the
+    # middle of a sentence of prose is not.
+    name = (properties.name if properties and properties.name else None) or MlModelUrn.from_string(
+        model_urn
+    ).name
 
     return ModelRef(
         urn=model_urn,

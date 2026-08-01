@@ -335,8 +335,21 @@ class LeakingFeature:
 
     @property
     def path_text(self) -> str:
-        """Render the leak path the way the incident and the report quote it."""
-        return " <- ".join(self.column_path)
+        """Render the leak path the way the incident and the report quote it.
+
+        Consecutive repeats of one column name collapse to a single step. A real
+        warehouse ingested from more than one source has sibling entities for the
+        same physical table (dbt and the warehouse itself both describe
+        ``customer_features``), so lineage legitimately walks the same column
+        twice under two platforms and the chain reads "x <- x <- y". The repeat
+        carries no information a reader of the derivation can use.
+        """
+        collapsed = [
+            column
+            for index, column in enumerate(self.column_path)
+            if index == 0 or column != self.column_path[index - 1]
+        ]
+        return " <- ".join(collapsed)
 
     @property
     def origin(self) -> str:
