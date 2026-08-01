@@ -129,9 +129,9 @@ Elasticsearch + Kafka - see `resources.md §9`; our job is to traverse a bounded
 ### C.4 SRE framing (borrow from the SRE book + Reliable ML)
 - **The SLO, stated:** *95% of upstream freshness failures on model-feeding tables produce an incident
   within 60 seconds of DataHub indexing the change.* The three terms of that budget, measured in
-  `benchmarks/RESULTS.md` rather than estimated: the detector call (median 0.06s, slowest 0.17s), DataHub's
-  own index convergence (median 2.91s, slowest 5.76s, and not ModelGuard's to control), and the `watch`
-  poll interval (operator-set; 30s on the demo VM). At a 30s interval the worst case is roughly 36s, which
+  `benchmarks/RESULTS.md` rather than estimated: the detector call (median 0.05s, slowest 0.14s), DataHub's
+  own index convergence (median 2.92s, slowest 4.03s, and not ModelGuard's to control), and the `watch`
+  poll interval (operator-set; 30s on the demo VM). At a 30s interval the worst case is roughly 35s, which
   is what leaves the target this much headroom. `detect_ms` on every scan line is the term ModelGuard owns,
   so a regression in it is visible before the budget is spent. Track an **error budget** on
   missed/late detections.
