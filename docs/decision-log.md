@@ -16,6 +16,56 @@ Entry template:
 
 ---
 
+## D-084: Compose DataHub's own MCP server rather than absorb it (2026-08-02)
+- Decided by: Ghassen Naouar (item F of docs/plan/06), applied by Claude
+- Decision: `skill/datahub-ml-guard/references/mcp-composition.md` documents
+  running `modelguard-mcp` beside `acryldata/mcp-server-datahub`, with the client
+  configuration, two worked sessions, and the argument for the split. No runtime
+  dependency is added.
+- Options considered: (a) depend on `mcp-server-datahub` and proxy its tools,
+  rejected as complexity bought for a criterion tick, and it would make
+  ModelGuard's MCP surface fail when the other server's did; (b) reimplement
+  search and lineage tools, rejected outright, that is rebuilding a shipped
+  feature rather than composing it; (c) document the composition, chosen.
+- Why: the judging criteria name the MCP Server explicitly, and ModelGuard ships
+  its own plus contributes a tool upstream, but nothing showed the two working
+  together. The paragraph that makes the pairing worth reading is itself the
+  differentiator: the official server answers what the catalog contains, and
+  ModelGuard answers the three questions that have to be reproducible, with
+  evidence, and with no LLM in the decision.
+- Result: a reference doc and a README paragraph pointing at it. It also states
+  the case against the tempting alternative (skip the detectors, ask a capable
+  model to read the lineage) on four grounds: reproducibility, checkable
+  evidence, prompt injection, and the invisibility of a wrong "no".
+
+## D-083: A public Python API, and a README PyPI can render (2026-08-02)
+- Decided by: Ghassen Naouar (items G and I of docs/plan/06), applied by Claude
+- Decision: `modelguard/api.py` exposes `link_model` and `scan_model`,
+  re-exported from the package root with `__all__`; both are thin wrappers over
+  the functions the CLI calls. Separately, the README's 22 repository-relative
+  links become absolute GitHub URLs.
+- Options considered: for the API, a client class was rejected as an abstraction
+  with one implementation over two functions; exposing the internals directly
+  was rejected because a user pinning to `modelguard.agent.pipeline.run_scan`
+  freezes an internal boundary. For the README, a second `README-pypi.md` was
+  rejected: a document that would drift from the first.
+- Why: the one place ModelGuard belongs inside somebody's code is the script
+  that trains the model, because that is the only moment when the feature table,
+  the label column and the training-time schema are all known. Telling that
+  script to shell out to a CLI is a worse interface than a function call, and it
+  is what the README said to do. On the README: `readme = "README.md"` ships that
+  file as the PyPI long description, and PyPI resolves a relative link against
+  `pypi.org`, so every one of the 22 404'd for the first person arriving from
+  `pip install`.
+- Result: 11 offline tests. The pre-tag checklist in
+  docs/deploy/pypi-release.md is now checked mechanically: `twine check` passes,
+  the wheel installs into a throwaway venv, all four console scripts run, the
+  packaged property YAML is present, and `import modelguard` exposes the API.
+  A test pins `__version__` to `pyproject.toml`'s version, because a wheel whose
+  two versions disagree is one nobody can file a bug against: the user reads one
+  and the resolver reads the other. The rename decision (D-076) remains the one
+  unchecked item, and it is now on that checklist rather than only in a plan doc.
+
 ## D-082: Measure what a whole-catalog sweep costs (2026-08-02)
 - Decided by: Ghassen Naouar (item E of docs/plan/06), applied by Claude
 - Decision: `benchmarks/scale.py` creates N replica models carrying the seeded

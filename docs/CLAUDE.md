@@ -33,3 +33,4 @@ Reference material, not code. Layers:
 | 2026-07-23 | Claude (for Ahmed Saad) | Add deploy/: the Azure judge-facing demo VM runbook (D-057) |
 | 2026-08-01 | Claude (for Ghassen Naouar) | D-073: the hardening checklist's four open items closed and its benchmark item corrected; the PyPI install instruction in 05-oss-delivery.md fixed to match reality (rule 1: the plan does not get to rot) |
 | 2026-08-02 | Claude (for Ghassen Naouar) | plan/06-judge-review-and-improvements.md added: the review against the five judging criteria and the ten improvements chosen from it (D-076) |
+| 2026-08-02 | Claude (for Ghassen Naouar) | deploy/pypi-release.md gains a pre-tag checklist, checked mechanically against the built wheel. The repository rename is its one open item, so the decision has a place that blocks a release rather than only a plan doc (D-083) |

@@ -47,6 +47,41 @@ undone (a yanked release still burns its version number forever).
 In the repository: **Settings -> Environments -> New environment -> `pypi`**,
 then tick **Required reviewers** and add whoever should approve a release.
 
+## Before the first tag
+
+Checked mechanically on 2026-08-02 against the built wheel, except where noted.
+
+- [x] `python -m build --wheel` succeeds, and `twine check` passes on the result,
+      which is what says the long description will render on PyPI rather than
+      landing as a wall of unformatted text.
+- [x] The README's links are absolute `https://github.com/...` URLs. They used to
+      be repository-relative, and PyPI resolves a relative link against
+      `pypi.org`, so all 22 of them 404'd for the first person to arrive from
+      `pip install`. GitHub renders absolute links identically, so one form
+      serves both.
+- [x] `modelguard/writeback/props/*.yaml` is inside the wheel: without it,
+      `define_properties` fails on a fresh install and no scan can write a trust
+      score.
+- [x] All four console scripts (`modelguard`, `modelguard-seed`,
+      `modelguard-scenario`, `modelguard-mcp`) are installed and run.
+- [x] `import modelguard` exposes the public API (`link_model`, `scan_model` and
+      their result types) from a clean install.
+- [x] `modelguard.__version__` equals `pyproject.toml`'s `version`. A test
+      enforces it (`tests/test_api.py`), because a wheel whose two versions
+      disagree is one nobody can report a bug against: the user reads one, the
+      resolver reads the other.
+- [ ] **Decide the repository rename** (P1-1), and if it goes ahead, edit the
+      PyPI pending publisher *first*. The publisher matches on
+      `Repository name: DataHub`, and GitHub's redirect does not help, because
+      the OIDC claim carries the new name. Renaming after publishing is strictly
+      worse than before, so this is a decision that has to be made now rather
+      than deferred again (D-076).
+
+The install check above must be done in a **throwaway** virtualenv, never the
+development one: installing the published package over an editable install of
+the same project silently shadows it, and a broken wheel would still look fine
+because the local source tree is what actually ran.
+
 ## Cutting a release
 
 The workflow refuses to publish when the tag and `pyproject.toml` disagree, so

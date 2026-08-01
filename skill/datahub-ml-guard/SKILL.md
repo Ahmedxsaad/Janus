@@ -97,6 +97,9 @@ appears in the Quality tab on OSS. Continuous scheduled evaluation of it is Clou
   literature (Kaufman 2012, Breck 2019, Sculley 2015, Mitchell 2019).
 - `references/datahub-write-surface.md` - incidents, structured properties, labels/terms,
   documents, guarding assertions, and the ODCS input contract, with the exact API shapes.
+- `references/mcp-composition.md` - running `modelguard-mcp` alongside DataHub's own
+  `mcp-server-datahub`: how to configure both, which question belongs to which, and why
+  detection stays deterministic rather than becoming something a model judges.
 
 ## Remember
 

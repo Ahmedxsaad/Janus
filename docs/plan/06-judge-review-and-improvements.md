@@ -17,8 +17,12 @@ Two parts:
 2. [Improvements](#part-2-improvements) - ten proposals, ranked, each with the
    criterion it moves, the smallest implementation that works, and its size.
 
-The improvements are proposals. Pick, then log the choice in
-`docs/decision-log.md` before building, per root CLAUDE.md rule 4.
+**Status, 2026-08-02: all ten are implemented** (D-076 through D-084). Each
+section below keeps its original argument, which is what makes the decisions
+readable a month from now; what actually shipped, and what it cost, is in the
+decision log. The one item deliberately left open is the repository rename
+inside **I**, which is now a blocking line on the pre-tag checklist in
+`docs/deploy/pypi-release.md` rather than an unlogged P1.
 
 ---
 
@@ -436,3 +440,4 @@ Wave 1 alone is a day. Waves 1-3 are the ones that change a score.
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-01 | Claude (for Ghassen Naouar) | Initial review against `f5c0901`: scorecard on the five criteria, ten ranked improvements, pre-tag release checklist |
+| 2026-08-02 | Claude (for Ghassen Naouar) | All ten implemented (D-076 to D-084). The proposals are kept as written, since the argument is the part worth rereading; the release checklist moves to docs/deploy/pypi-release.md, where it blocks a tag |
