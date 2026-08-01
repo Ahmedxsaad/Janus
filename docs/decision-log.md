@@ -16,7 +16,7 @@ Entry template:
 
 ---
 
-## D-073: A review pass over the whole implementation: seven code defects and four stale claims (2026-08-01)
+## D-073: A review pass over the whole implementation: eight defects and four stale claims (2026-08-01)
 - Decided by: Ghassen Naouar (asked for a review of the current implementation
   looking for inconsistencies, gaps and unfinished work, and for them to be
   finished), applied by Claude
@@ -25,7 +25,7 @@ Entry template:
   Each code fix carries a regression test that was run against the pre-fix code
   and confirmed red (tests/CLAUDE.md rule 6).
 
-  **The code defects**
+  **The code defects**, seven found by reading and one by deploying
   1. **Two impact reports collapsed into one.** `_document_id` keyed on
      `(model, resource_urn)`, but the resource does not separate the detectors:
      when the table a model trains on is also the table that went stale, the
@@ -69,6 +69,21 @@ Entry template:
      stays, deliberately: it is what reconciles findings an earlier process
      raised and never resolved, and the docstring now says so instead of
      claiming a steady state is quiet from the first poll.
+
+  8. **The judge VM's watcher could not be restarted, at all.** Found while
+     deploying this branch, not by reading code: `systemctl stop
+     modelguard-watch` left the container `Up`, because
+     `ExecStop=docker compose stop modelguard-watch-live` names a *container*
+     where `compose stop` takes a *service*, so it stopped nothing and said so
+     only to a log nobody reads. The container then outlived its unit and every
+     `ExecStart` after it died on the name conflict, with `Restart=always`
+     retrying the identical failure every 15s forever. D-068 saw this exact
+     symptom in July and logged it as a benign async-cleanup race that
+     `RestartSec` absorbs; it is not, and the service has evidently not been
+     restartable since it was enabled. `ExecStop` now uses plain `docker stop`
+     against the name we set, and a new `ExecStartPre=-docker rm -f` clears a
+     leftover so the unit heals itself instead of wedging.
+     `systemd-analyze verify` clean.
 
   **The stale claims**, each one something a judge could check and find false:
   - SKILL.md, the README and `05-oss-delivery.md` told readers to
