@@ -372,3 +372,14 @@ def test_the_dry_run_review_guard_explains_itself_instead_of_crashing():
 
     assert result.exit_code == 2
     assert "mutually exclusive" in result.output
+
+
+def test_infer_is_refused_on_a_whole_catalog_replay():
+    """--all replays recorded facts; --infer proposes guesses for a human to check.
+
+    Combining them would write an unreviewed proposal to every model at once.
+    """
+    result = _invoke("link", "--all", "--infer")
+
+    assert result.exit_code == 2
+    assert "incompatible" in result.output

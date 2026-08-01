@@ -16,6 +16,40 @@ Entry template:
 
 ---
 
+## D-080: link --infer proposes the join, a human still confirms it (2026-08-02)
+- Decided by: Ghassen Naouar (item A of docs/plan/06), applied by Claude
+- Decision: `modelguard/writeback/link_infer.py` reads a model's link out of the
+  graph and renders the exact `modelguard link` command a person would have
+  typed, one reason per decision, and writes nothing until they say yes (`--yes`
+  skips the prompt, `--dry-run` never prompts). Refused alongside `--all`.
+- Options considered:
+  1. Search the catalog for datasets whose names resemble the model's. Rejected:
+     it is a guess with no aspect behind it, it would be wrong most often on the
+     large catalogs where it matters most, and a wrong feature table produces
+     confident findings about a model's relationship to data it never read.
+  2. Ask an LLM to read the catalog and propose the link. Rejected outright:
+     root CLAUDE.md rule 4. The LLM never decides whether a finding exists, and
+     the link is upstream of every finding there is.
+  3. Read only what the graph states, chosen. Feature table from
+     `dataProcessInstanceInput` on the training runs (one input is a proposal,
+     several is a question, none is an honest refusal). Label from a column
+     already carrying the label term, else a configured name list, else nothing.
+     Exclusions from `schemaMetadata.primaryKeys`, `isPartOfKey` and
+     `isPartitioningKey` only.
+- Why: `inventory` on a freshly ingested catalog reports "not checked" for every
+  model, and the only way out was four hand-typed arguments per model. That is
+  the adoption cliff, and it caps how useful the rest of the project can be.
+- Result: 17 offline tests, four mutations confirmed red (guessing a label when
+  none is declared, picking the first of several inputs, letting a name match
+  beat a declared term, and excluding columns by name heuristic). Two deliberate
+  refusals to guess are asserted rather than assumed: nothing names a label ->
+  the proposal is returned incomplete and the CLI asks for `--label-column`;
+  a name that merely looks like a key (`customer_id`) is not excluded, because
+  `score_id` looks the same and is a feature. Every reason line names the aspect
+  it was read from, and a guess says the word "guess", so a reviewer checks the
+  reasoning rather than trusting it. `inventory`'s closing hint now points at
+  `--infer` first.
+
 ## D-079: Read the governance graph, not only the structural one (2026-08-02)
 - Decided by: Ghassen Naouar (item B of docs/plan/06), applied by Claude
 - Decision: two detectors land in `modelguard/detect/governance.py`.

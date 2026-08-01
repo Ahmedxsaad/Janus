@@ -159,8 +159,45 @@ connected to a single column, and a detector that walks from a feature to its
 source column has nowhere to start. Verified on a real stack, not assumed: see
 [examples/real-project/](examples/real-project/).
 
-`modelguard link` is that join, and it is one call from the script that trains
-the model:
+`modelguard link` is that join. Before typing it out, ask ModelGuard to work it
+out for you:
+
+```bash
+modelguard link --model churn_model --infer
+```
+
+It reads the model's training run, the datasets that run recorded as inputs, and
+the schema of the one it found, and proposes the exact command a person would
+have typed, with one line per decision saying which aspect it came from and
+whether it is a fact or a guess:
+
+```
+Inferred from the graph:
+  feature table: the only input recorded on churn_model's training run(s), from dataProcessInstanceInput
+  label column: churned matches a known label name (MODELGUARD_LABEL_COLUMN_NAMES). This one is a guess: check it
+  excluded columns: customer_id, from the schema's own key declarations (primaryKeys, isPartOfKey, isPartitioningKey) and the label itself
+
+Proposed:
+modelguard link \
+  --model churn_model \
+  --features analytics.customer_features \
+  --label-column churned \
+  --exclude customer_id
+
+Declare this? [Y/n]
+```
+
+There is no LLM in that, and nothing is written until you answer. A column that
+already carries the label term was *declared* rather than guessed, and the
+proposal says so; where nothing in the graph names a label at all, it refuses to
+invent one and asks for `--label-column`, because a wrong label makes every
+leakage verdict wrong in both directions. Exclusions come only from the
+warehouse's own key declarations, never from column names that look like
+identifiers: `customer_id` is usually a join key and `score_id` is usually a
+feature, and no rule over names tells them apart.
+
+Prefer to type it, or the graph is too quiet to infer from? It is one call from
+the script that trains the model:
 
 ```bash
 modelguard link \

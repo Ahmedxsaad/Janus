@@ -64,6 +64,7 @@ from modelguard.writeback.link import (
     models_with_recorded_link,
     recorded_link,
 )
+from modelguard.writeback.link_infer import LinkProposal, infer_link
 
 app = typer.Typer(
     add_completion=False,
@@ -1224,9 +1225,26 @@ def inventory(
     if unchecked:
         console.print(
             f"\n[dim]{unchecked} model(s) have nothing linking them to their training "
-            "data. Declare it with: modelguard link --model <name> --features <table> "
-            "--label-column <column>[/dim]"
+            "data. Start with: modelguard link --model <name> --infer, which reads "
+            "the arguments off the graph and shows them for confirmation. Where the "
+            "graph is silent, declare it yourself: modelguard link --model <name> "
+            "--features <table> --label-column <column>[/dim]"
         )
+
+
+def _print_proposal(proposal: LinkProposal) -> None:
+    """Show an inferred link and how each part of it was decided.
+
+    The reasons are printed before the command, not after: a proposal a person
+    accepts without reading the reasoning is a guess with a confirmation prompt
+    stapled to it, which is worse than asking them to type the arguments.
+    """
+    console.print("[bold]Inferred from the graph:[/bold]")
+    for reason in proposal.reasons:
+        colour = "yellow" if "guess" in reason or "NOT FOUND" in reason else "dim"
+        console.print(f"  [{colour}]{reason}[/{colour}]")
+    console.print("\n[bold]Proposed:[/bold]")
+    console.print(proposal.command())
 
 
 def _link_all(*, dry_run: bool, named: tuple[object, ...]) -> None:
@@ -1337,6 +1355,17 @@ def link(
             "step after an ingestion run.",
         ),
     ] = False,
+    infer: Annotated[
+        bool,
+        typer.Option(
+            "--infer",
+            help="Work the arguments out from the graph and show them for confirmation.",
+        ),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Accept an inferred proposal without prompting."),
+    ] = False,
 ) -> None:
     """Tell DataHub which columns a model trains on, and which one is its label.
 
@@ -1361,6 +1390,15 @@ def link(
     replay is just ``modelguard link --model <name>``.
     """
     if all_models:
+        if infer:
+            # --all replays what link already recorded, which is a fact. --infer
+            # proposes something for a human to check. Combining them would mean
+            # writing an unreviewed guess to every model in the catalog at once.
+            console.print(
+                "[red]--all and --infer are incompatible: --all replays recorded "
+                "links, --infer proposes new ones for you to confirm.[/red]"
+            )
+            raise typer.Exit(code=2)
         _link_all(dry_run=dry_run, named=(model, features, label_table, label_column, exclude))
         return
 
@@ -1388,6 +1426,33 @@ def link(
     # link is replayed regularly. Replaying it must not mean retyping it.
     previous = recorded_link(conn, model_urn)
 
+    proposal: LinkProposal | None = None
+    if infer:
+        try:
+            proposal = infer_link(conn, config, model_urn)
+        except LinkError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=2) from exc
+
+        _print_proposal(proposal)
+        # An explicitly typed flag always wins: --infer proposes, it never
+        # overrules somebody who already knows the answer.
+        features = features or proposal.feature_dataset_urn
+        feature_urn = feature_urn or proposal.feature_dataset_urn
+        if not exclude and proposal.exclude:
+            exclude = sorted(proposal.exclude)
+
+        if label_column is None and proposal.label_column_urn is None:
+            console.print(
+                "[red]Nothing in the graph names this model's label, so the "
+                "proposal is incomplete. Rerun with --label-column <column>.[/red]"
+            )
+            raise typer.Exit(code=2)
+
+        if not (yes or dry_run) and not typer.confirm("\nDeclare this?", default=True):
+            console.print("[yellow]Nothing was written.[/yellow]")
+            raise typer.Exit(code=0)
+
     if label_column is not None:
         try:
             label_dataset_urn = (
@@ -1400,6 +1465,8 @@ def link(
             console.print("[red]--label-column needs --label-table, or --features.[/red]")
             raise typer.Exit(code=2)
         label_column_urn = str(SchemaFieldUrn(label_dataset_urn, label_column))
+    elif proposal is not None and proposal.label_column_urn is not None:
+        label_column_urn = proposal.label_column_urn
     elif previous is not None:
         label_column_urn = previous.label_column_urn
     else:

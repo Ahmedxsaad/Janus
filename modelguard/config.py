@@ -32,6 +32,7 @@ from modelguard.env import (
 
 __all__ = [
     "ENV_FRESHNESS_SLA_HOURS",
+    "ENV_LABEL_COLUMN_NAMES",
     "ENV_LABEL_TERM_URN",
     "ENV_LEAKAGE_MAX_HOPS",
     "ENV_LINEAGE_RESULT_CAP",
@@ -47,6 +48,7 @@ ENV_MAX_HOPS = "MODELGUARD_MAX_HOPS"
 ENV_LINEAGE_RESULT_CAP = "MODELGUARD_LINEAGE_RESULT_CAP"
 ENV_LEAKAGE_MAX_HOPS = "MODELGUARD_LEAKAGE_MAX_HOPS"
 ENV_LABEL_TERM_URN = "MODELGUARD_LABEL_TERM_URN"
+ENV_LABEL_COLUMN_NAMES = "MODELGUARD_LABEL_COLUMN_NAMES"
 ENV_SENSITIVE_TERM_URNS = "MODELGUARD_SENSITIVE_TERM_URNS"
 ENV_SENSITIVE_TAG_URNS = "MODELGUARD_SENSITIVE_TAG_URNS"
 
@@ -103,6 +105,25 @@ class ScanConfig:
 
     leakage_risk_term_urn: str = "urn:li:glossaryTerm:modelguard.leakage-risk"
     """The term ModelGuard attaches to a feature it proved leaks."""
+
+    label_column_names: tuple[str, ...] = (
+        "label",
+        "target",
+        "y",
+        "outcome",
+        "churned",
+        "is_churn",
+        "default_status",
+        "converted",
+        "fraud",
+    )
+    """Column names ``link --infer`` falls back on when nothing is declared.
+
+    A guess, and reported as one: the proposal says which route found the label,
+    and a name match is never written without a human confirming it. Names, not
+    identity, so they carry a documented default; override the list when your
+    organization has a convention of its own.
+    """
 
     sensitive_term_urns: tuple[str, ...] = ()
     """Glossary terms that mark a column as one a model must not learn from.
@@ -206,4 +227,5 @@ class ScanConfig:
             # itself as not evaluated.
             sensitive_term_urns=optional_list(ENV_SENSITIVE_TERM_URNS),
             sensitive_tag_urns=optional_list(ENV_SENSITIVE_TAG_URNS),
+            label_column_names=optional_list(ENV_LABEL_COLUMN_NAMES) or defaults.label_column_names,
         )
