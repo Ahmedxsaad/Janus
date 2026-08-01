@@ -58,12 +58,12 @@ def test_gms_url_strips_trailing_slash(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_blank_token_is_treated_as_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     # .env.example ships DATAHUB_GMS_TOKEN= with an empty value.
     monkeypatch.setenv(ENV_GMS_TOKEN, "   ")
-    assert client_module._gms_token() is None
+    assert client_module.gms_token() is None
 
 
 def test_token_is_read_and_stripped(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ENV_GMS_TOKEN, "  secret-token\n")
-    assert client_module._gms_token() == "secret-token"
+    assert client_module.gms_token() == "secret-token"
 
 
 def test_write_path_without_token_fails_before_connecting(monkeypatch: pytest.MonkeyPatch) -> None:

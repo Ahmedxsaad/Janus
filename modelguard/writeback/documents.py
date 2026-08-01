@@ -16,13 +16,14 @@ docs/decision-log.md.
 
 Idempotency
 -----------
-The document id is derived from the model URN and the finding's own resource
-URN, so a rerun of the *same* finding updates one document in place rather than
-piling up a report per scan. The resource URN half matters: a model can be
-named in more than one finding in a single scan (downstream of a stale table
-and independently leaking, or leaking through two separate features), and each
-finding's resource_urn is what it actually points at (a leaking column, say),
-so two distinct findings on one model get two distinct, individually
+The document id is derived from the model URN, the finding's type, and the
+finding's own resource URN, so a rerun of the *same* finding updates one
+document in place rather than piling up a report per scan. The other two halves
+matter: a model can be named in more than one finding in a single scan
+(downstream of a stale table and independently leaking, or leaking through two
+separate features), and two detectors can name the *same* resource (a table
+that is both stale and drifted from the model's training schema). Keying on all
+three gives two distinct findings on one model two distinct, individually
 convergent reports instead of the second silently overwriting the first.
 
 The prose in the body may come from an LLM. It is only ever prose: every number
@@ -42,6 +43,7 @@ from datahub.sdk.document import Document
 from modelguard.client import DataHubConnection
 from modelguard.models import (
     Finding,
+    FindingType,
     FreshnessFinding,
     LeakageFinding,
     ModelAtRisk,
@@ -64,20 +66,28 @@ class DocumentWrite:
     markdown: str
 
 
-def _document_id(model_urn: str, resource_urn: str) -> str:
+def _document_id(model_urn: str, finding_type: FindingType, resource_urn: str) -> str:
     """Derive a stable document id from the model and the finding it reports on.
 
     The model's name, not its full URN: URNs contain characters that make an
-    unreadable document id. The resource URN is folded in as a short hash so
-    that two different findings on the same model (a leaking column and a
-    stale upstream table, or two separate leaking columns) land on two
-    different documents rather than colliding on one: without this, the
-    second ``publish_impact_report`` call in a scan would silently overwrite
-    the first finding's report. Hashed rather than embedded verbatim because a
+    unreadable document id. The finding type and the resource URN are folded in
+    as a short hash so that two different findings on the same model (a leaking
+    column and a stale upstream table, or two separate leaking columns) land on
+    two different documents rather than colliding on one: without this, the
+    second ``publish_impact_report`` call in a scan would silently overwrite the
+    first finding's report. Hashed rather than embedded verbatim because a
     schemaField URN contains parentheses and colons that do not belong in an id.
+
+    The finding type is part of the hash because the resource URN alone does not
+    separate the detectors: a table that is both stale and drifted from a
+    model's training schema is the ``resource_urn`` of a freshness finding and
+    of a schema-drift finding at once, and keying on the resource alone let the
+    second report overwrite the first. It mirrors the incident dedup key
+    ``(resource_urn, incident_type, title)``, which separates the same case.
     """
     model_name = MlModelUrn.from_string(model_urn).name
-    resource_hash = hashlib.sha256(resource_urn.encode()).hexdigest()[:12]
+    key = f"{finding_type.value}:{resource_urn}"
+    resource_hash = hashlib.sha256(key.encode()).hexdigest()[:12]
     return f"modelguard-impact-{model_name}-{resource_hash}"
 
 
@@ -363,7 +373,7 @@ def publish_impact_report(
     title = f"ModelGuard impact report: {report_subject(finding)}"
 
     document = Document.create_document(
-        id=_document_id(model_urn, finding.resource_urn),
+        id=_document_id(model_urn, finding.finding_type, finding.resource_urn),
         title=title,
         text=markdown,
         subtype=REPORT_SUBTYPE,

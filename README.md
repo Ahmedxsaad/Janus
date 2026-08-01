@@ -85,10 +85,12 @@ modelguard scan --table loans_raw    # detect, explain, write back
 ```
 
 Not developing on ModelGuard itself, just want the CLI against your own DataHub?
-`pip install modelguard-datahub` (add `[agent]` for `scan --review`, `[mcp]` for
-`modelguard-mcp`). The distribution is named `-datahub`, since the exact name
-`modelguard` was already taken on PyPI by an unrelated package; the commands you
-run are still `modelguard`, `modelguard gate`, `modelguard-mcp`.
+Until the first PyPI release is cut it is `pip install -e .` from a clone; from
+the release on, `pip install modelguard-datahub` (add `[agent]` for
+`scan --review`, `[mcp]` for `modelguard-mcp`). The distribution is named
+`-datahub`, since the exact name `modelguard` was already taken on PyPI by an
+unrelated package; the commands you run are still `modelguard`,
+`modelguard gate`, `modelguard-mcp`.
 
 The scan names the live model at risk, then writes the incident, the
 `model-at-risk` tag, the risk properties, the guarding assertion, and the impact
@@ -243,6 +245,70 @@ These are implementations of an *approach*, handed ModelGuard's own label index 
 nothing is won by starting better informed; no Great Expectations or Evidently process
 was run. [RESULTS.md](benchmarks/RESULTS.md) says so, and states what is still not
 measured: no scale test, and no scoring of narrative quality.
+
+## Security and privacy
+
+**No row-level data ever leaves DataHub, and none of it reaches the LLM.**
+ModelGuard reads the metadata graph and nothing else: aspects DataHub already
+holds, among them the `operation` aspect for freshness, `schemaMetadata` for
+drift, glossary terms for labels, and lineage for the paths between them. It
+never connects to the warehouse and never issues a query against a table, so
+there is no path by which a row, a PII column value, or a PHI record can reach a
+model provider. What an LLM is shown is the fact block
+printed in every incident: URNs, column names, hop counts, and the numbers a
+detector measured. You can read exactly what was sent, because it is what was
+written back.
+
+The rest of the security model, in the order it matters:
+
+- **The LLM decides nothing.** Detection is deterministic Python. The model
+  explains, ranks, and drafts prose; nothing it emits reaches a dedup key, a
+  severity, a URN, or an enum, and it never composes a mutation. A scan runs
+  end to end with no LLM configured at all, and detection is byte-identical
+  either way.
+- **Prompt injection is contained, not assumed away** (OWASP LLM01). Catalog
+  text is metadata anybody can edit, so it is wrapped as delimited untrusted
+  data and delimiter lookalikes are stripped before wrapping. Even a successful
+  injection cannot invent a finding: it is downstream of the detectors.
+- **Writes are fixed and parameterized.** `writeback/` exposes a closed set of
+  mutations with validated arguments (URNs must resolve, incident types are
+  checked against `IncidentTypeClass`, scores are clamped). There is no code
+  path that sends a GraphQL string the caller supplied.
+- **Writes are idempotent and reversible in place.** Every write is keyed on
+  `(resource_urn, incident_type, title)` with read-before-write, stamped with a
+  `modelguard.run_id` for provenance. The benchmark reads the graph back after a
+  rerun and measures the duplicates created: 0.
+- **Writes are gated on a human.** `scan --review` pauses after detection and
+  writes only what you approve. `gate` reads and does not write unless you pass
+  `--write`, because it runs on every push and one incident per run would fill
+  the graph with findings about code that never merged. The MCP tools cannot
+  write at all, on any flag: the model driving an MCP client is outside this
+  project's control, so it gets to ask what is wrong, never to fix it. `watch`
+  auto-approves because it is unattended by definition.
+- **The token stays a secret.** It enters the process in one module
+  (`modelguard/env.py`), lives only in `.env` (git-ignored), and is never
+  logged, echoed, or put in an exception message. Errors name the *variable*,
+  never its value. Text that came back from somebody else's SDK is scrubbed of
+  it before it reaches a console or a CI log, and Typer's locals-in-traceback
+  rendering is pinned off because those frames hold the token.
+- **Least privilege, honestly.** DataHub OSS personal access tokens are not
+  scoped per operation, so ModelGuard cannot claim a narrowed token. What it can
+  say is what it touches: incidents, tags, glossary terms, structured
+  properties, documents, and assertion aspects. Give it a token you are willing
+  to rotate, and rotate it.
+
+Detection is measured, not asserted, and each detector implements a published
+result rather than a heuristic somebody liked:
+
+| What | Source |
+|---|---|
+| Target leakage as illegitimate information about the target, found by inspecting how a feature was constructed | Kaufman, Rosset and Perlich, *Leakage in Data Mining: Formulation, Detection, and Avoidance* (KDD 2011 / ACM TKDD 2012) |
+| Undeclared consumers: a table acquiring model consumers its owners never agreed to serve | Sculley et al., *Hidden Technical Debt in Machine Learning Systems* (NeurIPS 2015) |
+| A schema fixed at training time, against which serving data is continuously validated | Breck, Polyzotis, Roy, Whang and Zinkevich, *Data Validation for Machine Learning* (MLSys 2019) |
+| The prompt-injection and sensitive-disclosure threat model | OWASP Top 10 for LLM Applications (2025), LLM01 and LLM06 |
+
+Full reading list with what each one changed here:
+[docs/plan/resources.md](docs/plan/resources.md).
 
 ## OSS contributions
 

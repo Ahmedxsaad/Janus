@@ -23,8 +23,9 @@ from modelguard.cli import (
     _watch_once,
     app,
     resolve_table,
+    safe_error,
 )
-from modelguard.client import DataHubConnection
+from modelguard.client import ENV_GMS_TOKEN, DataHubConnection
 from modelguard.config import ScanConfig
 from tests.conftest import (
     DEPLOYMENT_URN,
@@ -266,3 +267,58 @@ def test_the_cli_never_renders_locals_into_a_traceback():
     change of default cannot quietly turn it back on.
     """
     assert app.pretty_exceptions_show_locals is False
+
+
+def test_an_exception_printed_to_the_console_carries_no_token(monkeypatch, capsys):
+    """``gate`` prints an SDK failure straight into a CI log the whole team reads.
+
+    ModelGuard's own errors name a variable and never its value, but an exception
+    surfacing from someone else's SDK may quote a request or a header we handed
+    the token to (root CLAUDE.md rule 6d).
+    """
+    secret = "dh-token-super-secret-value"
+    monkeypatch.setenv(ENV_GMS_TOKEN, secret)
+
+    rendered = safe_error(RuntimeError(f"401 Unauthorized: Authorization=Bearer {secret}"))
+
+    assert secret not in rendered
+    # Still readable: the operator has to be able to act on it.
+    assert "401 Unauthorized" in rendered
+
+
+def test_a_first_poll_of_a_healthy_target_does_not_claim_a_recovery(capsys):
+    """Nothing recovered: the target was already healthy when watch started.
+
+    ``previous`` is None on a process's first poll, which is not the same as an
+    empty set, and announcing a recovery there invents an incident that never
+    happened.
+    """
+    graph, client = _watch_fixture(1.0)
+
+    signature = _poll(graph, client, previous=None)
+
+    assert signature == frozenset()
+    printed = capsys.readouterr().out
+    assert "clean: no findings" in printed
+    assert "recovered" not in printed
+
+
+def test_a_target_that_actually_recovered_is_announced_as_recovered(capsys):
+    """The other half: a remembered finding that is gone is a real recovery."""
+    graph, client = _watch_fixture(1.0)
+    was_failing = frozenset({(TABLE_URN, "upstream-freshness", "Stale upstream data", "critical")})
+
+    signature = _poll(graph, client, previous=was_failing)
+
+    assert signature == frozenset()
+    assert "recovered: no findings" in capsys.readouterr().out
+
+
+def test_a_first_poll_that_finds_something_says_detected(capsys):
+    """A first poll is only quiet about recovery, never about a finding."""
+    graph, client = _watch_fixture(30.0)
+
+    signature = _poll(graph, client, previous=None)
+
+    assert signature
+    assert "detected" in capsys.readouterr().out

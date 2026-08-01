@@ -14,6 +14,8 @@ never a guess: silently auditing the wrong table would be worse than failing.
 
 from __future__ import annotations
 
+import logging
+import sys
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -25,9 +27,14 @@ from datahub.sdk.search_filters import FilterDsl as F
 from rich.console import Console
 
 from modelguard.agent.pipeline import FindingWrites, ScanReport, run_scan
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
+from modelguard.client import (
+    DataHubConnection,
+    DataHubConnectionError,
+    connect,
+    gms_token,
+)
 from modelguard.config import ScanConfig
-from modelguard.env import ConfigError
+from modelguard.env import ConfigError, scrub
 from modelguard.gate import (
     EXIT_ERROR,
     GatePolicy,
@@ -63,6 +70,18 @@ app = typer.Typer(
 console = Console(soft_wrap=True)
 
 WATCH_MAX_BACKOFF_SECONDS = 300.0
+
+
+def safe_error(exc: BaseException) -> str:
+    """Render an exception for the console with the DataHub token removed.
+
+    For exceptions we did not raise ourselves. ModelGuard's own errors name a
+    variable and never its value, but an exception surfacing from the DataHub
+    SDK or from ``requests`` may quote a request, a header, or a URL we handed
+    the token to, and ``gate`` in particular prints straight into a CI log that
+    the whole team can read (root CLAUDE.md rule 6d).
+    """
+    return scrub(str(exc), gms_token())
 
 
 @app.callback()
@@ -404,7 +423,13 @@ def _announce_watch_change(
     """Say what changed since the last poll: a recovery, or new or changed findings."""
     stamp = time.strftime("%H:%M:%S")
     if not signature:
-        console.print(f"[green]{stamp} recovered: no findings.[/green]")
+        # previous is None only on a process's first poll, where there is no
+        # "since" to compare against: a target that was already healthy when
+        # watch started never recovered from anything, and saying it did would
+        # be inventing an incident that never happened. The scan still runs, and
+        # still reconciles whatever an earlier process left open on the graph.
+        opening = "clean" if previous is None else "recovered"
+        console.print(f"[green]{stamp} {opening}: no findings.[/green]")
         return
     verb = "detected" if not previous else "changed to"
     console.print(f"[bold red]{stamp} {verb} {len(signature)} finding(s):[/bold red]")
@@ -430,8 +455,13 @@ def _watch_once(
     whether the previous finding was raised by this exact process, an earlier
     one before a restart, or a plain scan). Re-writing an unchanged finding
     every poll would be safe (the writes are idempotent) but noisy and
-    pointless, so a steady state stays quiet. Returns the current signature,
-    which the caller carries into the next poll.
+    pointless, so a steady state stays quiet after the first poll.
+
+    The first poll is never quiet, even against a healthy target: ``previous``
+    is None rather than an empty set, so there is no remembered state to match,
+    and the write that follows is what reconciles findings an earlier process
+    raised and never got to resolve. Returns the current signature, which the
+    caller carries into the next poll.
     """
     preview = run_scan(
         conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm, dry_run=True
@@ -701,6 +731,19 @@ def watch(
     """
     # ponytail: polling loop, not the Actions/Kafka EntityChangeEvent consumer.
     # Wire datahub-actions here if sub-poll-interval latency ever matters.
+
+    # The one entry point that runs unattended for days, so it is the one that
+    # turns the pipeline's per-scan timing lines on. The other commands print a
+    # report to a human who is standing there and would only be talked over.
+    # basicConfig is a no-op if the embedding application already configured
+    # logging, which is what makes it safe to call from a command rather than
+    # at import.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        stream=sys.stderr,
+    )
+
     conn, config, llm, table_urn, model_urn = _prepare(
         table=table,
         model=model,
@@ -863,7 +906,7 @@ def gate(
         )
         verdict = evaluate(report, policy)
     except Exception as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{safe_error(exc)}[/red]")
         raise typer.Exit(code=EXIT_ERROR) from exc
 
     for finding in (write_.finding for write_ in report.writes):

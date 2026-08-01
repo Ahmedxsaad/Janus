@@ -69,11 +69,16 @@ def _gms_url() -> str:
     return url.rstrip("/")
 
 
-def _gms_token() -> str | None:
+def gms_token() -> str | None:
     """Return the personal access token, or None when it is unset or blank.
 
     ``.env.example`` ships ``DATAHUB_GMS_TOKEN=`` with an empty value, so an
     empty string means "not configured" rather than "the empty token".
+
+    Public, and it is the one function here that hands out a secret. Callers get
+    it for exactly one purpose: passing it to :func:`modelguard.env.scrub` so a
+    third-party exception message can be cleaned before it reaches a log. Never
+    print, format, or store what this returns.
     """
     return optional_value(ENV_GMS_TOKEN)
 
@@ -95,7 +100,7 @@ def connect(*, require_token: bool = False, validate: bool = True) -> DataHubCon
             required but absent, or the server did not answer.
     """
     url = _gms_url()
-    token = _gms_token()
+    token = gms_token()
 
     if require_token and token is None:
         raise DataHubConnectionError(

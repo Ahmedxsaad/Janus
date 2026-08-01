@@ -26,15 +26,18 @@ Release-Please handles versioning; no stated CLA/DCO.
 1. Fork and clone `datahub-project/datahub-skills`; branch `feat/datahub-ml-guard`.
 2. `pip install pre-commit && pre-commit install`.
 3. Copy `skill/datahub-ml-guard/` -> `skills/datahub-ml-guard/` in the fork.
-4. **The modelguard-dependency wrinkle, resolved (D-055).** Upstream skills wrap
-   the stock `datahub` CLI; ours wraps the `modelguard` CLI, which is now on PyPI
-   as `pip install modelguard-datahub` (the exact name `modelguard` was already
-   taken by an unrelated package; the installed commands are still `modelguard`,
-   `modelguard-mcp`, etc., since the distribution name and the console-script
-   names are independent). SKILL.md's prerequisite is a one-line `pip install`,
-   not a clone. The honest framing still holds: "an ML-reliability skill that
-   drives the ModelGuard package," not a stock-CLI skill, but a reviewer's
-   install-friction question is answered before it is asked.
+4. **The modelguard-dependency wrinkle (D-055, corrected in D-073).** Upstream
+   skills wrap the stock `datahub` CLI; ours wraps the `modelguard` CLI, which is
+   packaged for PyPI as `modelguard-datahub` (the exact name `modelguard` was
+   already taken by an unrelated package; the installed commands are still
+   `modelguard`, `modelguard-mcp`, etc., since the distribution name and the
+   console-script names are independent). **The release is not cut yet**
+   (docs/deploy/pypi-release.md), so SKILL.md's prerequisite names the working
+   clone-and-`pip install -e .` path first and the one-line `pip install` from
+   the release on. Do not submit the skill upstream ahead of that release: a
+   prerequisite a reviewer cannot run is worse than a clone they can. The honest
+   framing still holds: "an ML-reliability skill that drives the ModelGuard
+   package," not a stock-CLI skill.
 5. **Match upstream conventions** by diffing against `skills/datahub-enrich/`:
    confirm the frontmatter field set (we mirror `name`, `description`,
    `user-invocable`, `allowed-tools`); check whether `min-cli-version` applies and

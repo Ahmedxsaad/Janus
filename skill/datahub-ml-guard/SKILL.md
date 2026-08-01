@@ -41,9 +41,12 @@ schema still matches training.
 ## Prerequisites
 
 - A DataHub instance (a local OSS Quickstart is enough: `datahub docker quickstart`).
-- `pip install modelguard-datahub`, which installs the `modelguard` CLI (the
-  distribution is named `-datahub` on PyPI; the installed commands are still
-  `modelguard`, `modelguard-mcp`, `modelguard-seed`, `modelguard-scenario`).
+- The `modelguard` CLI. Until the first PyPI release is cut, install it from a
+  clone: `git clone https://github.com/Ahmedxsaad/DataHub && pip install -e DataHub`.
+  From the release on it is `pip install modelguard-datahub` (the distribution
+  is named `-datahub` because the exact name `modelguard` is taken on PyPI by an
+  unrelated package). Either way the installed commands are `modelguard`,
+  `modelguard-mcp`, `modelguard-seed`, `modelguard-scenario`.
 - `DATAHUB_GMS_URL` set (`export DATAHUB_GMS_URL=http://localhost:8080` for the
   default Quickstart). No token is needed against it; set `DATAHUB_GMS_TOKEN`
   only if metadata-service auth is enabled.

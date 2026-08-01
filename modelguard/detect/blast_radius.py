@@ -147,8 +147,12 @@ def _downstream_traversal(
     # DataHub returns beyond the cap once max_hops exceeds 2. Honor the cap.
     within_cap = [r for r in results if r.hops <= config.max_hops]
 
-    datasets = sorted(r.urn for r in within_cap if entity_type(r.urn) == _DATASET)
-    features = sorted(r.urn for r in within_cap if entity_type(r.urn) == _ML_FEATURE)
+    # Deduplicated, for the same reason the model hops below are: that full-graph
+    # search can return one entity via more than one path within the cap, and a
+    # plain sorted() would list it twice and count it twice in "Downstream
+    # datasets: N" on the impact report a human reads.
+    datasets = sorted({r.urn for r in within_cap if entity_type(r.urn) == _DATASET})
+    features = sorted({r.urn for r in within_cap if entity_type(r.urn) == _ML_FEATURE})
     # min(), not last-wins: DataHub's full-graph search past hop 2 (see the cap
     # comment above) can return the same model via more than one path within the
     # cap, in network-order rather than hop order. A dict comprehension would keep
