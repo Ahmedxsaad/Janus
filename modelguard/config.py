@@ -22,10 +22,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from modelguard.env import ConfigError, optional_float, optional_int
+from modelguard.env import ConfigError, optional_float, optional_int, optional_value
 
 __all__ = [
     "ENV_FRESHNESS_SLA_HOURS",
+    "ENV_LABEL_TERM_URN",
     "ENV_LEAKAGE_MAX_HOPS",
     "ENV_LINEAGE_RESULT_CAP",
     "ENV_MAX_HOPS",
@@ -37,6 +38,7 @@ ENV_FRESHNESS_SLA_HOURS = "MODELGUARD_FRESHNESS_SLA_HOURS"
 ENV_MAX_HOPS = "MODELGUARD_MAX_HOPS"
 ENV_LINEAGE_RESULT_CAP = "MODELGUARD_LINEAGE_RESULT_CAP"
 ENV_LEAKAGE_MAX_HOPS = "MODELGUARD_LEAKAGE_MAX_HOPS"
+ENV_LABEL_TERM_URN = "MODELGUARD_LABEL_TERM_URN"
 
 
 @dataclass(frozen=True)
@@ -73,9 +75,10 @@ class ScanConfig:
 
     A column carrying this term is ground truth: any feature whose upstream column
     lineage reaches it is target leakage. This is a *name*, not a credential or an
-    endpoint, and it is identical on every machine, so it has a default (D-029).
-    Point it at your own term if your organization already has one for labels, and
-    the leakage detector will honor that instead.
+    endpoint, so it has a default (D-029). The default term, though, exists only
+    in a graph ``modelguard-seed`` built. Point ``MODELGUARD_LABEL_TERM_URN`` at
+    your own term if your organization already has one for labels, and the
+    leakage detector will honor that instead.
     """
 
     leakage_max_hops: int = 6
@@ -142,4 +145,11 @@ class ScanConfig:
             max_hops=optional_int(ENV_MAX_HOPS, defaults.max_hops),
             lineage_result_cap=optional_int(ENV_LINEAGE_RESULT_CAP, defaults.lineage_result_cap),
             leakage_max_hops=optional_int(ENV_LEAKAGE_MAX_HOPS, defaults.leakage_max_hops),
+            # A term URN is a name, not an endpoint or a credential, so like the
+            # thresholds above it keeps a default. It is overridable because the
+            # default term only exists in a graph `modelguard-seed` built: on a
+            # real catalog the organization already has its own term for a label,
+            # and without this the detector could only ever look for a term that
+            # is not there (D-074).
+            label_term_urn=optional_value(ENV_LABEL_TERM_URN) or defaults.label_term_urn,
         )
