@@ -63,6 +63,8 @@ class FindingType(StrEnum):
     UPSTREAM_FRESHNESS = "upstream-freshness"
     TARGET_LEAKAGE = "target-leakage"
     INPUT_SCHEMA_DRIFT = "input-schema-drift"
+    SENSITIVE_SOURCE = "sensitive-source"
+    DEPRECATED_INPUT = "deprecated-input"
 
 
 @dataclass(frozen=True)
@@ -429,6 +431,205 @@ class LeakageFinding(Finding):
     @property
     def models_at_risk(self) -> tuple[ModelRef, ...]:
         """Exactly the one model that consumes this leaking feature."""
+        return (self.model,)
+
+
+@dataclass(frozen=True)
+class SensitiveFeature:
+    """One feature whose upstream column lineage reaches a classified column.
+
+    The model was trained on data derived from a column somebody in the
+    organization marked as restricted: PII, PHI, a protected attribute, anything
+    their taxonomy says must not be learned from. Nothing about the model is
+    broken, which is what makes this hard to find by any other means. It is a
+    standing exposure: the model has absorbed information from a column whose
+    handling somebody agreed to constrain, and the derivation is often several
+    joins away from anyone who would recognise it.
+
+    ``column_path`` is the literal chain of columns the traversal walked, from the
+    feature's own source column back to the classified one. It is what the
+    incident quotes, and it is why this finding is auditable rather than a claim.
+    """
+
+    feature_urn: str
+    feature_name: str
+    source_column_urn: str
+    """The schemaField the feature is computed from. Where the incident lands."""
+    source_column_name: str
+    sensitive_column_urn: str
+    sensitive_column_name: str
+    sensitive_dataset_name: str
+    marker_urn: str
+    """The glossary term or tag that classifies the ancestor column.
+
+    Quoted in the finding so the incident names the organization's own
+    classification rather than ModelGuard's opinion of it.
+    """
+    column_path: tuple[str, ...]
+    """Column names from the feature's source column back to the classified one."""
+
+    @property
+    def marker_name(self) -> str:
+        """The classification's readable name, taken from the tail of its URN.
+
+        A URN in the incident title would make the title unreadable and, worse,
+        unstable across a re-ingestion that changes a URN's prefix while meaning
+        the same thing.
+        """
+        return self.marker_urn.rsplit(":", 1)[-1]
+
+    @property
+    def path_text(self) -> str:
+        """Render the derivation the way the incident and the report quote it.
+
+        Consecutive repeats of one column name collapse to a single step, for the
+        same reason as :attr:`LeakingFeature.path_text`: a warehouse ingested from
+        more than one source has sibling entities for the same physical table, so
+        lineage legitimately walks the same column twice under two platforms.
+        """
+        collapsed = [
+            column
+            for index, column in enumerate(self.column_path)
+            if index == 0 or column != self.column_path[index - 1]
+        ]
+        return " <- ".join(collapsed)
+
+
+@dataclass(frozen=True)
+class SensitiveSourceFinding(Finding):
+    """A model consumes a feature derived from a column classified as restricted.
+
+    One finding per feature, so each exposed column gets its own incident and its
+    own dedup key, exactly like leakage.
+    """
+
+    model: ModelRef
+    exposure: SensitiveFeature
+
+    @property
+    def finding_type(self) -> FindingType:
+        """A feature derives from a column the organization classified."""
+        return FindingType.SENSITIVE_SOURCE
+
+    @property
+    def resource_urn(self) -> str:
+        """The feature's own source column: the precise column to go and look at."""
+        return self.exposure.source_column_urn
+
+    @property
+    def incident_type(self) -> str:
+        """FIELD is DataHub's column-scoped incident type. There is no COLUMN."""
+        return "FIELD"
+
+    @property
+    def severity(self) -> Severity:
+        """Serious, but never CRITICAL, and the distinction is deliberate.
+
+        CRITICAL in this project means the model's own numbers are wrong and
+        cannot be trusted, which is what target leakage does. A feature derived
+        from a restricted column is a governance exposure: the model works, and
+        what is wrong is what it was allowed to see. Ranking the two the same
+        would make CRITICAL stop meaning anything, and a team that cannot sort
+        its critical findings triages none of them.
+        """
+        return Severity.HIGH if self.model.is_live else Severity.MEDIUM
+
+    @property
+    def title(self) -> str:
+        """A pure function of two column names and the classification's name."""
+        return (
+            f"Sensitive source: {self.exposure.source_column_name} derives from "
+            f"{self.exposure.marker_name} column {self.exposure.sensitive_column_name}"
+        )
+
+    @property
+    def evidence(self) -> Mapping[str, str]:
+        """The column path proving the derivation. Every value read from the graph."""
+        return {
+            "feature": self.exposure.feature_name,
+            "exposed_column": self.exposure.source_column_name,
+            "sensitive_column": self.exposure.sensitive_column_name,
+            "sensitive_table": self.exposure.sensitive_dataset_name,
+            "classification": self.exposure.marker_name,
+            "column_path": self.exposure.path_text,
+            "model": self.model.name,
+            "model_is_live": str(self.model.is_live).lower(),
+            "severity": str(self.severity),
+        }
+
+    @property
+    def models_at_risk(self) -> tuple[ModelRef, ...]:
+        """Exactly the one model that consumes this feature."""
+        return (self.model,)
+
+
+@dataclass(frozen=True)
+class DeprecatedInputFinding(Finding):
+    """A model trains on an input its own owners have marked deprecated.
+
+    The cheapest finding in the project to compute and one of the more useful to
+    receive: DataHub already holds the ``deprecation`` aspect, somebody set it
+    deliberately, and nothing today tells the team downstream of that table that
+    a model depends on it. Nothing is broken yet, which is the point: this is the
+    warning that arrives while there is still time to act on it.
+    """
+
+    model: ModelRef
+    dataset_urn: str
+    dataset_name: str
+    note: str = ""
+    """The deprecation note its owners left, when they left one."""
+    decommission_time_ms: int | None = None
+    """When the owners said the table goes away, if they said."""
+
+    @property
+    def finding_type(self) -> FindingType:
+        """A training input is on its way out."""
+        return FindingType.DEPRECATED_INPUT
+
+    @property
+    def resource_urn(self) -> str:
+        """The deprecated dataset. The incident belongs where the decision was made."""
+        return self.dataset_urn
+
+    @property
+    def incident_type(self) -> str:
+        """OPERATIONAL: nothing is wrong with the data, the asset is being retired."""
+        return "OPERATIONAL"
+
+    @property
+    def severity(self) -> Severity:
+        """Never higher than MEDIUM: this is a deadline, not a defect.
+
+        A live model raises it to MEDIUM because somebody has to plan the
+        migration; one that is not serving is LOW, since the deadline lands on a
+        model nobody is depending on yet.
+        """
+        return Severity.MEDIUM if self.model.is_live else Severity.LOW
+
+    @property
+    def title(self) -> str:
+        """A pure function of the dataset and model names."""
+        return f"Deprecated training input {self.dataset_name} for {self.model.name}"
+
+    @property
+    def evidence(self) -> Mapping[str, str]:
+        """What the owners declared, quoted rather than interpreted."""
+        facts = {
+            "input_table": self.dataset_name,
+            "model": self.model.name,
+            "model_is_live": str(self.model.is_live).lower(),
+            "severity": str(self.severity),
+        }
+        if self.note:
+            facts["deprecation_note"] = self.note
+        if self.decommission_time_ms is not None:
+            facts["decommission_time_ms"] = str(self.decommission_time_ms)
+        return facts
+
+    @property
+    def models_at_risk(self) -> tuple[ModelRef, ...]:
+        """Exactly the one model that trains on this input."""
         return (self.model,)
 
 

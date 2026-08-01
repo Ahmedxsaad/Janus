@@ -174,6 +174,11 @@ def label_column_urn() -> SchemaFieldUrn:
     return SchemaFieldUrn(parent=source_table_urn(), field_path=LABEL_SOURCE_COLUMN)
 
 
+def source_column_urn(column: str) -> SchemaFieldUrn:
+    """Return the URN of one column of the source table."""
+    return SchemaFieldUrn(parent=source_table_urn(), field_path=column)
+
+
 def feature_column_urn(column: str) -> SchemaFieldUrn:
     """Return the URN of one column of the feature table."""
     return SchemaFieldUrn(parent=feature_table_dataset_urn(), field_path=column)

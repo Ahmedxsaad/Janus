@@ -42,19 +42,25 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from datahub.metadata.schema_classes import SchemaMetadataClass
+from datahub.metadata.schema_classes import DeprecationClass, SchemaMetadataClass
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import freshness_signal
+from modelguard.detect.governance import sensitive_index
 from modelguard.models import FindingType
 from modelguard.seed import graph_spec as spec
 from modelguard.seed.scenarios import (
+    SENSITIVE_SOURCE_COLUMN,
+    plant_deprecated_input,
     plant_leakage,
     plant_schema_drift,
+    plant_sensitive_source,
     plant_stale_source,
+    revert_deprecated_input,
     revert_leakage,
     revert_schema_drift,
+    revert_sensitive_source,
     revert_stale_source,
 )
 
@@ -107,6 +113,16 @@ def _plant_leakage(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
 def _plant_drift(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
     """Drift the feature table's schema away from training, or restore it."""
     plant_schema_drift(conn) if trial.expected else revert_schema_drift(conn)
+
+
+def _plant_sensitive(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
+    """Classify the upstream column a model feature derives from, or unclassify it."""
+    plant_sensitive_source(conn) if trial.expected else revert_sensitive_source(conn)
+
+
+def _plant_deprecation(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
+    """Mark the model's training input deprecated, or withdraw the deprecation."""
+    plant_deprecated_input(conn) if trial.expected else revert_deprecated_input(conn)
 
 
 #: The lags the sweep walks, in hours, against the default 6 hour SLA. Chosen to
@@ -189,6 +205,62 @@ def _drift_trials() -> tuple[Trial, ...]:
     )
 
 
+def _sensitive_trials() -> tuple[Trial, ...]:
+    """A model feature descending from a classified column, both directions.
+
+    The negative is the narrow one, like leakage's: the column, the derivation
+    and the model all survive, and only the organization's classification is
+    withdrawn. A clean result therefore isolates the classification signal rather
+    than proving that a column nothing descends from is safe.
+    """
+    return (
+        Trial(
+            name="sensitive-planted",
+            family=FindingType.SENSITIVE_SOURCE,
+            target=Target.MODEL,
+            expected=True,
+            detail="a model feature derives from a column tagged sensitive upstream",
+            plant=_plant_sensitive,
+        ),
+        Trial(
+            name="sensitive-reverted",
+            family=FindingType.SENSITIVE_SOURCE,
+            target=Target.MODEL,
+            expected=False,
+            detail="same column and same derivation, classification withdrawn",
+            plant=_plant_sensitive,
+        ),
+    )
+
+
+def _deprecation_trials() -> tuple[Trial, ...]:
+    """A deprecated training input, both directions.
+
+    The negative writes ``deprecated=False`` rather than removing the aspect,
+    because that is how DataHub records a withdrawn deprecation, and a detector
+    that treated the aspect's mere presence as the signal would fail exactly
+    here.
+    """
+    return (
+        Trial(
+            name="deprecation-planted",
+            family=FindingType.DEPRECATED_INPUT,
+            target=Target.MODEL,
+            expected=True,
+            detail="the model's training input is marked deprecated by its owners",
+            plant=_plant_deprecation,
+        ),
+        Trial(
+            name="deprecation-reverted",
+            family=FindingType.DEPRECATED_INPUT,
+            target=Target.MODEL,
+            expected=False,
+            detail="the same aspect present with deprecated=false, a withdrawn deprecation",
+            plant=_plant_deprecation,
+        ),
+    )
+
+
 def build_trials(config: ScanConfig) -> tuple[Trial, ...]:
     """Return the whole matrix, in a fixed order.
 
@@ -197,7 +269,13 @@ def build_trials(config: ScanConfig) -> tuple[Trial, ...]:
             benchmark measures the boundary the scan actually enforces rather
             than a number hardcoded here.
     """
-    return _freshness_trials(config.freshness_sla_hours) + _leakage_trials() + _drift_trials()
+    return (
+        _freshness_trials(config.freshness_sla_hours)
+        + _leakage_trials()
+        + _drift_trials()
+        + _sensitive_trials()
+        + _deprecation_trials()
+    )
 
 
 def _freshness_visible(
@@ -255,10 +333,33 @@ def _drift_visible(conn: DataHubConnection, trial: Trial, config: ScanConfig, no
     return drifted == trial.expected
 
 
+def _sensitive_visible(
+    conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int
+) -> bool:
+    """Whether the classification this trial wrote is readable on the column.
+
+    Asks the same index the detector asks, about the column the scenario writes,
+    and compares against what was planted rather than against a finding.
+    """
+    column_urn = str(spec.source_column_urn(SENSITIVE_SOURCE_COLUMN))
+    return sensitive_index(conn, config).is_marked(column_urn) == trial.expected
+
+
+def _deprecation_visible(
+    conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int
+) -> bool:
+    """Whether the deprecation this trial wrote is readable on the input dataset."""
+    aspect = conn.graph.get_aspect(str(spec.feature_table_dataset_urn()), DeprecationClass)
+    deprecated = bool(aspect and aspect.deprecated)
+    return deprecated == trial.expected
+
+
 _VISIBILITY: dict[FindingType, Callable[[DataHubConnection, Trial, ScanConfig, int], bool]] = {
     FindingType.UPSTREAM_FRESHNESS: _freshness_visible,
     FindingType.TARGET_LEAKAGE: _leakage_visible,
     FindingType.INPUT_SCHEMA_DRIFT: _drift_visible,
+    FindingType.SENSITIVE_SOURCE: _sensitive_visible,
+    FindingType.DEPRECATED_INPUT: _deprecation_visible,
 }
 
 
@@ -296,3 +397,8 @@ def restore_baseline(conn: DataHubConnection, *, now_ms: int | None = None) -> N
     revert_stale_source(conn, now_ms=now_ms)
     plant_leakage(conn)
     revert_schema_drift(conn)
+    # The governance declarations are anomalies planted on top of the seed, not
+    # part of it, so the baseline is the withdrawn state for both. The leak above
+    # is the exception because it *is* the seeded baseline (D-032).
+    revert_sensitive_source(conn)
+    revert_deprecated_input(conn)

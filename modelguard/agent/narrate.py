@@ -58,10 +58,12 @@ from functools import singledispatch
 from modelguard.env import scrub
 from modelguard.llm import LLMConfig, build_chat_model
 from modelguard.models import (
+    DeprecatedInputFinding,
     Finding,
     FreshnessFinding,
     LeakageFinding,
     SchemaDriftFinding,
+    SensitiveSourceFinding,
 )
 
 logger = logging.getLogger(__name__)
@@ -131,6 +133,25 @@ _LEAKAGE_EXTRA = """\
   lineage proves the derivation.
 """
 
+_SENSITIVE_SUBJECT = (
+    "a governance exposure: a model trained on a feature derived from a column the "
+    "organization classified as restricted"
+)
+_SENSITIVE_EXTRA = """\
+- Do not say the model is broken or inaccurate. Nothing about its numbers is wrong.
+  What is wrong is what it was permitted to learn from.
+- Name the exact column path from the evidence, and the classification by the name
+  the evidence gives it. The lineage proves the derivation; do not soften it.
+- If the model is live, say plainly that the exposure is in production today.
+"""
+
+_DEPRECATED_SUBJECT = "a model trained on a table whose own owners have marked it deprecated"
+_DEPRECATED_EXTRA = """\
+- This is a deadline, not a defect: say clearly that nothing is broken yet.
+- Quote the owners' deprecation note and any decommission time from the evidence
+  exactly. Do not estimate a date that is not there.
+"""
+
 
 @singledispatch
 def _system_prompt(finding: Finding) -> str:
@@ -157,6 +178,16 @@ def _leakage_prompt(finding: LeakageFinding) -> str:
 @_system_prompt.register
 def _drift_prompt(finding: SchemaDriftFinding) -> str:
     return _SYSTEM_PREAMBLE.format(subject=_DRIFT_SUBJECT, extra=_DRIFT_EXTRA)
+
+
+@_system_prompt.register
+def _sensitive_prompt(finding: SensitiveSourceFinding) -> str:
+    return _SYSTEM_PREAMBLE.format(subject=_SENSITIVE_SUBJECT, extra=_SENSITIVE_EXTRA)
+
+
+@_system_prompt.register
+def _deprecated_prompt(finding: DeprecatedInputFinding) -> str:
+    return _SYSTEM_PREAMBLE.format(subject=_DEPRECATED_SUBJECT, extra=_DEPRECATED_EXTRA)
 
 
 @singledispatch
@@ -237,6 +268,51 @@ def _drift_facts(finding: SchemaDriftFinding) -> str:
         "The training-time schema was captured on the training run when the model "
         "was trained. ModelGuard compared it against the dataset's current schema; "
         "it did not read the data.",
+    ]
+    return "\n".join(lines)
+
+
+@fact_block.register
+def _sensitive_facts(finding: SensitiveSourceFinding) -> str:
+    exposure = finding.exposure
+    model = finding.model
+    return "\n".join(
+        [
+            f"The feature {exposure.feature_name}, computed from "
+            f"{exposure.source_column_name}, derives from "
+            f"{exposure.sensitive_dataset_name}.{exposure.sensitive_column_name}, "
+            f"classified {exposure.marker_name}.",
+            "",
+            f"Column path: {exposure.path_text}",
+            "",
+            f"Model affected: {model.name} "
+            f"[{finding.severity}] {'live' if model.is_live else 'not serving'}.",
+            "",
+            "The classification is the organization's own, read from the column in "
+            "DataHub. The derivation is declared in column-level lineage. ModelGuard "
+            "did not read the data, only the lineage.",
+        ]
+    )
+
+
+@fact_block.register
+def _deprecated_facts(finding: DeprecatedInputFinding) -> str:
+    model = finding.model
+    lines = [
+        f"{finding.dataset_name} is marked deprecated in DataHub, and {model.name} "
+        "is trained on it.",
+    ]
+    if finding.note:
+        lines += ["", f"Owners' note: {finding.note}"]
+    if finding.decommission_time_ms is not None:
+        lines += ["", f"Decommission time (epoch ms): {finding.decommission_time_ms}"]
+    lines += [
+        "",
+        f"Model affected: {model.name} "
+        f"[{finding.severity}] {'live' if model.is_live else 'not serving'}.",
+        "",
+        "The deprecation was set by the dataset's own owners. ModelGuard read that "
+        "flag and the model's recorded training inputs; it did not read the data.",
     ]
     return "\n".join(lines)
 
@@ -326,6 +402,56 @@ def _drift_template(finding: SchemaDriftFinding) -> str:
     )
 
 
+@template_narrative.register
+def _sensitive_template(finding: SensitiveSourceFinding) -> str:
+    exposure = finding.exposure
+    model = finding.model
+
+    serving = (
+        f"{model.name} is behind a live endpoint, so the exposure is in production "
+        "today, not hypothetical."
+        if model.is_live
+        else f"{model.name} is not currently serving, so the exposure is still "
+        "contained to training and evaluation."
+    )
+
+    return (
+        f"The feature {exposure.feature_name} derives, through "
+        f"{exposure.path_text}, from {exposure.sensitive_column_name} in "
+        f"{exposure.sensitive_dataset_name}, a column classified "
+        f"{exposure.marker_name} in this catalog. The model's predictions are "
+        "not wrong because of this; what is wrong is that it was trained on "
+        "information somebody agreed to constrain the handling of, and the "
+        f"derivation is far enough upstream that neither team would see it. {serving} "
+        "Confirm with whoever owns that classification whether this use is permitted, "
+        "and rebuild the feature from unrestricted inputs if it is not."
+    )
+
+
+@template_narrative.register
+def _deprecated_template(finding: DeprecatedInputFinding) -> str:
+    model = finding.model
+
+    note = f" The owners' note reads: {finding.note}" if finding.note else ""
+    serving = (
+        f"{model.name} is behind a live endpoint, so a migration has to be planned "
+        "before the table goes away."
+        if model.is_live
+        else f"{model.name} is not currently serving, so the deadline lands on the "
+        "next training run rather than on production."
+    )
+
+    return (
+        f"{finding.dataset_name}, which {model.name} is trained on, has been marked "
+        f"deprecated by its owners.{note} Nothing is broken today: the table still "
+        "exists and the model still works. What has changed is that this model now "
+        "has an expiry date that nobody on either side has diarised, because the "
+        "people who deprecated the table cannot see that a model depends on it. "
+        f"{serving} Agree a replacement input with the table's owners, or a date to "
+        "retrain against one."
+    )
+
+
 @singledispatch
 def _evidence_detail(finding: Finding) -> str:
     """Render the per-type detail the evidence mapping cannot carry.
@@ -369,6 +495,24 @@ def _drift_detail(finding: SchemaDriftFinding) -> str:
     return (
         f"\n\nchanges:\n{changes}\n\nmodels:\n- name={model.name!r} "
         f"severity={finding.severity} live={model.is_live} owned={model.has_owner}"
+    )
+
+
+@_evidence_detail.register
+def _sensitive_detail(finding: SensitiveSourceFinding) -> str:
+    model = finding.model
+    return (
+        f"\n\nmodels:\n- name={model.name!r} severity={finding.severity} "
+        f"live={model.is_live} owned={model.has_owner}"
+    )
+
+
+@_evidence_detail.register
+def _deprecated_detail(finding: DeprecatedInputFinding) -> str:
+    model = finding.model
+    return (
+        f"\n\nmodels:\n- name={model.name!r} severity={finding.severity} "
+        f"live={model.is_live} owned={model.has_owner}"
     )
 
 

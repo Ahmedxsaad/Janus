@@ -16,6 +16,53 @@ Entry template:
 
 ---
 
+## D-079: Read the governance graph, not only the structural one (2026-08-02)
+- Decided by: Ghassen Naouar (item B of docs/plan/06), applied by Claude
+- Decision: two detectors land in `modelguard/detect/governance.py`.
+  **Sensitive source**: a model feature whose upstream column lineage reaches a
+  column the organization classified (a glossary term or a tag). **Deprecated
+  input**: a model trained on a dataset carrying DataHub's `deprecation` aspect.
+  Both write back through the existing generic path (incident, tag, risk flags,
+  impact report, trust deduction); neither adds a write of its own.
+- Options considered:
+  1. Copy the leakage traversal into a new module. Rejected: that traversal
+     holds the `paths`-not-`urn` trap (D-031), the single subtlest fact in this
+     codebase, and duplicating it duplicates the chance to get it wrong.
+  2. Generalise `_LabelIndex` in place and have the new detector import a
+     private name. Rejected: an underscore-prefixed cross-module import is a
+     boundary nobody enforces.
+  3. Extract both the index and the walk into `detect/column_marks.py`, chosen.
+     Leakage supplies one mark (the label term), governance supplies the
+     configured classifications, and `leak_path` becomes a four-line wrapper.
+     Verified behaviour-preserving: the 18 existing leakage tests passed
+     unchanged before anything new was added.
+  For severity: a sensitive source is HIGH live / MEDIUM otherwise, never
+  CRITICAL. CRITICAL in this project means the model's numbers are wrong, which
+  is what leakage does. A team that cannot sort its critical findings triages
+  none of them. Deprecation never exceeds MEDIUM: it is a deadline, not a defect.
+- Why: DataHub's classification surface (tags, terms, deprecation) is the half of
+  the graph no detector was reading, and it is the half a judge from DataHub
+  thinks about daily. More to the point, these are real failures nothing else can
+  find: the classification lives on the data side, the model lives on the ML
+  side, and only the column-level lineage between them turns two unrelated facts
+  into one finding.
+- Result: 18 offline tests, four mutations confirmed red per tests/CLAUDE.md
+  rule 6, and a positive and negative benchmark trial for each detector (the
+  existing suite refuses to pass until every `FindingType` has both, which is how
+  the missing trials were caught). Configuration has **no default**, and both
+  variables empty means the check reports itself as not evaluated rather than
+  clean: a guessed classification URN either matches nothing or matches a term
+  meaning something else, and a false compliance incident is the worst kind.
+
+  **One bug found and fixed in existing code.** Reconciliation keyed stale
+  incidents on `(resource_urn, incident_type)` alone. Leakage and a sensitive
+  source both raise a `FIELD` incident on the same column, so a sensitive finding
+  would have marked that column "still failing" for leakage, and a leak somebody
+  had already fixed would keep its incident open forever, which is exactly the
+  class of bug D-067, D-069 and D-070 each fought. The key set is now per finding
+  type, and the two column detectors are told apart by title prefix through one
+  shared `_active_incidents_titled` helper.
+
 ## D-077: One scan, three renderings, and a rich markup bug the guards hid (2026-08-01)
 - Decided by: Ghassen Naouar (chose all ten improvements from
   docs/plan/06-judge-review-and-improvements.md), applied by Claude

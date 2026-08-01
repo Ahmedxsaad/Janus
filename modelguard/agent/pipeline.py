@@ -53,6 +53,12 @@ from modelguard.detect.blast_radius import (
     freshness_signal,
 )
 from modelguard.detect.coverage import Unevaluated, coverage_gaps
+from modelguard.detect.governance import (
+    deprecated_input_findings,
+    model_input_datasets,
+    sensitive_index,
+    sensitive_source_findings,
+)
 from modelguard.detect.graph_reads import model_ref
 from modelguard.detect.leakage import feature_source_column, leakage_findings
 from modelguard.detect.schema_drift import schema_drift_candidate_resources, schema_drift_findings
@@ -392,6 +398,8 @@ def _detect(
     if model_urn is not None:
         findings.extend(leakage_findings(conn, model_urn, config))
         findings.extend(schema_drift_findings(conn, model_urn, config))
+        findings.extend(sensitive_source_findings(conn, model_urn, config))
+        findings.extend(deprecated_input_findings(conn, model_urn, config))
 
     findings.sort(key=lambda finding: severity_rank(finding.severity))
     gaps = coverage_gaps(
@@ -477,6 +485,35 @@ def _record_leak_columns(
         remove_properties(conn, model_urn, {OPEN_LEAK_COLUMNS})
 
 
+def _active_incidents_titled(
+    conn: DataHubConnection,
+    resource_urn: str,
+    title_prefix: str,
+) -> tuple[str, ...]:
+    """Return the active FIELD incidents on a column whose title starts as given.
+
+    Prefix matching, not the exact-title lookup ``raise_incident``'s own dedup
+    uses, because a column-scoped title names what the derivation *reached* (the
+    label, or the classified column), and that is exactly the fact that no longer
+    exists once somebody has fixed the derivation. Matching on the part of the
+    title that is a function of the column alone is what lets a fixed problem be
+    recognised as fixed.
+
+    The prefix is what keeps the two column detectors from resolving each
+    other's incidents: they raise on the same column with the same incident
+    type, and only the title distinguishes them.
+    """
+    matched: list[str] = []
+    for incident_urn in attached_incident_urns(conn, resource_urn):
+        info = conn.graph.get_aspect(incident_urn, IncidentInfoClass)
+        if info is None or info.status.state != IncidentStateClass.ACTIVE:
+            continue
+        if info.type != "FIELD" or info.title is None or not info.title.startswith(title_prefix):
+            continue
+        matched.append(incident_urn)
+    return tuple(matched)
+
+
 def _reconcile_stale_findings(
     conn: DataHubConnection,
     config: ScanConfig,
@@ -505,7 +542,22 @@ def _reconcile_stale_findings(
     write, so a dry run (including ``gate`` without ``--write``) must never
     reach this.
     """
-    current_keys = {(finding.resource_urn, finding.incident_type) for finding in findings}
+    # Keyed by finding type, not by (resource, incident_type) alone. Leakage and
+    # a sensitive source both raise a FIELD incident on the same column, so a
+    # single flat key set would let a sensitive finding on a column mark that
+    # column "still failing" for leakage, and a leak somebody had already fixed
+    # would keep its incident open forever. Each detector below consults only its
+    # own type's keys.
+    current_keys: dict[FindingType, set[tuple[str, str]]] = {}
+    for finding in findings:
+        current_keys.setdefault(finding.finding_type, set()).add(
+            (finding.resource_urn, finding.incident_type)
+        )
+
+    def still_failing(finding_type: FindingType, resource_urn: str, incident_type: str) -> bool:
+        """Whether this scan raised this exact finding, so it must not be resolved."""
+        return (resource_urn, incident_type) in current_keys.get(finding_type, set())
+
     recovered_flags: dict[str, set[str]] = {}
     recovered_models: dict[str, ModelRef] = {}
 
@@ -513,7 +565,9 @@ def _reconcile_stale_findings(
         recovered_models[model.urn] = model
         recovered_flags.setdefault(model.urn, set()).add(str(finding_type))
 
-    if table_urn is not None and (table_urn, "FRESHNESS") not in current_keys:
+    if table_urn is not None and not still_failing(
+        FindingType.UPSTREAM_FRESHNESS, table_urn, "FRESHNESS"
+    ):
         title = f"Stale upstream data in {DatasetUrn.from_string(table_urn).name}"
         incident = find_active_incident(conn, table_urn, "FRESHNESS", title)
         if incident is not None:
@@ -525,6 +579,11 @@ def _reconcile_stale_findings(
     if model_urn is not None:
         model = model_ref(conn, model_urn)
         properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
+        # Asked once. With no classification configured the detector never runs,
+        # so it can raise nothing, so there is nothing of its to resolve: walking
+        # the columns for it anyway would be a graph read per column per scan
+        # buying an answer that is known in advance.
+        sensitive_configured = sensitive_index(conn, config).configured
 
         # Leakage: every candidate source column, matched by title prefix rather
         # than find_active_incident's exact match, because the incident's title
@@ -551,22 +610,30 @@ def _reconcile_stale_findings(
         for source_column, known_feature_urn in sorted(
             candidates.items(), key=lambda pair: pair[0]
         ):
-            if (source_column, "FIELD") in current_keys:
-                continue
             field_path = SchemaFieldUrn.from_string(source_column).field_path
-            prefix = f"Target leakage: {field_path} derives from label "
-            for incident_urn in attached_incident_urns(conn, source_column):
-                info = conn.graph.get_aspect(incident_urn, IncidentInfoClass)
-                if info is None or info.status.state != IncidentStateClass.ACTIVE:
-                    continue
-                if info.type != "FIELD" or info.title is None or not info.title.startswith(prefix):
-                    continue
-                resolve_incident(conn, incident_urn, _recovery_message(run_id))
-                if known_feature_urn is not None:
-                    # Only a feature that still exists can have its risk term
-                    # taken back off; a deleted one has nothing left to clear.
-                    remove_term(conn, known_feature_urn, config.leakage_risk_term_urn)
-                record(model, FindingType.TARGET_LEAKAGE)
+
+            if not still_failing(FindingType.TARGET_LEAKAGE, source_column, "FIELD"):
+                prefix = f"Target leakage: {field_path} derives from label "
+                for incident_urn in _active_incidents_titled(conn, source_column, prefix):
+                    resolve_incident(conn, incident_urn, _recovery_message(run_id))
+                    if known_feature_urn is not None:
+                        # Only a feature that still exists can have its risk term
+                        # taken back off; a deleted one has nothing left to clear.
+                        remove_term(conn, known_feature_urn, config.leakage_risk_term_urn)
+                    record(model, FindingType.TARGET_LEAKAGE)
+
+            # A sensitive source is the same walk over the same columns with a
+            # different mark, so it recovers the same way and for the same
+            # reasons: the title names the classified column reached, which is
+            # not reconstructable once the derivation is gone, so it is matched
+            # by prefix rather than by find_active_incident's exact title.
+            if sensitive_configured and not still_failing(
+                FindingType.SENSITIVE_SOURCE, source_column, "FIELD"
+            ):
+                prefix = f"Sensitive source: {field_path} derives from "
+                for incident_urn in _active_incidents_titled(conn, source_column, prefix):
+                    resolve_incident(conn, incident_urn, _recovery_message(run_id))
+                    record(model, FindingType.SENSITIVE_SOURCE)
 
         _record_leak_columns(conn, model_urn, findings)
 
@@ -574,7 +641,7 @@ def _reconcile_stale_findings(
         # fully known (no measurement in it), so this reuses the exact dedup
         # lookup raise_incident itself uses.
         for dataset_urn in schema_drift_candidate_resources(conn, model_urn, config):
-            if (dataset_urn, "DATA_SCHEMA") in current_keys:
+            if still_failing(FindingType.INPUT_SCHEMA_DRIFT, dataset_urn, "DATA_SCHEMA"):
                 continue
             title = (
                 "Training-serving schema drift in "
@@ -584,6 +651,22 @@ def _reconcile_stale_findings(
             if incident is not None:
                 resolve_incident(conn, incident, _recovery_message(run_id))
                 record(model, FindingType.INPUT_SCHEMA_DRIFT)
+
+        # A deprecation that was lifted. DataHub records that as the aspect with
+        # deprecated=False rather than by removing it, so the input is still a
+        # candidate and the title is fully known: an exact dedup lookup, like
+        # drift above.
+        for dataset_urn in model_input_datasets(conn, model_urn):
+            if still_failing(FindingType.DEPRECATED_INPUT, dataset_urn, "OPERATIONAL"):
+                continue
+            title = (
+                f"Deprecated training input {DatasetUrn.from_string(dataset_urn).name} "
+                f"for {model.name}"
+            )
+            incident = find_active_incident(conn, dataset_urn, "OPERATIONAL", title)
+            if incident is not None:
+                resolve_incident(conn, incident, _recovery_message(run_id))
+                record(model, FindingType.DEPRECATED_INPUT)
 
     # A risk flag is a finding type, but a model can carry one type from several
     # resources at once: two stale upstream tables, two leaking features. One of

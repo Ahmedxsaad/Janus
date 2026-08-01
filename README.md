@@ -202,9 +202,55 @@ check, the missing metadata, and how to supply it:
 | Freshness + blast radius | the `operation` aspect on the table | dbt, Airflow, Spark, or the SDK's `report_operation` |
 | Target leakage | features with source columns, plus a column carrying the label term | `modelguard link` |
 | Schema drift | a training-time schema snapshot on the training run | `modelguard link` |
+| Sensitive source | features with source columns, plus `MODELGUARD_SENSITIVE_TAG_URNS` or `..._TERM_URNS` | your classifier, or a human in the UI |
+| Deprecated input | the model's training run, and the `deprecation` aspect | the table's own owners |
 
 Already have a glossary term for labels? Point `MODELGUARD_LABEL_TERM_URN` at it
 in `.env` and the detector honors yours instead of creating one.
+
+### The two checks that read the governance graph
+
+The first three checks ask whether a model's data is *correct*. The last two ask
+something the organization has already answered elsewhere in DataHub, and that
+nothing today joins back to the model.
+
+**Sensitive source.** Somebody classified a column as PII, PHI, or restricted.
+Three joins downstream, a feature derives from it, and a live model trains on
+that feature. Nothing is broken and the model works; what is wrong is what it was
+allowed to see, and the derivation is far enough upstream that neither team would
+notice. It is the leakage walk with a different mark, so it produces the same
+auditable proof:
+
+> `credit_risk_v3` feature `applicant_income` derives, through
+> `applicant_income <- income`, from `loans_raw.income`, classified
+> `modelguard.sensitive`.
+
+Point it at your own taxonomy, comma-separated, either surface or both:
+
+```bash
+MODELGUARD_SENSITIVE_TAG_URNS=urn:li:tag:PII,urn:li:tag:Confidential
+MODELGUARD_SENSITIVE_TERM_URNS=urn:li:glossaryTerm:Classification.Restricted
+```
+
+There is deliberately no default. A guessed classification URN either matches
+nothing or matches a term that means something else in your catalog, and a false
+incident about a compliance exposure is the worst kind to be wrong about. Leave
+both empty and every scan reports the check as **not evaluated**, never as clean.
+
+**Deprecated input.** A table's owners marked it deprecated, with a note and
+sometimes a decommission date. They have no way to know a model depends on it,
+and the model's team has no way to know the flag was set. This needs no
+configuration: `deprecation` is DataHub's own aspect with one meaning everywhere.
+It is never more than `medium` severity, because it is a deadline rather than a
+defect.
+
+Both are reversible scenarios, so you can watch them fire and clear:
+
+```bash
+modelguard-scenario --scenario sensitive-source
+modelguard scan --model credit_risk_v3
+modelguard-scenario --scenario sensitive-source --revert
+```
 
 ## Block a bad model before it merges
 

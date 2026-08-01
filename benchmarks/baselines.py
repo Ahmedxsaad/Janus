@@ -35,7 +35,8 @@ from datahub.metadata.urns import DatasetUrn, SchemaFieldUrn
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
-from modelguard.detect.leakage import _LabelIndex, feature_source_column
+from modelguard.detect.column_marks import ColumnMarkIndex
+from modelguard.detect.leakage import feature_source_column, label_index
 
 
 @dataclass(frozen=True)
@@ -70,7 +71,7 @@ NO_LINEAGE = Approach(
 
 
 def _dataset_has_label_column(
-    conn: DataHubConnection, dataset_urn: str, labels: _LabelIndex
+    conn: DataHubConnection, dataset_urn: str, labels: ColumnMarkIndex
 ) -> bool:
     """Whether any column of a dataset is declared to be a label.
 
@@ -84,7 +85,7 @@ def _dataset_has_label_column(
 
     dataset = DatasetUrn.from_string(dataset_urn)
     return any(
-        labels.is_label(str(SchemaFieldUrn(parent=dataset, field_path=field.fieldPath)))
+        labels.is_marked(str(SchemaFieldUrn(parent=dataset, field_path=field.fieldPath)))
         for field in schema.fields
     )
 
@@ -110,7 +111,7 @@ def table_level_leakage(
     if properties is None or not properties.mlFeatures:
         return ()
 
-    labels = _LabelIndex(conn, config)
+    labels = label_index(conn, config)
     flagged: list[str] = []
 
     for feature_urn in properties.mlFeatures:

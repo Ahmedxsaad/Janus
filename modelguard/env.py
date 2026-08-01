@@ -106,6 +106,23 @@ def required_value(name: str, hint: str) -> str:
     return value
 
 
+def optional_list(name: str) -> tuple[str, ...]:
+    """Return a comma-separated value as a tuple, or empty when it is unset.
+
+    Blanks and surrounding whitespace are dropped, so a trailing comma or a
+    value pasted across two lines is not an empty entry that would then be
+    compared against every URN in the graph and match nothing.
+
+    Order is preserved and duplicates are kept: this is configuration a human
+    typed, and reordering or silently deduplicating it makes an error report
+    harder to line up against what they wrote.
+    """
+    raw = optional_value(name)
+    if raw is None:
+        return ()
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
 def optional_float(name: str, default: float) -> float:
     """Return a positive float override, or the default.
 
