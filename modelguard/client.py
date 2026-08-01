@@ -29,6 +29,7 @@ logged, echoed, or embedded in an exception message.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.sdk.main_client import DataHubClient
@@ -37,6 +38,19 @@ from modelguard.env import optional_value
 
 ENV_GMS_URL = "DATAHUB_GMS_URL"
 ENV_GMS_TOKEN = "DATAHUB_GMS_TOKEN"
+
+#: Hosts that mean "the Quickstart on this machine". Advice that assumes a
+#: Quickstart (start it with `datahub docker quickstart`, populate it with
+#: `modelguard-seed`) is correct here and wrong anywhere else: told to somebody
+#: pointed at their company's catalog, it invites them to write demo datasets
+#: into production metadata, or to go looking for a container that was never
+#: meant to exist. Every user-facing hint that names the demo is gated on this.
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+
+
+def is_local_gms(gms_url: str) -> bool:
+    """Whether a GMS URL points at a DataHub running on this machine."""
+    return (urlparse(gms_url).hostname or "") in _LOCAL_HOSTS
 
 
 class DataHubConnectionError(RuntimeError):
@@ -115,10 +129,13 @@ def connect(*, require_token: bool = False, validate: bool = True) -> DataHubCon
         try:
             graph.test_connection()
         except Exception as exc:
-            raise DataHubConnectionError(
-                f"Could not reach DataHub at {url}. Is the Quickstart running? "
-                "Start it with: datahub docker quickstart"
-            ) from exc
+            hint = (
+                "Is the Quickstart running? Start it with: datahub docker quickstart"
+                if is_local_gms(url)
+                else f"Check {ENV_GMS_URL}, that the host is reachable from here, "
+                f"and that {ENV_GMS_TOKEN} is set if that instance requires one."
+            )
+            raise DataHubConnectionError(f"Could not reach DataHub at {url}. {hint}") from exc
 
     return DataHubConnection(
         graph=graph,
