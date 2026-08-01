@@ -58,6 +58,7 @@ from modelguard.detect.leakage import feature_source_column, leakage_findings
 from modelguard.detect.schema_drift import schema_drift_candidate_resources, schema_drift_findings
 from modelguard.detect.trust_score import trust_inputs_from_findings, trust_score
 from modelguard.llm import LLMConfig
+from modelguard.logs import LOG_FIELDS, logfmt
 from modelguard.models import (
     Finding,
     FindingType,
@@ -645,10 +646,11 @@ def _log_scan(
 ) -> None:
     """Emit one machine-readable line summarizing a completed scan.
 
-    ``key=value`` rather than JSON, because it stays readable in a terminal
-    tailing ``modelguard watch`` and is still one ``logfmt`` parser away from a
-    metrics pipeline; a second format nobody has asked for is a second format to
-    keep correct.
+    The facts are assembled once and rendered twice: as ``key=value`` in the
+    message, which stays readable in a terminal tailing ``modelguard watch``, and
+    as structured fields on the record, which :class:`~modelguard.logs.JsonFormatter`
+    emits as object keys when the operator asked for JSON. One mapping feeds
+    both, so the human line and the indexed fields cannot drift apart.
 
     ``detect_ms`` is the number an MTTD budget is actually built from: the rest
     of the delay between a table breaking and an incident existing belongs to
@@ -658,19 +660,18 @@ def _log_scan(
     identifier or a count that a detector measured, and no aspect content, no
     prose, and no credential reaches this line.
     """
-    logger.info(
-        "scan complete run_id=%s table=%s model=%s dry_run=%s "
-        "findings=%d writes=%d warnings=%d detect_ms=%d total_ms=%d",
-        run_id,
-        table_urn or "-",
-        model_urn or "-",
-        str(dry_run).lower(),
-        findings,
-        writes,
-        warnings,
-        round(detect_seconds * 1000),
-        round(total_seconds * 1000),
-    )
+    fields = {
+        "run_id": run_id,
+        "table": table_urn or "-",
+        "model": model_urn or "-",
+        "dry_run": str(dry_run).lower(),
+        "findings": findings,
+        "writes": writes,
+        "warnings": warnings,
+        "detect_ms": round(detect_seconds * 1000),
+        "total_ms": round(total_seconds * 1000),
+    }
+    logger.info("scan complete %s", logfmt(fields), extra={LOG_FIELDS: fields})
 
 
 def run_scan(

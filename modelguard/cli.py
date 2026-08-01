@@ -44,6 +44,7 @@ from modelguard.gate import (
     summary,
 )
 from modelguard.llm import LLMConfig, llm_config_from_env
+from modelguard.logs import configure_logging
 from modelguard.models import (
     Finding,
     FreshnessFinding,
@@ -954,12 +955,14 @@ def watch(
     # report to a human who is standing there and would only be talked over.
     # basicConfig is a no-op if the embedding application already configured
     # logging, which is what makes it safe to call from a command rather than
-    # at import.
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-        stream=sys.stderr,
-    )
+    # at import. MODELGUARD_LOG_FORMAT=json switches the same lines to one JSON
+    # object each, for the deployment that ships them to a log pipeline.
+    try:
+        log_format = configure_logging(level=logging.INFO, stream=sys.stderr)
+    except ConfigError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+    console.print(f"[dim]logging: {log_format}[/dim]")
 
     conn, config, llm, table_urn, model_urn = _prepare(
         table=table,

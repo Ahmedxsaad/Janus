@@ -16,6 +16,88 @@ Entry template:
 
 ---
 
+## D-077: One scan, three renderings, and a rich markup bug the guards hid (2026-08-01)
+- Decided by: Ghassen Naouar (chose all ten improvements from
+  docs/plan/06-judge-review-and-improvements.md), applied by Claude
+- Decision: item D. `modelguard/render.py` holds two new renderings of a
+  `ScanReport`, both pure functions of it like `gate.py`: `report_json` for
+  `--format json` on `scan` and `gate`, and `job_summary_markdown`, appended to
+  the file named by `GITHUB_STEP_SUMMARY` on every gate and scan run.
+- Options considered:
+  (a) A `--json` boolean flag. Rejected: a second output format later needs a
+      second flag, and two booleans can both be passed.
+  (b) `--format` taking a free string. Rejected: a typo would have to be
+      validated by hand, and the choices would not appear in `--help`.
+  (c) `--format` taking a StrEnum, chosen. Typer validates it, lists the
+      choices, and a typo is a usage error.
+  For the summary: a flag or input on the Action was considered and rejected.
+  The runner always sets `GITHUB_STEP_SUMMARY`, so writing unconditionally makes
+  it work for every existing user of the Action with no YAML change at all, and
+  outside Actions the variable is unset and nothing is written. Same reasoning
+  as the GitHub annotations already emitted unconditionally.
+- Why: a finding that lands only in DataHub and an exit code that lands only in
+  a log both stop short of the person who has to act. The summary page is where
+  a reviewer already is; JSON is for the team routing findings somewhere this
+  project does not know about. Neither adds a dependency.
+- Result: 14 new offline tests, all three mutation-checked per tests/CLAUDE.md
+  rule 6 (truncate-instead-of-append, drop the not-evaluated section, emit the
+  gate key on a plain scan: each goes red). Under `--format json` the progress
+  lines and the unauthenticated-writes warning move to stderr, so stdout carries
+  exactly one parseable document. `--format` is refused with `--all-models`
+  (concatenated JSON documents are not a JSON document) and with
+  `--review`/`--auto-approve` (the agent waits for a human).
+
+  One pre-existing bug found by the first test to invoke a guard clause: the
+  `--dry-run` + `--review` guard printed an opening `[red]` in one
+  `console.print` and its closing tag in the next. Rich parses each call
+  independently, so the second raised `MarkupError` and the guard died
+  mid-sentence instead of explaining itself. Both guards are now one call, and a
+  regression test covers it. Nothing else in the package had the pattern.
+
+## D-078: Structured logs behind one variable, closing P2-5 (2026-08-01)
+- Decided by: Ghassen Naouar (item H of the same review), applied by Claude
+- Decision: `modelguard/logs.py` adds `MODELGUARD_LOG_FORMAT`, `text` (default)
+  or `json`. `_log_scan` assembles its facts once as a mapping and renders them
+  twice: `logfmt` in the message, and the same mapping as structured fields on
+  the record, which `JsonFormatter` emits as top-level JSON keys. `watch` is
+  still the only entry point that configures a handler.
+- Options considered: (a) `structlog`, rejected as a dependency for something
+  `logging.Formatter` does in twenty lines; (b) emit JSON always, rejected
+  because the default reader is a human at a terminal; (c) log the same facts
+  twice, once per format, rejected because two renderings that are written
+  separately drift.
+- Why: P2-5 has been open since the first improvements doc, and `watch` is the
+  entry point people actually run unattended. Without indexable fields, shipping
+  its output anywhere needs a per-tool regular expression that breaks the first
+  time a key is added.
+- Result: 11 offline tests, mutation-checked (a silent fallback on an unknown
+  format, and caller fields overwriting `level`: both go red). Logging's own
+  attributes win on a name collision, so a caller cannot overwrite the level a
+  log search depends on. An unrecognised value fails loudly naming the variable.
+  P2-5 marked done in docs/plan/04-improvements.md.
+
+## D-076: Review ModelGuard as a judge would, and plan the work before the tag (2026-08-01)
+- Decided by: Ghassen Naouar (asked for a deep review from the judges'
+  perspective plus creative, solid improvements), applied by Claude
+- Decision: docs/plan/06-judge-review-and-improvements.md scores the repository
+  against the five published criteria and proposes ten ranked improvements, to
+  be implemented before the first PyPI tag. All ten were chosen.
+- Options considered: implementing the highest-value subset (waves 1-3), the
+  pre-tag subset, or all ten. All ten was chosen, so the plan doc's suggested
+  order becomes the build order rather than a menu.
+- Why: the repository is strong on every criterion, so the remaining points are
+  in specific, nameable gaps rather than in anything structural: the governance
+  half of the graph is read by no detector, `link` is manual per model, scale is
+  unmeasured, and the README's 22 relative links all 404 on a PyPI project page.
+- Result: the plan doc, and one finding that changes an existing plan. The
+  repository rename (P1-1, open since the first improvements doc) is no longer
+  free: the PyPI Trusted Publisher in docs/deploy/pypi-release.md matches on
+  `Repository name: DataHub`, and GitHub's redirect does not help because the
+  OIDC claim carries the new name, so a rename breaks publishing until the
+  pending publisher is edited to match. **Deferred by decision**, not by
+  oversight: revisit before the first tag, and rename before publishing rather
+  than after, since a rename after publishing is strictly worse.
+
 ## D-075: Deploy the judge VM onto D-074, and a clone token still live on it (2026-08-01)
 - Decided by: Ghassen Naouar (asked for the remaining work to be finished),
   applied by Claude
