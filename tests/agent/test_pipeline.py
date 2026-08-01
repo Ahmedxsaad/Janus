@@ -33,7 +33,7 @@ from modelguard.agent.pipeline import FindingWrites, ScanReport, new_run_id, run
 from modelguard.config import ScanConfig
 from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
 from modelguard.models import FindingType, Severity
-from modelguard.writeback.properties import RISK_FLAGS, RUN_ID
+from modelguard.writeback.properties import OPEN_LEAK_COLUMNS, RISK_FLAGS, RUN_ID
 from tests.conftest import (
     CLEAN_COLUMN_URN,
     CLEAN_FEATURE_URN,
@@ -624,6 +624,62 @@ def test_a_stale_leakage_incident_resolves_and_clears_the_models_risk_state():
     assert properties is not None
     risk_flags_urn = str(StructuredPropertyUrn(RISK_FLAGS))
     assert all(p.propertyUrn != risk_flags_urn for p in properties.properties)
+
+
+def test_a_leak_fixed_by_deleting_the_column_still_gets_its_incident_closed():
+    """The way a leak is actually fixed: the column stops existing.
+
+    Nothing then lists it as a feature, so the walk over the model's current
+    features never reaches it, and before D-074 the incident stayed open forever
+    on a graph somebody had already fixed. The scan that raised it recorded the
+    column on the model, and that record is what this walks instead. Observed on
+    a real dbt project, which is the condition D-069 said it would wait for.
+    """
+    graph = _graph(lag_hours=1.0)
+    # The model declares no features at all: the leaking column was dropped from
+    # the feature table and the model retrained without it.
+    graph.set_aspect(MODEL_URN, MLModelPropertiesClass(deployments=[DEPLOYMENT_URN]))
+    incident_urn = "urn:li:incident:leak-column-deleted"
+    active_incident(
+        graph,
+        resource_urn=LEAK_COLUMN_URN,
+        incident_urn=incident_urn,
+        incident_type="FIELD",
+        title="Target leakage: prior_default_flag derives from label default_status",
+    )
+    graph.set_aspect(
+        MODEL_URN,
+        StructuredPropertiesClass(
+            properties=[
+                StructuredPropertyValueAssignmentClass(
+                    propertyUrn=str(StructuredPropertyUrn(OPEN_LEAK_COLUMNS)),
+                    values=[LEAK_COLUMN_URN],
+                )
+            ]
+        ),
+    )
+    graph.emitted.clear()
+    graph.graphql_calls.clear()
+
+    report = run_scan(
+        make_connection(graph, FakeClient()),
+        ScanConfig(),
+        model_urn=MODEL_URN,
+        llm=None,
+        now_ms=NOW_MS,
+    )
+
+    assert report.clean
+    resolved = [
+        variables for query, variables in graph.graphql_calls if "updateIncidentStatus" in query
+    ]
+    assert [v["urn"] for v in resolved] == [incident_urn]
+
+    # And the record is cleared, so the next scan does not walk a closed incident.
+    properties = graph.get_aspect(MODEL_URN, StructuredPropertiesClass)
+    assert properties is not None
+    recorded = str(StructuredPropertyUrn(OPEN_LEAK_COLUMNS))
+    assert all(p.propertyUrn != recorded for p in properties.properties)
 
 
 def test_a_stale_schema_drift_incident_resolves_with_no_prior_process_state():

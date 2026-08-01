@@ -42,3 +42,48 @@ properties:
     value_type: string
     cardinality: SINGLE
     entity_types: [mlModel]
+
+  - qualified_name: modelguard.open_leak_columns
+    display_name: ModelGuard Open Leak Columns
+    description: >-
+      Source columns this model currently has an open target-leakage incident
+      on. ModelGuard writes it to be able to close an incident whose column was
+      deleted outright, which is the most common way a leak is actually fixed
+      and leaves no lineage to walk back through.
+    value_type: string
+    cardinality: MULTIPLE
+    entity_types: [mlModel]
+
+  # The three below are not findings: they are what `modelguard link` was told,
+  # kept so it can be re-run without repeating the arguments. They live in
+  # structuredProperties rather than in mlModelProperties precisely because they
+  # have to survive the next ingestion run: DataHub's mlflow source upserts the
+  # whole mlModelProperties aspect, which drops the mlFeatures link writes
+  # (observed live, D-074). Structured properties are a separate aspect that
+  # ingestion does not touch, so the declaration outlives it and can be replayed.
+  - qualified_name: modelguard.feature_table
+    display_name: ModelGuard Feature Table
+    description: >-
+      The dataset whose columns this model was linked to as its features, as
+      declared by `modelguard link`.
+    value_type: string
+    cardinality: SINGLE
+    entity_types: [mlModel]
+
+  - qualified_name: modelguard.label_column
+    display_name: ModelGuard Label Column
+    description: >-
+      The schemaField URN of the column this model predicts, as declared by
+      `modelguard link`.
+    value_type: string
+    cardinality: SINGLE
+    entity_types: [mlModel]
+
+  - qualified_name: modelguard.excluded_columns
+    display_name: ModelGuard Excluded Columns
+    description: >-
+      Columns of the feature table that are not features of this model (join
+      keys, partition columns), as declared by `modelguard link`.
+    value_type: string
+    cardinality: MULTIPLE
+    entity_types: [mlModel]

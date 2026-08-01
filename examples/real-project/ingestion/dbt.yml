@@ -1,0 +1,14 @@
+# dbt is what gives DataHub column-level lineage: the manifest records every
+# model's compiled SQL, and the source parses it into column-to-column edges.
+# Paths are relative to this directory, so run `datahub ingest` from here.
+source:
+  type: dbt
+  config:
+    manifest_path: ../churn_analytics/target/manifest.json
+    catalog_path: ../churn_analytics/target/catalog.json
+    target_platform: postgres
+    include_column_lineage: true
+sink:
+  type: datahub-rest
+  config:
+    server: "${DATAHUB_GMS_URL}"

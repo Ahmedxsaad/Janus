@@ -42,13 +42,25 @@ classifiers = [
     # that could drift from it.
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Quality Assurance",
 ]
-requires-python = ">=3.11,<3.12"
+# The floor is real: 3.11 syntax is used throughout. The ceiling is not a
+# preference, it is the first version this project has no evidence for.
+#
+# This used to cap at <3.12 because acryl-datahub's CLI prints "Python versions
+# above 3.11 are not actively tested with yet". That is a warning, not a
+# failure, and capping on it made the package uninstallable on every current
+# distro Python: Ubuntu 24.04 ships 3.12, 25.04 ships 3.13, and neither carries
+# 3.11 in its default repositories, so `pip install modelguard-datahub` failed
+# outright with "requires a different Python" for the ordinary user (D-074).
+# Verified on 3.12.3: install, `scan`, `gate`, leakage detection and the trust
+# score all behave identically to 3.11. Development still targets 3.11
+# (see .python-version), which is what CI runs.
+requires-python = ">=3.11,<3.14"
 
-# Pins are exact. acryl-datahub's CLI emits a runtime warning on Python above
-# 3.11 ("not actively tested with yet"), so requires-python caps at 3.11 even
-# though the package classifiers advertise 3.12. See .python-version.
+# Pins are exact.
 dependencies = [
     "acryl-datahub[datahub-rest]==1.6.0.13",
     "pydantic==2.13.4",

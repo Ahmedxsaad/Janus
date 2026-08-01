@@ -52,6 +52,7 @@ from modelguard.detect.blast_radius import (
     finding_for,
     freshness_signal,
 )
+from modelguard.detect.coverage import Unevaluated, coverage_gaps
 from modelguard.detect.graph_reads import model_ref
 from modelguard.detect.leakage import feature_source_column, leakage_findings
 from modelguard.detect.schema_drift import schema_drift_candidate_resources, schema_drift_findings
@@ -83,6 +84,7 @@ from modelguard.writeback.incidents import (
 )
 from modelguard.writeback.labels import add_tag, ensure_tag, remove_tag
 from modelguard.writeback.properties import (
+    OPEN_LEAK_COLUMNS,
     RISK_FLAGS,
     RUN_ID,
     TRUST_BAND,
@@ -167,6 +169,10 @@ class ScanReport:
     """The guarding assertion a freshness finding would leave. Rendered even on a
     dry run, so the caller can see the artifact that was not written."""
     warnings: tuple[str, ...] = field(default_factory=tuple)
+    not_evaluated: tuple[Unevaluated, ...] = field(default_factory=tuple)
+    """Checks this scan asked for but could not perform, with the metadata each
+    one is missing. A clean scan is only meaningful alongside this: without it,
+    "no finding" reads the same whether a check passed or never ran."""
 
     @property
     def clean(self) -> bool:
@@ -362,11 +368,12 @@ def _detect(
     table_urn: str | None,
     model_urn: str | None,
     observed_at: int,
-) -> tuple[list[Finding], list[str]]:
+) -> tuple[list[Finding], list[str], tuple[Unevaluated, ...]]:
     """Run every detector the caller asked for. Deterministic, and no writes.
 
     Returns:
-        The findings, worst first, and any warnings worth surfacing.
+        The findings worst first, any warnings worth surfacing, and the checks
+        that could not run at all for want of the metadata they read.
     """
     findings: list[Finding] = []
     warnings: list[str] = []
@@ -386,7 +393,14 @@ def _detect(
         findings.extend(schema_drift_findings(conn, model_urn, config))
 
     findings.sort(key=lambda finding: severity_rank(finding.severity))
-    return findings, warnings
+    gaps = coverage_gaps(
+        conn,
+        config,
+        table_urn=table_urn,
+        model_urn=model_urn,
+        findings=tuple(findings),
+    )
+    return findings, warnings, gaps
 
 
 def _recovery_message(run_id: str) -> str:
@@ -429,6 +443,37 @@ def _record_recovered_assertion(
         created_ms=observed_at,
     )
     record_assertion_result(conn, assertion_urn=assertion.urn, signal=signal, run_id=run_id)
+
+
+def _recorded_leak_columns(conn: DataHubConnection, model_urn: str) -> tuple[str, ...]:
+    """Return the columns the last scan left an open leakage incident on."""
+    recorded = read_properties(conn, model_urn).get(OPEN_LEAK_COLUMNS, [])
+    return tuple(str(value) for value in recorded)
+
+
+def _record_leak_columns(
+    conn: DataHubConnection,
+    model_urn: str,
+    findings: list[Finding],
+) -> None:
+    """Record exactly the columns this model is leaking through, as of this scan.
+
+    Written after reconciliation, so it always describes the state the graph was
+    just left in: a column that was resolved above is gone from it, and a column
+    raised this run is in it. An empty set removes the property rather than
+    writing an empty list, so a model that has never leaked carries nothing.
+    """
+    leaking = sorted(
+        {
+            finding.resource_urn
+            for finding in findings
+            if isinstance(finding, LeakageFinding) and finding.model.urn == model_urn
+        }
+    )
+    if leaking:
+        assign_properties(conn, model_urn, {OPEN_LEAK_COLUMNS: list(leaking)})
+    else:
+        remove_properties(conn, model_urn, {OPEN_LEAK_COLUMNS})
 
 
 def _reconcile_stale_findings(
@@ -480,21 +525,32 @@ def _reconcile_stale_findings(
         model = model_ref(conn, model_urn)
         properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
 
-        # Leakage: every feature's source column is a candidate resource. The
-        # incident's title also names the label reached, which is not
-        # reconstructable once the leak is gone, so this matches by prefix
-        # rather than find_active_incident's exact-title match.
+        # Leakage: every candidate source column, matched by title prefix rather
+        # than find_active_incident's exact match, because the incident's title
+        # also names the label reached and that is not reconstructable once the
+        # leak is gone.
         #
-        # Known gap (D-069): this walks the model's *current* features, so a leak
-        # fixed by deleting the feature outright, rather than by severing its
-        # lineage the way seed/scenarios.py's revert_leakage does, leaves an
-        # incident with no path back into this walk and it stays open. Closing it
-        # needs a durable record of every resource a finding ever named, the
-        # side-channel state store D-067 deliberately rejected, so it is logged
-        # rather than built until a real deployment needs it.
+        # The candidates are the model's current features *and* the columns the
+        # last scan recorded an open incident on. The second half is what closes
+        # D-069's gap: a leak is most often fixed by deleting the offending
+        # column outright, and a deleted column is in no feature list, so walking
+        # only the current features left the incident open forever on a graph
+        # somebody had already fixed. Hit for real on a live dbt project (D-074),
+        # which is the condition D-069 said it would wait for. The record is a
+        # structured property on the model, not the side-channel state store
+        # D-067 rejected: it lives in the graph, it is written by the same scan
+        # that raised the incident, and losing it costs a stale incident, never a
+        # wrong verdict.
+        candidates: dict[str, str | None] = dict.fromkeys(_recorded_leak_columns(conn, model_urn))
         for feature_urn in (properties.mlFeatures or []) if properties else []:
             source_column = feature_source_column(conn, feature_urn)
-            if source_column is None or (source_column, "FIELD") in current_keys:
+            if source_column is not None:
+                candidates[source_column] = feature_urn
+
+        for source_column, known_feature_urn in sorted(
+            candidates.items(), key=lambda pair: pair[0]
+        ):
+            if (source_column, "FIELD") in current_keys:
                 continue
             field_path = SchemaFieldUrn.from_string(source_column).field_path
             prefix = f"Target leakage: {field_path} derives from label "
@@ -505,8 +561,13 @@ def _reconcile_stale_findings(
                 if info.type != "FIELD" or info.title is None or not info.title.startswith(prefix):
                     continue
                 resolve_incident(conn, incident_urn, _recovery_message(run_id))
-                remove_term(conn, feature_urn, config.leakage_risk_term_urn)
+                if known_feature_urn is not None:
+                    # Only a feature that still exists can have its risk term
+                    # taken back off; a deleted one has nothing left to clear.
+                    remove_term(conn, known_feature_urn, config.leakage_risk_term_urn)
                 record(model, FindingType.TARGET_LEAKAGE)
+
+        _record_leak_columns(conn, model_urn, findings)
 
         # Schema drift: every training input with a captured snapshot, title
         # fully known (no measurement in it), so this reuses the exact dedup
@@ -655,7 +716,7 @@ def run_scan(
     # perf_counter, not the clock: this measures an elapsed duration, and the
     # wall clock can step sideways under NTP mid-scan.
     started = time.perf_counter()
-    findings, warnings = _detect(conn, config, table_urn, model_urn, observed_at)
+    findings, warnings, gaps = _detect(conn, config, table_urn, model_urn, observed_at)
     detect_seconds = time.perf_counter() - started
 
     # Rendered either way: a dry run must be able to show the assertion it would
@@ -692,6 +753,7 @@ def run_scan(
             trust=trust,
             assertion_yaml=assertion_yaml,
             warnings=tuple(warnings),
+            not_evaluated=gaps,
         )
 
     writes = tuple(
@@ -736,4 +798,5 @@ def run_scan(
         trust=trust,
         assertion_yaml=written_assertion_yaml(writes),
         warnings=tuple(warnings),
+        not_evaluated=gaps,
     )

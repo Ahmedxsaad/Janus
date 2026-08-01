@@ -158,3 +158,40 @@ is not reachable for most consumers (it affects sdist *building*, not use of the
 SDK), so the practical answer is to record it as accepted rather than to pretend
 it was fixed. Raising the ceiling to admit setuptools 83 would remove the finding
 outright.
+
+## 14. The mlflow source overwrites `mlModelProperties`, silently dropping another tool's `mlFeatures`
+
+**Package:** `acryl-datahub` 1.6.0.13, `datahub ingest` with `source: mlflow`.
+**Symptom:** the source emits `mlModelProperties` as a whole-aspect upsert built
+only from what MLflow knows. Any field MLflow has no concept of is written back as
+empty, and `mlFeatures` is the one that matters: a model linked to the columns it
+trains on is silently unlinked by the next scheduled ingestion run. The same
+happens to `dataProcessInstanceProperties.customProperties` on the training run,
+so anything recorded against the run (for us, the training-time input schema)
+disappears too. Nothing warns, and the model still renders fine in the UI, so the
+loss is invisible until whatever depended on those links reports that it can no
+longer see anything.
+
+This is not specific to us. `mlFeatures`, `mlFeatureTables`, `groups` and
+`trainingJobs` are exactly the fields an organization fills in from somewhere
+other than MLflow, and an ingestion source that treats "MLflow does not know this"
+as "this is not true" makes DataHub's ML entities unusable as a place where two
+systems meet.
+
+**Repro:**
+```bash
+datahub ingest -c mlflow.yml                       # model appears, mlFeatures empty
+# attach features to the model with the SDK (emit mlModelProperties with mlFeatures)
+datahub ingest -c mlflow.yml                       # same recipe, unchanged MLflow
+# read mlModelProperties: mlFeatures is None again
+```
+Verified against a real MLflow tracking server (2026-08-01, D-074), twice, on two
+model versions.
+
+**Workaround:** keep anything that has to survive ingestion in an aspect the
+source does not write. ModelGuard records what it was told in
+`structuredProperties` on the model, so the link can be replayed with one command
+after each ingest. The fix upstream is a patch-style emit (`ChangeType.PATCH`, or
+read-merge-emit) for the fields the source does not own, which is what
+DataHub's own docs already recommend to *users* of the SDK for exactly this
+reason.

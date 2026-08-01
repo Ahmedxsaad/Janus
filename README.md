@@ -109,6 +109,71 @@ modelguard-scenario --revert                  # the table refreshes
 modelguard scan --table loans_raw             # no finding, no writes
 ```
 
+## Use it on your own project
+
+The Quickstart above builds a demo graph where every link a detector needs is
+already in place. Your DataHub is not that graph, so start by asking what
+ModelGuard can already see:
+
+```bash
+modelguard inventory        # every model, and what can and cannot be checked
+```
+
+Expect most models to come back "not checked", and that is the honest answer
+rather than a failure. DataHub's mlflow source records a model and its training
+run; its dbt, Spark and warehouse sources record excellent column-level lineage
+between tables. **Nothing joins the two**, so out of the box a model is not
+connected to a single column, and a detector that walks from a feature to its
+source column has nowhere to start. Verified on a real stack, not assumed: see
+[examples/real-project/](examples/real-project/).
+
+`modelguard link` is that join, and it is one call from the script that trains
+the model:
+
+```bash
+modelguard link \
+  --model churn_model \
+  --features analytics.customer_features \
+  --label-table analytics.customer_labels \
+  --label-column churned \
+  --exclude customer_id
+```
+
+That declares the model's features (one per column, each carrying the exact
+source column it came from), marks the label column with the glossary term the
+leakage detector reads, and captures the input schema as the baseline drift is
+measured against. Then `modelguard scan --model churn_model` works the way the
+demo does, on your data.
+
+Run `link` again after each ingestion of the model. DataHub's mlflow source
+upserts the whole `mlModelProperties` aspect and drops the features (reported as
+[feedback #14](docs/most-valuable-feedback.md)); the arguments are recorded on the
+model in an aspect ingestion does not touch, so the replay needs no arguments at
+all, and one command covers every model at once:
+
+```bash
+datahub ingest -c mlflow.yml     # your existing pipeline, unchanged
+modelguard link --all            # put back what it dropped, for every linked model
+modelguard scan --all-models     # audit the whole catalog
+```
+
+A model nobody has linked is skipped rather than guessed at, so `--all` is safe
+to run on a schedule.
+
+### What each check needs, and what it says when it lacks it
+
+A scan never reports something healthy that it could not measure. It names the
+check, the missing metadata, and how to supply it:
+
+| Check | Needs | Who normally writes it |
+|---|---|---|
+| Freshness + blast radius | the `operation` aspect on the table | dbt, Airflow, Spark, or the SDK's `report_operation` |
+| Target leakage | features with source columns, plus a column carrying the label term | `modelguard link` |
+| Schema drift | a training-time schema snapshot on the training run | `modelguard link` |
+
+Already have a glossary term for labels? Point `MODELGUARD_LABEL_TERM_URN` at it
+in `.env` and the detector honors yours instead of creating one.
+
 ## Block a bad model before it merges
 
 Everything above is after the fact: it audits a graph that already holds the mistake.
@@ -318,7 +383,7 @@ Built alongside ModelGuard and offered back to the DataHub ecosystem:
 |---|---|
 | [skill/datahub-ml-guard/](skill/datahub-ml-guard/) | The `datahub-ml-guard` skill: traces model features back to source columns to catch leakage, drift, and blast radius, and guides the write-back. Unlike the several ML-reliability skills already submitted to the registry, it is a thin wrapper around a real, tested, deterministic detection engine (this repo), not an LLM asked to eyeball a lineage graph. Destined for [datahub-project/datahub-skills](https://github.com/datahub-project/datahub-skills). |
 | [mcp_ext/raise_incident_tool.py](mcp_ext/raise_incident_tool.py) | A thin `raise_incident` mutation tool for [acryldata/mcp-server-datahub](https://github.com/acryldata/mcp-server-datahub), which today has no incident-write tool. Ships with [an RFC](mcp_ext/RFC-ml-incidents.md) for first-class ML incidents. |
-| [docs/most-valuable-feedback.md](docs/most-valuable-feedback.md) | Thirteen concrete, reproducible bugs and doc gaps found while building, each with a repro and a workaround. |
+| [docs/most-valuable-feedback.md](docs/most-valuable-feedback.md) | Fourteen concrete, reproducible bugs and doc gaps found while building, each with a repro and a workaround. |
 
 ## Contributing
 

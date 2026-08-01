@@ -40,6 +40,12 @@ TRUST_BAND = "modelguard.trust_band"
 RISK_FLAGS = "modelguard.risk_flags"
 RUN_ID = "modelguard.run_id"
 
+#: Source columns this model currently has an open leakage incident on. Written
+#: by the scan that raised them and read by the next scan's reconciliation, so a
+#: leak fixed by deleting the column outright, which leaves nothing to walk back
+#: through, still gets its incident closed (D-069's gap, hit for real in D-074).
+OPEN_LEAK_COLUMNS = "modelguard.open_leak_columns"
+
 _VALID_CARDINALITIES = frozenset(
     {PropertyCardinalityClass.SINGLE, PropertyCardinalityClass.MULTIPLE}
 )

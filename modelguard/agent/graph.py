@@ -64,6 +64,7 @@ from modelguard.agent.pipeline import (
 )
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
+from modelguard.detect.coverage import Unevaluated
 from modelguard.llm import LLMConfig
 from modelguard.models import Finding
 from modelguard.writeback.assertions import render_assertion_yaml
@@ -105,6 +106,9 @@ class _RunArtifacts:
     narratives: list[Narrative] = field(default_factory=list)
     trust: tuple[TrustWrite, ...] = ()
     warnings: list[str] = field(default_factory=list)
+    not_evaluated: tuple[Unevaluated, ...] = ()
+    """The checks that could not run, carried into both the preview and the report
+    so approving a scan never hides what it was unable to look at."""
     preview: ScanReport | None = None
     """What the caller is shown at the interrupt: findings and prose, no writes."""
     report: ScanReport | None = None
@@ -168,13 +172,15 @@ def build_scan_graph(
                 else ""
             ),
             warnings=tuple(artifacts.warnings),
+            not_evaluated=artifacts.not_evaluated,
         )
 
     def _detect_node(state: ScanState) -> ScanState:
         """Run every detector the targets call for. Deterministic, no writes."""
-        findings, warnings = _detect(conn, config, table_urn, model_urn, observed_at)
+        findings, warnings, gaps = _detect(conn, config, table_urn, model_urn, observed_at)
         artifacts.findings = findings
         artifacts.warnings = warnings
+        artifacts.not_evaluated = gaps
         artifacts.trust = _trust_scores(findings, config)
         return {}
 
@@ -228,6 +234,7 @@ def build_scan_graph(
             trust=artifacts.trust,
             assertion_yaml=written_assertion_yaml(writes),
             warnings=tuple(artifacts.warnings),
+            not_evaluated=artifacts.not_evaluated,
         )
         return {}
 
