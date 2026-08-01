@@ -93,6 +93,7 @@ def _leakage_gap(
     column through lineage, and some column has to be declared a label. Each
     absence gets its own reason, because each has a different remedy.
     """
+
     def gap(reason: str, remedy: str) -> Unevaluated:
         return Unevaluated(
             check="target leakage", target_urn=model_urn, reason=reason, remedy=remedy
@@ -102,7 +103,8 @@ def _leakage_gap(
         return gap(
             "the model declares no features (mlModelProperties.mlFeatures is empty), "
             "so there is no feature whose lineage could be traced back to a label",
-            "Record the model's features as mlFeature entities and list them on the model.",
+            "Declare them with `modelguard link --model ... --features <table> "
+            "--label-column <column>`, from the script that trains the model.",
         )
 
     if not conn.graph.exists(config.label_term_urn):
@@ -141,8 +143,8 @@ def _drift_gap(
                 "could carry a training-time schema"
             ),
             remedy=(
-                "Link the training run to the model, then capture its input schema "
-                "with `modelguard snapshot`."
+                "Link the training run to the model in DataHub, then declare the "
+                "model's inputs with `modelguard link`."
             ),
         )
 
@@ -154,7 +156,7 @@ def _drift_gap(
                 f"no training run of this model carries a {config.training_schema_property!r} "
                 "snapshot, so there is no baseline to diff the current schema against"
             ),
-            remedy="Capture one at training time with `modelguard snapshot`.",
+            remedy="Capture one at training time with `modelguard link`.",
         )
 
     return None
