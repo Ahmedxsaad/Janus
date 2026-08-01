@@ -17,9 +17,13 @@ landed unlogged):
   request, 2026-07-22, D-051). It runs pre-commit rather than its own list of
   ruff and mypy invocations, so the local hooks and the enforced checks cannot
   drift, plus the offline test suite and an advisory dependency audit.
-- Still open: P1-1, P2-5, P3-1 through P3-4. P2-5 (structured logging with
-  run_id) is partial: run_id threads through every write and dedup key (D-013,
-  modelguard/CLAUDE.md rule 4) but there is no structured JSON logger.
+- Still open: P1-1, P3-1 through P3-4.
+- Adopted and done, later: P2-5 (structured logging with run_id, 2026-08-01).
+  run_id already threaded through every write and dedup key (D-013,
+  modelguard/CLAUDE.md rule 4); modelguard/logs.py adds the JSON logger behind
+  `MODELGUARD_LOG_FORMAT=json`, and `_log_scan` now assembles its facts once and
+  renders them twice (logfmt in the message, structured fields on the record) so
+  the human line and the indexed fields cannot drift.
 
 ## P1-1. Rename the repository from DataHub to modelguard
 The repo is named DataHub but the project is ModelGuard. Judges land on the

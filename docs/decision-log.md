@@ -16,6 +16,284 @@ Entry template:
 
 ---
 
+## D-084: Compose DataHub's own MCP server rather than absorb it (2026-08-02)
+- Decided by: Ghassen Naouar (item F of docs/plan/06), applied by Claude
+- Decision: `skill/datahub-ml-guard/references/mcp-composition.md` documents
+  running `modelguard-mcp` beside `acryldata/mcp-server-datahub`, with the client
+  configuration, two worked sessions, and the argument for the split. No runtime
+  dependency is added.
+- Options considered: (a) depend on `mcp-server-datahub` and proxy its tools,
+  rejected as complexity bought for a criterion tick, and it would make
+  ModelGuard's MCP surface fail when the other server's did; (b) reimplement
+  search and lineage tools, rejected outright, that is rebuilding a shipped
+  feature rather than composing it; (c) document the composition, chosen.
+- Why: the judging criteria name the MCP Server explicitly, and ModelGuard ships
+  its own plus contributes a tool upstream, but nothing showed the two working
+  together. The paragraph that makes the pairing worth reading is itself the
+  differentiator: the official server answers what the catalog contains, and
+  ModelGuard answers the three questions that have to be reproducible, with
+  evidence, and with no LLM in the decision.
+- Result: a reference doc and a README paragraph pointing at it. It also states
+  the case against the tempting alternative (skip the detectors, ask a capable
+  model to read the lineage) on four grounds: reproducibility, checkable
+  evidence, prompt injection, and the invisibility of a wrong "no".
+
+## D-083: A public Python API, and a README PyPI can render (2026-08-02)
+- Decided by: Ghassen Naouar (items G and I of docs/plan/06), applied by Claude
+- Decision: `modelguard/api.py` exposes `link_model` and `scan_model`,
+  re-exported from the package root with `__all__`; both are thin wrappers over
+  the functions the CLI calls. Separately, the README's 22 repository-relative
+  links become absolute GitHub URLs.
+- Options considered: for the API, a client class was rejected as an abstraction
+  with one implementation over two functions; exposing the internals directly
+  was rejected because a user pinning to `modelguard.agent.pipeline.run_scan`
+  freezes an internal boundary. For the README, a second `README-pypi.md` was
+  rejected: a document that would drift from the first.
+- Why: the one place ModelGuard belongs inside somebody's code is the script
+  that trains the model, because that is the only moment when the feature table,
+  the label column and the training-time schema are all known. Telling that
+  script to shell out to a CLI is a worse interface than a function call, and it
+  is what the README said to do. On the README: `readme = "README.md"` ships that
+  file as the PyPI long description, and PyPI resolves a relative link against
+  `pypi.org`, so every one of the 22 404'd for the first person arriving from
+  `pip install`.
+- Result: 11 offline tests. The pre-tag checklist in
+  docs/deploy/pypi-release.md is now checked mechanically: `twine check` passes,
+  the wheel installs into a throwaway venv, all four console scripts run, the
+  packaged property YAML is present, and `import modelguard` exposes the API.
+  A test pins `__version__` to `pyproject.toml`'s version, because a wheel whose
+  two versions disagree is one nobody can file a bug against: the user reads one
+  and the resolver reads the other. The rename decision (D-076) remains the one
+  unchecked item, and it is now on that checklist rather than only in a plan doc.
+
+## D-082: Measure what a whole-catalog sweep costs (2026-08-02)
+- Decided by: Ghassen Naouar (item E of docs/plan/06), applied by Claude
+- Decision: `benchmarks/scale.py` creates N replica models carrying the seeded
+  model's features and training run, sweeps them dry-run at 1/10/50, and reports
+  wall clock plus graph reads counted at the connection. Replicas are
+  hard-deleted afterwards, including on failure. `RESULTS.md` gains a Scale
+  section, and its "no scale test" caveat is replaced by the ceiling that was
+  actually measured.
+- Options considered:
+  1. Extrapolate from the single seeded model. Rejected: a curve nobody
+     measured, presented as one, is the kind of number a benchmark exists to
+     replace.
+  2. Add `--replicas N` to `modelguard-seed`. Rejected: every URN in
+     `graph_spec` is a fixed function today, so parameterising it touches the
+     whole seeder to serve one benchmark, and production seed code would grow a
+     feature only the benchmark uses.
+  3. Replicate only the ML side, in `benchmarks/`, chosen. The replicas share
+     one feature table because the question is what a *sweep* costs; duplicating
+     the warehouse side would measure the seeder instead. Stated in the report.
+- Why: `RESULTS.md` has said "no scale test" since the benchmark landed, and it
+  is the first question anyone running a real catalog asks of a command that
+  performs one independent scan per model.
+- Result: the section renders whatever was measured, and nothing is scored
+  against a target: there is no published number for how fast a metadata sweep
+  should be, and inventing one to pass would be worse than the plain figure. The
+  graph-read count is the diagnostic: a per-model figure that stays flat as the
+  catalog grows is what says the cost is the catalog's size and not the
+  traversal's shape. Two mutations confirmed red.
+
+  Two gaps found while wiring it. `_observe` had no branch for the two new
+  finding types, so the governance trials would have raised
+  `no detector registered` on the first live run; and the sensitive detector is
+  configuration-gated, so the benchmark now supplies the classification the
+  scenario plants and says so in the report, rather than scoring a detector it
+  never let run.
+
+## D-081: A trust score with a direction (2026-08-02)
+- Decided by: Ghassen Naouar (item C of docs/plan/06), applied by Claude
+- Decision: each scan that scores a model appends one capped entry to a new
+  `modelguard.trust_history` structured property, keyed on `run_id` so a rerun
+  replaces its own row. The impact report gains a "Trust over time" section, the
+  CLI prints the direction under each score, and `--format json` carries
+  `previous_score`.
+- Options considered:
+  1. A custom timeseries aspect, which would give DataHub's UI a real chart.
+     Rejected: that is a change to DataHub's own metadata model, which belongs
+     in the RFC lane (`mcp_ext/`), not in an agent that composes shipped
+     features.
+  2. Append rows to the impact report Document. Rejected: the document is keyed
+     per (model, finding type, resource), so a model with two findings would
+     carry two partial histories of itself.
+  3. A multi-valued structured property on the model, chosen. One list per
+     model, ordered, visible in the UI, and capped at 20 so a `watch` polling
+     every thirty seconds cannot turn it into an unbounded log.
+- Why: 82 out of 100 is neither good nor bad until you know it was 95 last
+  Tuesday. The direction is the actionable part, and nothing recorded it.
+- Result: 12 offline tests plus 5 on the report section, three mutations
+  confirmed red. Two details worth recording. The history is *projected* before
+  the per-finding writes and the projection is what both the report renders and
+  the graph stores, because the report is published before the trust score is
+  persisted and a trend table stopping one scan short of the scan that produced
+  it reads as a bug. And `previous_score` is None rather than the current score
+  for a first-ever scan: "unchanged" and "never measured before" are different
+  facts, and only one of them is reassuring.
+
+## D-080: link --infer proposes the join, a human still confirms it (2026-08-02)
+- Decided by: Ghassen Naouar (item A of docs/plan/06), applied by Claude
+- Decision: `modelguard/writeback/link_infer.py` reads a model's link out of the
+  graph and renders the exact `modelguard link` command a person would have
+  typed, one reason per decision, and writes nothing until they say yes (`--yes`
+  skips the prompt, `--dry-run` never prompts). Refused alongside `--all`.
+- Options considered:
+  1. Search the catalog for datasets whose names resemble the model's. Rejected:
+     it is a guess with no aspect behind it, it would be wrong most often on the
+     large catalogs where it matters most, and a wrong feature table produces
+     confident findings about a model's relationship to data it never read.
+  2. Ask an LLM to read the catalog and propose the link. Rejected outright:
+     root CLAUDE.md rule 4. The LLM never decides whether a finding exists, and
+     the link is upstream of every finding there is.
+  3. Read only what the graph states, chosen. Feature table from
+     `dataProcessInstanceInput` on the training runs (one input is a proposal,
+     several is a question, none is an honest refusal). Label from a column
+     already carrying the label term, else a configured name list, else nothing.
+     Exclusions from `schemaMetadata.primaryKeys`, `isPartOfKey` and
+     `isPartitioningKey` only.
+- Why: `inventory` on a freshly ingested catalog reports "not checked" for every
+  model, and the only way out was four hand-typed arguments per model. That is
+  the adoption cliff, and it caps how useful the rest of the project can be.
+- Result: 17 offline tests, four mutations confirmed red (guessing a label when
+  none is declared, picking the first of several inputs, letting a name match
+  beat a declared term, and excluding columns by name heuristic). Two deliberate
+  refusals to guess are asserted rather than assumed: nothing names a label ->
+  the proposal is returned incomplete and the CLI asks for `--label-column`;
+  a name that merely looks like a key (`customer_id`) is not excluded, because
+  `score_id` looks the same and is a feature. Every reason line names the aspect
+  it was read from, and a guess says the word "guess", so a reviewer checks the
+  reasoning rather than trusting it. `inventory`'s closing hint now points at
+  `--infer` first.
+
+## D-079: Read the governance graph, not only the structural one (2026-08-02)
+- Decided by: Ghassen Naouar (item B of docs/plan/06), applied by Claude
+- Decision: two detectors land in `modelguard/detect/governance.py`.
+  **Sensitive source**: a model feature whose upstream column lineage reaches a
+  column the organization classified (a glossary term or a tag). **Deprecated
+  input**: a model trained on a dataset carrying DataHub's `deprecation` aspect.
+  Both write back through the existing generic path (incident, tag, risk flags,
+  impact report, trust deduction); neither adds a write of its own.
+- Options considered:
+  1. Copy the leakage traversal into a new module. Rejected: that traversal
+     holds the `paths`-not-`urn` trap (D-031), the single subtlest fact in this
+     codebase, and duplicating it duplicates the chance to get it wrong.
+  2. Generalise `_LabelIndex` in place and have the new detector import a
+     private name. Rejected: an underscore-prefixed cross-module import is a
+     boundary nobody enforces.
+  3. Extract both the index and the walk into `detect/column_marks.py`, chosen.
+     Leakage supplies one mark (the label term), governance supplies the
+     configured classifications, and `leak_path` becomes a four-line wrapper.
+     Verified behaviour-preserving: the 18 existing leakage tests passed
+     unchanged before anything new was added.
+  For severity: a sensitive source is HIGH live / MEDIUM otherwise, never
+  CRITICAL. CRITICAL in this project means the model's numbers are wrong, which
+  is what leakage does. A team that cannot sort its critical findings triages
+  none of them. Deprecation never exceeds MEDIUM: it is a deadline, not a defect.
+- Why: DataHub's classification surface (tags, terms, deprecation) is the half of
+  the graph no detector was reading, and it is the half a judge from DataHub
+  thinks about daily. More to the point, these are real failures nothing else can
+  find: the classification lives on the data side, the model lives on the ML
+  side, and only the column-level lineage between them turns two unrelated facts
+  into one finding.
+- Result: 18 offline tests, four mutations confirmed red per tests/CLAUDE.md
+  rule 6, and a positive and negative benchmark trial for each detector (the
+  existing suite refuses to pass until every `FindingType` has both, which is how
+  the missing trials were caught). Configuration has **no default**, and both
+  variables empty means the check reports itself as not evaluated rather than
+  clean: a guessed classification URN either matches nothing or matches a term
+  meaning something else, and a false compliance incident is the worst kind.
+
+  **One bug found and fixed in existing code.** Reconciliation keyed stale
+  incidents on `(resource_urn, incident_type)` alone. Leakage and a sensitive
+  source both raise a `FIELD` incident on the same column, so a sensitive finding
+  would have marked that column "still failing" for leakage, and a leak somebody
+  had already fixed would keep its incident open forever, which is exactly the
+  class of bug D-067, D-069 and D-070 each fought. The key set is now per finding
+  type, and the two column detectors are told apart by title prefix through one
+  shared `_active_incidents_titled` helper.
+
+## D-077: One scan, three renderings, and a rich markup bug the guards hid (2026-08-01)
+- Decided by: Ghassen Naouar (chose all ten improvements from
+  docs/plan/06-judge-review-and-improvements.md), applied by Claude
+- Decision: item D. `modelguard/render.py` holds two new renderings of a
+  `ScanReport`, both pure functions of it like `gate.py`: `report_json` for
+  `--format json` on `scan` and `gate`, and `job_summary_markdown`, appended to
+  the file named by `GITHUB_STEP_SUMMARY` on every gate and scan run.
+- Options considered:
+  (a) A `--json` boolean flag. Rejected: a second output format later needs a
+      second flag, and two booleans can both be passed.
+  (b) `--format` taking a free string. Rejected: a typo would have to be
+      validated by hand, and the choices would not appear in `--help`.
+  (c) `--format` taking a StrEnum, chosen. Typer validates it, lists the
+      choices, and a typo is a usage error.
+  For the summary: a flag or input on the Action was considered and rejected.
+  The runner always sets `GITHUB_STEP_SUMMARY`, so writing unconditionally makes
+  it work for every existing user of the Action with no YAML change at all, and
+  outside Actions the variable is unset and nothing is written. Same reasoning
+  as the GitHub annotations already emitted unconditionally.
+- Why: a finding that lands only in DataHub and an exit code that lands only in
+  a log both stop short of the person who has to act. The summary page is where
+  a reviewer already is; JSON is for the team routing findings somewhere this
+  project does not know about. Neither adds a dependency.
+- Result: 14 new offline tests, all three mutation-checked per tests/CLAUDE.md
+  rule 6 (truncate-instead-of-append, drop the not-evaluated section, emit the
+  gate key on a plain scan: each goes red). Under `--format json` the progress
+  lines and the unauthenticated-writes warning move to stderr, so stdout carries
+  exactly one parseable document. `--format` is refused with `--all-models`
+  (concatenated JSON documents are not a JSON document) and with
+  `--review`/`--auto-approve` (the agent waits for a human).
+
+  One pre-existing bug found by the first test to invoke a guard clause: the
+  `--dry-run` + `--review` guard printed an opening `[red]` in one
+  `console.print` and its closing tag in the next. Rich parses each call
+  independently, so the second raised `MarkupError` and the guard died
+  mid-sentence instead of explaining itself. Both guards are now one call, and a
+  regression test covers it. Nothing else in the package had the pattern.
+
+## D-078: Structured logs behind one variable, closing P2-5 (2026-08-01)
+- Decided by: Ghassen Naouar (item H of the same review), applied by Claude
+- Decision: `modelguard/logs.py` adds `MODELGUARD_LOG_FORMAT`, `text` (default)
+  or `json`. `_log_scan` assembles its facts once as a mapping and renders them
+  twice: `logfmt` in the message, and the same mapping as structured fields on
+  the record, which `JsonFormatter` emits as top-level JSON keys. `watch` is
+  still the only entry point that configures a handler.
+- Options considered: (a) `structlog`, rejected as a dependency for something
+  `logging.Formatter` does in twenty lines; (b) emit JSON always, rejected
+  because the default reader is a human at a terminal; (c) log the same facts
+  twice, once per format, rejected because two renderings that are written
+  separately drift.
+- Why: P2-5 has been open since the first improvements doc, and `watch` is the
+  entry point people actually run unattended. Without indexable fields, shipping
+  its output anywhere needs a per-tool regular expression that breaks the first
+  time a key is added.
+- Result: 11 offline tests, mutation-checked (a silent fallback on an unknown
+  format, and caller fields overwriting `level`: both go red). Logging's own
+  attributes win on a name collision, so a caller cannot overwrite the level a
+  log search depends on. An unrecognised value fails loudly naming the variable.
+  P2-5 marked done in docs/plan/04-improvements.md.
+
+## D-076: Review ModelGuard as a judge would, and plan the work before the tag (2026-08-01)
+- Decided by: Ghassen Naouar (asked for a deep review from the judges'
+  perspective plus creative, solid improvements), applied by Claude
+- Decision: docs/plan/06-judge-review-and-improvements.md scores the repository
+  against the five published criteria and proposes ten ranked improvements, to
+  be implemented before the first PyPI tag. All ten were chosen.
+- Options considered: implementing the highest-value subset (waves 1-3), the
+  pre-tag subset, or all ten. All ten was chosen, so the plan doc's suggested
+  order becomes the build order rather than a menu.
+- Why: the repository is strong on every criterion, so the remaining points are
+  in specific, nameable gaps rather than in anything structural: the governance
+  half of the graph is read by no detector, `link` is manual per model, scale is
+  unmeasured, and the README's 22 relative links all 404 on a PyPI project page.
+- Result: the plan doc, and one finding that changes an existing plan. The
+  repository rename (P1-1, open since the first improvements doc) is no longer
+  free: the PyPI Trusted Publisher in docs/deploy/pypi-release.md matches on
+  `Repository name: DataHub`, and GitHub's redirect does not help because the
+  OIDC claim carries the new name, so a rename breaks publishing until the
+  pending publisher is edited to match. **Deferred by decision**, not by
+  oversight: revisit before the first tag, and rename before publishing rather
+  than after, since a rename after publishing is strictly worse.
+
 ## D-075: Deploy the judge VM onto D-074, and a clone token still live on it (2026-08-01)
 - Decided by: Ghassen Naouar (asked for the remaining work to be finished),
   applied by Claude

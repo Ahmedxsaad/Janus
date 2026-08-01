@@ -17,6 +17,7 @@ import pytest
 
 from benchmarks.inject import Target, Trial
 from benchmarks.run_bench import BlastRadiusCheck, TrialOutcome, WriteBackCheck, render_results
+from benchmarks.scale import ScaleMeasurement
 from modelguard.config import ScanConfig
 from modelguard.models import FindingType
 
@@ -135,6 +136,60 @@ def test_the_report_states_what_it_does_not_measure():
     assert "## What this does not measure" in report
     for absent in ("scale test", "Great Expectations", "Evidently"):
         assert absent in report
+
+
+def test_a_measured_sweep_replaces_the_no_scale_test_caveat():
+    """A report still claiming "no scale test" beside a scale table is untrustworthy.
+
+    The point of the disclosure section is that it tracks what was actually run.
+    A caveat that outlives the gap it described teaches a reader to skip the
+    section, which is where the caveats that are still true live.
+    """
+    outcomes = [_outcome(_trial("g", FindingType.TARGET_LEAKAGE, expected=True), True)]
+    report = render_results(
+        outcomes,
+        BLAST,
+        WRITEBACK,
+        CONFIG,
+        generated_at=WHEN,
+        scale=(
+            ScaleMeasurement(models=1, seconds=0.4, graph_reads=12),
+            ScaleMeasurement(models=10, seconds=4.2, graph_reads=120),
+        ),
+    )
+
+    assert "## Scale" in report
+    assert "| 10 |" in report
+    assert "scale test" not in report
+    # The remaining limits are still stated, including the new ceiling.
+    assert "sweeps up to 10" in report
+    assert "10k/100k-entity curve" in report
+
+
+def test_the_scale_section_is_absent_when_nothing_was_swept():
+    """An empty measurement renders no table rather than an empty one."""
+    report = _report([_outcome(_trial("g", FindingType.TARGET_LEAKAGE, expected=True), True)])
+
+    assert "## Scale" not in report
+    assert "scale test" in report
+
+
+def test_the_per_model_cost_is_reported_not_only_the_total():
+    """The total says how long to wait; the per-model figure says whether it scales."""
+    outcomes = [_outcome(_trial("g", FindingType.TARGET_LEAKAGE, expected=True), True)]
+    report = render_results(
+        outcomes,
+        BLAST,
+        WRITEBACK,
+        CONFIG,
+        generated_at=WHEN,
+        scale=(ScaleMeasurement(models=50, seconds=25.0, graph_reads=600),),
+    )
+
+    row = next(line for line in report.splitlines() if line.startswith("| 50 |"))
+    # 25s over 50 models is 0.5s each, and 600 reads is 12.0 each.
+    assert "0.50s" in row
+    assert "12.0" in row
 
 
 def test_a_missing_blast_radius_says_so_rather_than_printing_a_score():

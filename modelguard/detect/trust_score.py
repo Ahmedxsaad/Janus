@@ -35,11 +35,13 @@ from dataclasses import dataclass
 
 from modelguard.config import ScanConfig
 from modelguard.models import (
+    DeprecatedInputFinding,
     Finding,
     FreshnessFinding,
     LeakageFinding,
     ModelRef,
     SchemaDriftFinding,
+    SensitiveSourceFinding,
     Severity,
     TrustBand,
     TrustScore,
@@ -64,6 +66,8 @@ DEDUCTION_LEAKAGE = "leakage"
 DEDUCTION_SCHEMA_DRIFT = "schema_drift"
 DEDUCTION_FRESHNESS_LAG = "freshness_lag"
 DEDUCTION_MISSING_OWNER = "missing_owner"
+DEDUCTION_SENSITIVE_SOURCE = "sensitive_source"
+DEDUCTION_DEPRECATED_INPUT = "deprecated_input"
 
 
 @dataclass(frozen=True)
@@ -86,6 +90,15 @@ class TrustInputs:
     none. Defaults to None so a directly-constructed TrustInputs (as the
     detector's own tests do for the freshness-only cases) does not have to
     name a severity it is not testing."""
+    has_sensitive_source: bool = False
+    """A feature derives from a column the organization classified as restricted.
+
+    Defaulted, and placed after the fields that are not, both because a dataclass
+    requires it and because it says the useful thing: a caller that predates this
+    detector still means exactly what it meant.
+    """
+    has_deprecated_input: bool = False
+    """A training input its own owners have marked deprecated."""
 
 
 def trust_inputs_from_findings(
@@ -106,6 +119,8 @@ def trust_inputs_from_findings(
     has_upstream_failure = False
     has_leakage = False
     has_schema_drift = False
+    has_sensitive_source = False
+    has_deprecated_input = False
     lag_ratio = 0.0
     worst_severity: Severity | None = None
 
@@ -123,11 +138,17 @@ def trust_inputs_from_findings(
             has_leakage = True
         elif isinstance(finding, SchemaDriftFinding):
             has_schema_drift = True
+        elif isinstance(finding, SensitiveSourceFinding):
+            has_sensitive_source = True
+        elif isinstance(finding, DeprecatedInputFinding):
+            has_deprecated_input = True
 
     return TrustInputs(
         has_upstream_failure=has_upstream_failure,
         has_leakage=has_leakage,
         has_schema_drift=has_schema_drift,
+        has_sensitive_source=has_sensitive_source,
+        has_deprecated_input=has_deprecated_input,
         freshness_lag_ratio=lag_ratio,
         missing_owner=not model.has_owner,
         worst_severity=worst_severity,
@@ -167,6 +188,10 @@ def trust_score(inputs: TrustInputs, config: ScanConfig) -> TrustScore:
         deductions[DEDUCTION_LEAKAGE] = config.trust_weight_leakage
     if inputs.has_schema_drift:
         deductions[DEDUCTION_SCHEMA_DRIFT] = config.trust_weight_schema_drift
+    if inputs.has_sensitive_source:
+        deductions[DEDUCTION_SENSITIVE_SOURCE] = config.trust_weight_sensitive_source
+    if inputs.has_deprecated_input:
+        deductions[DEDUCTION_DEPRECATED_INPUT] = config.trust_weight_deprecated_input
     if inputs.freshness_lag_ratio > 0:
         deductions[DEDUCTION_FRESHNESS_LAG] = (
             config.trust_weight_freshness_lag * inputs.freshness_lag_ratio

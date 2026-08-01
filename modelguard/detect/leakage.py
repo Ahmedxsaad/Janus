@@ -13,31 +13,16 @@ the column holding the ground truth. ModelGuard reads that path, so a finding is
 auditable rather than asserted, and it needs no training run and no access to the
 underlying data.
 
-How a label is declared
------------------------
-By a glossary term on the column, read from two places and unioned, because both
-are legitimate ways to say "this column is the answer":
-
-* ``glossaryTerms`` on the ``schemaField`` itself, which is what ModelGuard and
-  the seeder write, and
-* ``editableSchemaMetadata`` on the parent dataset, which is what the DataHub UI
-  writes when a human tags a column by hand.
-
-Reading both means a data scientist declares their label in the UI, touching no
-ModelGuard configuration, and leakage detection starts working on their models.
-Both routes were emitted and read back against a live GMS before this module was
-written.
-
-The trap in column-level lineage
---------------------------------
-``get_lineage(source_column=...)`` does **not** return the upstream column. It
-returns the upstream **dataset**: for the seeded graph ``LineageResult.urn`` is
-``loans_raw``, never ``loans_raw.default_status``. A detector that compared result
-URNs against the label column URN would find nothing and pronounce a leaking graph
-clean, which is the worst way for a detector to be wrong. The column truth is
-carried in ``LineageResult.paths``, whose entries are ``LineagePath`` objects with
-a schemaField ``urn`` and a ``column_name``. This module reads ``paths`` and never
-``urn``, and that same path is what the incident quotes.
+How a label is declared, and how the walk works
+-----------------------------------------------
+A label is a glossary term on the column, read from the ``schemaField`` itself
+and from the parent dataset's ``editableSchemaMetadata`` (what the UI writes) and
+unioned, so a data scientist declaring their label in the UI needs no ModelGuard
+configuration at all. The upstream walk, the two aspects it reads, and the
+``paths``-not-``urn`` trap that walk turns on all live in
+:mod:`modelguard.detect.column_marks`, because the sensitive-source detector asks
+the same question of the same graph with a different mark. This module supplies
+the mark (the configured label term) and turns a hit into a finding.
 
 Literature
 ----------
@@ -51,8 +36,6 @@ Column-level lineage is that inspection, made mechanical.
 from __future__ import annotations
 
 from datahub.metadata.schema_classes import (
-    EditableSchemaMetadataClass,
-    GlossaryTermsClass,
     MLFeaturePropertiesClass,
     MLModelPropertiesClass,
 )
@@ -61,6 +44,7 @@ from datahub.utilities.urns.error import InvalidUrnError
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
+from modelguard.detect.column_marks import ColumnMarkIndex, marked_ancestor
 from modelguard.detect.graph_reads import model_ref
 from modelguard.models import LeakageFinding, LeakingFeature, ModelRef
 
@@ -70,64 +54,16 @@ from modelguard.models import LeakageFinding, LeakingFeature, ModelRef
 SOURCE_COLUMN_PROPERTY = "modelguard.source_column"
 
 
-class _LabelIndex:
-    """Which columns are declared labels, read once per dataset.
+def label_index(conn: DataHubConnection, config: ScanConfig) -> ColumnMarkIndex:
+    """Return the index of columns declared to be labels.
 
-    A leak path revisits the same dataset for every column it walks, and the
-    declaration lives in an aspect on that dataset. Caching the per-dataset read
-    keeps the traversal from turning into an N+1 (detect/CLAUDE.md rule 3).
+    A :class:`~modelguard.detect.column_marks.ColumnMarkIndex` over exactly one
+    glossary term, the configured label term. Labels are never declared by a tag:
+    a label is a statement about what a column *means* to a model, which is what
+    a glossary term is for, and accepting tags too would let an unrelated tag
+    silently start producing leakage incidents.
     """
-
-    def __init__(self, conn: DataHubConnection, config: ScanConfig) -> None:
-        self._conn = conn
-        self._term = config.label_term_urn
-        self._by_dataset: dict[str, frozenset[str]] = {}
-
-    def _editable_terms(self, dataset_urn: str) -> frozenset[str]:
-        """Return the field paths a human tagged as labels through the UI.
-
-        The UI does not write to the schemaField entity. It writes
-        ``editableSchemaMetadata`` on the parent dataset, keyed by field path, so
-        a detector that read only the schemaField would never see a human's
-        declaration.
-        """
-        editable = self._conn.graph.get_aspect(dataset_urn, EditableSchemaMetadataClass)
-        if editable is None:
-            return frozenset()
-
-        return frozenset(
-            info.fieldPath
-            for info in editable.editableSchemaFieldInfo
-            if info.glossaryTerms
-            and any(association.urn == self._term for association in info.glossaryTerms.terms)
-        )
-
-    def _labels_in(self, dataset_urn: str) -> frozenset[str]:
-        """Return the label column URNs of one dataset, reading it at most once."""
-        cached = self._by_dataset.get(dataset_urn)
-        if cached is not None:
-            return cached
-
-        dataset = DatasetUrn.from_string(dataset_urn)
-        labels = {
-            str(SchemaFieldUrn(parent=dataset, field_path=path))
-            for path in self._editable_terms(dataset_urn)
-        }
-        self._by_dataset[dataset_urn] = frozenset(labels)
-        return self._by_dataset[dataset_urn]
-
-    def is_label(self, column_urn: str) -> bool:
-        """Whether a column is declared a label, by either route."""
-        field = SchemaFieldUrn.from_string(column_urn)
-        if column_urn in self._labels_in(field.parent):
-            return True
-
-        # The schemaField's own aspect. Not cached per dataset because it is keyed
-        # by column, and a leak path walks only a handful of columns.
-        terms = self._conn.graph.get_aspect(column_urn, GlossaryTermsClass)
-        if terms is None or not terms.terms:
-            return False
-        return any(association.urn == self._term for association in terms.terms)
+    return ColumnMarkIndex(conn, terms=frozenset({config.label_term_urn}))
 
 
 def feature_source_column(conn: DataHubConnection, feature_urn: str) -> str | None:
@@ -162,68 +98,26 @@ def feature_source_column(conn: DataHubConnection, feature_urn: str) -> str | No
 def leak_path(
     conn: DataHubConnection,
     source_column_urn: str,
-    labels: _LabelIndex,
+    labels: ColumnMarkIndex,
     config: ScanConfig,
 ) -> tuple[str, tuple[str, ...]] | None:
     """Walk a column's upstream cone and return the label it reaches, if any.
 
-    Reads ``LineageResult.paths``, never ``LineageResult.urn``. See the module
-    docstring: ``urn`` is the upstream dataset, and comparing it against a label
-    column makes a leaking graph look clean.
-
-    A column's cone can reach a label by more than one chain. Every match is
-    collected and the shortest is returned, ties broken on the label URN and
-    then the chain itself, rather than returning whichever the server listed
-    first: above two hops DataHub answers from a full-graph search in
-    network-order, so a first-match return can quote a different derivation
-    chain on two scans of an unchanged graph. That chain is the auditable proof
-    a human reads in the incident, and proof that changes when nothing changed
-    is not proof.
+    A thin wrapper over :func:`~modelguard.detect.column_marks.marked_ancestor`,
+    which holds the traversal and the ``paths``-not-``urn`` rule it turns on. The
+    marker it returns is dropped here: for a label index there is only one
+    possible marker, the configured label term, so naming it in every finding
+    would add a column of identical values.
 
     Returns:
         The label column's URN and the chain of column names walked to reach it,
         or None when the cone reaches no declared label.
     """
-    field = SchemaFieldUrn.from_string(source_column_urn)
-
-    # A feature whose declared source column IS the label, with no
-    # transformation at all, is leakage in its most direct form: someone wired
-    # a "feature" straight from the ground truth. The traversal below would
-    # never reveal this, since there is nothing left to derive from once the
-    # column already is the label, so it is checked explicitly first.
-    if labels.is_label(source_column_urn):
-        return source_column_urn, (field.field_path,)
-
-    results = conn.client.lineage.get_lineage(
-        source_urn=field.parent,
-        source_column=field.field_path,
-        direction="upstream",
-        max_hops=config.leakage_max_hops,
-        count=config.lineage_result_cap,
-    )
-
-    matches: list[tuple[str, tuple[str, ...]]] = []
-    for result in results:
-        # Above two hops DataHub switches to a full-graph search and returns
-        # entities beyond the cap, so the cap is enforced here (D-020).
-        if result.hops > config.leakage_max_hops:
-            continue
-
-        path = result.paths or []
-        for index, step in enumerate(path):
-            if step.urn == source_column_urn:
-                continue
-            if labels.is_label(step.urn):
-                # Truncated at the match: a path that continues past the label
-                # to a more distant ancestor must not be quoted as part of the
-                # derivation chain that proves this finding.
-                columns = tuple(hop.column_name for hop in path[: index + 1] if hop.column_name)
-                matches.append((step.urn, columns))
-                break
-
-    if not matches:
+    hit = marked_ancestor(conn, source_column_urn, labels, config)
+    if hit is None:
         return None
-    return min(matches, key=lambda match: (len(match[1]), match[0], match[1]))
+    label_urn, _marker, column_path = hit
+    return label_urn, column_path
 
 
 def leakage_findings(
@@ -251,7 +145,7 @@ def leakage_findings(
         return ()
 
     model = model_ref(conn, model_urn, properties=properties)
-    labels = _LabelIndex(conn, config)
+    labels = label_index(conn, config)
 
     findings: list[LeakageFinding] = []
     for feature_urn in properties.mlFeatures:

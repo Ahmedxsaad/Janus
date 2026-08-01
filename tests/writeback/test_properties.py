@@ -36,6 +36,9 @@ def test_the_shipped_declarations_parse_and_cover_the_planned_properties():
         # The columns a model currently leaks through, so a scan after the leak
         # was deleted outright can still close its incident (D-069, D-074).
         "modelguard.open_leak_columns",
+        # One capped entry per scan that scored the model, so the score has a
+        # direction: 82 means nothing without the 95 it was last week (D-081).
+        "modelguard.trust_history",
         # What `modelguard link` was told, kept so it can be replayed after an
         # ingestion run overwrites the model's own aspect (D-074).
         "modelguard.feature_table",

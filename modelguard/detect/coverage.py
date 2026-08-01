@@ -27,13 +27,16 @@ from datahub.metadata.schema_classes import MLModelPropertiesClass
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import freshness_signal
+from modelguard.detect.governance import model_input_datasets, sensitive_index
 from modelguard.detect.leakage import feature_source_column
 from modelguard.detect.schema_drift import schema_drift_candidate_resources
 from modelguard.models import (
+    DeprecatedInputFinding,
     Finding,
     FreshnessFinding,
     LeakageFinding,
     SchemaDriftFinding,
+    SensitiveSourceFinding,
 )
 
 
@@ -162,6 +165,90 @@ def _drift_gap(
     return None
 
 
+def _sensitive_gap(
+    conn: DataHubConnection,
+    config: ScanConfig,
+    model_urn: str,
+    properties: MLModelPropertiesClass | None,
+) -> Unevaluated | None:
+    """Whether the sensitive-source check had a classification to look for.
+
+    Two ways it cannot run, and they have opposite remedies. Either nobody told
+    ModelGuard what "sensitive" means in this organization, which is a
+    configuration gap, or the model declares no features, which is the same
+    missing join `link` fixes for leakage.
+    """
+
+    def gap(reason: str, remedy: str) -> Unevaluated:
+        return Unevaluated(
+            check="sensitive source", target_urn=model_urn, reason=reason, remedy=remedy
+        )
+
+    if not sensitive_index(conn, config).configured:
+        return gap(
+            "no classification is configured, so no column in this catalog counts as "
+            "sensitive and there is nothing for the check to look for",
+            "Set MODELGUARD_SENSITIVE_TERM_URNS or MODELGUARD_SENSITIVE_TAG_URNS to "
+            "the glossary terms or tags your organization already classifies columns "
+            "with (comma-separated URNs). Either one alone is enough.",
+        )
+
+    if properties is None or not properties.mlFeatures:
+        return gap(
+            "the model declares no features (mlModelProperties.mlFeatures is empty), "
+            "so there is no feature whose lineage could be traced back to a "
+            "classified column",
+            "Declare them with `modelguard link --model ... --features <table> "
+            "--label-column <column>`, from the script that trains the model.",
+        )
+
+    if not any(feature_source_column(conn, urn) is not None for urn in properties.mlFeatures):
+        return gap(
+            "no feature of this model has column-level lineage to a source column, so "
+            "there is no path to walk upstream",
+            "Ingest column-level lineage for the feature tables (dbt and Spark sources "
+            "emit it; the SDK's add_lineage accepts explicit column mappings).",
+        )
+
+    return None
+
+
+def _deprecated_input_gap(
+    conn: DataHubConnection,
+    model_urn: str,
+    properties: MLModelPropertiesClass | None,
+) -> Unevaluated | None:
+    """Whether the deprecation check had any training input to look at."""
+    if properties is None or not properties.trainingJobs:
+        return Unevaluated(
+            check="deprecated input",
+            target_urn=model_urn,
+            reason=(
+                "no training run is recorded on the model "
+                "(mlModelProperties.trainingJobs is empty), so nothing names the "
+                "tables this model was trained on"
+            ),
+            remedy=(
+                "Link the training run to the model in DataHub, then declare the "
+                "model's inputs with `modelguard link`."
+            ),
+        )
+
+    if not model_input_datasets(conn, model_urn):
+        return Unevaluated(
+            check="deprecated input",
+            target_urn=model_urn,
+            reason=(
+                "the model's training runs record no input datasets "
+                "(dataProcessInstanceInput is empty), so there is no table whose "
+                "deprecation could be read"
+            ),
+            remedy="Declare the model's inputs with `modelguard link`.",
+        )
+
+    return None
+
+
 def coverage_gaps(
     conn: DataHubConnection,
     config: ScanConfig,
@@ -194,18 +281,24 @@ def coverage_gaps(
         gaps.append(_freshness_gap(conn, config, table_urn))
 
     if model_urn is not None:
-        # One read, shared by both model checks, and only on the path where at
+        # One read, shared by every model check, and only on the path where at
         # least one of them found nothing.
         needs_leakage = LeakageFinding not in found
         needs_drift = SchemaDriftFinding not in found
+        needs_sensitive = SensitiveSourceFinding not in found
+        needs_deprecation = DeprecatedInputFinding not in found
         properties = (
             conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
-            if needs_leakage or needs_drift
+            if needs_leakage or needs_drift or needs_sensitive or needs_deprecation
             else None
         )
         if needs_leakage:
             gaps.append(_leakage_gap(conn, config, model_urn, properties))
         if needs_drift:
             gaps.append(_drift_gap(conn, config, model_urn, properties))
+        if needs_sensitive:
+            gaps.append(_sensitive_gap(conn, config, model_urn, properties))
+        if needs_deprecation:
+            gaps.append(_deprecated_input_gap(conn, model_urn, properties))
 
     return tuple(gap for gap in gaps if gap is not None)

@@ -37,17 +37,49 @@ to see any of it.
 Prefer to run it yourself? [Try it](#try-it) below is the same loop against a
 local Quickstart, and it is the path the rest of this README documents.
 
+## The one thing nothing else does, measured
+
+DataHub holds two graphs that no other catalog holds together: column-level
+lineage across the warehouse, and ML metadata for the models. Nothing joins
+them, so a model is not connected to a single column and a data failure cannot
+be traced to the model it breaks. **ModelGuard writes that join** (`modelguard
+link`) and then reads across it, which is what makes every detector below
+possible.
+
+That is a claim, so here it is as a number. The same graph, the same ground
+truth, three ways of reading it, scored per **feature**: every approach can tell
+that a leaking model leaks, and the question that separates them is *which* of
+its features leaks, which is what somebody has to go and fix.
+
+| Approach | Precision | Recall | Still alerting after the fix |
+|---|---|---|---|
+| ModelGuard (column-level lineage) | 1.00 | 1.00 | 0 features |
+| Table-level lineage | 0.25 | 1.00 | 2 features |
+| Table quality checks, no lineage | - | 0.00 | 0 features |
+
+Note the middle row's **perfect recall**: table-level lineage does catch the leak. It
+just cannot say which of the two features carries it, because both descend from the same
+labelled table. And having never seen the column edge, it cannot see the column edge
+being removed either, so it keeps alerting on a graph somebody has already fixed. That
+last column is what gets a reliability tool switched off.
+
+These are implementations of an *approach*, handed ModelGuard's own label index so
+nothing is won by starting better informed; no Great Expectations or Evidently process
+was run. [RESULTS.md](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md) says so, and states what is still not
+measured, alongside a scale table for a whole-catalog sweep.
+
 ## Documentation
 
 | Doc | What it answers |
 |---|---|
-| [docs/plan/01-strategy-modelguard.md](docs/plan/01-strategy-modelguard.md) | Why this project, what it solves |
-| [docs/plan/architecture.md](docs/plan/architecture.md) | How it works: layers, flows, diagrams |
-| [docs/plan/02-implementation-plan.md](docs/plan/02-implementation-plan.md) | The build: phases, APIs, schedule |
-| [docs/plan/03-production-hardening.md](docs/plan/03-production-hardening.md) | Benchmark, scaling, security model |
-| [docs/plan/04-improvements.md](docs/plan/04-improvements.md) | Proposed improvements, pending decisions |
-| [docs/decision-log.md](docs/decision-log.md) | Decisions made, options, why, results |
-| [docs/hackathon-specs/](docs/hackathon-specs/) | Official hackathon rules and requirements |
+| [docs/plan/01-strategy-modelguard.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/01-strategy-modelguard.md) | Why this project, what it solves |
+| [docs/plan/architecture.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/architecture.md) | How it works: layers, flows, diagrams |
+| [docs/plan/02-implementation-plan.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/02-implementation-plan.md) | The build: phases, APIs, schedule |
+| [docs/plan/03-production-hardening.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/03-production-hardening.md) | Benchmark, scaling, security model |
+| [docs/plan/04-improvements.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/04-improvements.md) | Proposed improvements, pending decisions |
+| [docs/plan/06-judge-review-and-improvements.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/06-judge-review-and-improvements.md) | Review against the judging criteria, and what to land before the PyPI tag |
+| [docs/decision-log.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/decision-log.md) | Decisions made, options, why, results |
+| [docs/hackathon-specs/](https://github.com/Ahmedxsaad/DataHub/tree/main/docs/hackathon-specs) | Official hackathon rules and requirements |
 
 ## Repository layout
 
@@ -125,10 +157,47 @@ run; its dbt, Spark and warehouse sources record excellent column-level lineage
 between tables. **Nothing joins the two**, so out of the box a model is not
 connected to a single column, and a detector that walks from a feature to its
 source column has nowhere to start. Verified on a real stack, not assumed: see
-[examples/real-project/](examples/real-project/).
+[examples/real-project/](https://github.com/Ahmedxsaad/DataHub/tree/main/examples/real-project).
 
-`modelguard link` is that join, and it is one call from the script that trains
-the model:
+`modelguard link` is that join. Before typing it out, ask ModelGuard to work it
+out for you:
+
+```bash
+modelguard link --model churn_model --infer
+```
+
+It reads the model's training run, the datasets that run recorded as inputs, and
+the schema of the one it found, and proposes the exact command a person would
+have typed, with one line per decision saying which aspect it came from and
+whether it is a fact or a guess:
+
+```
+Inferred from the graph:
+  feature table: the only input recorded on churn_model's training run(s), from dataProcessInstanceInput
+  label column: churned matches a known label name (MODELGUARD_LABEL_COLUMN_NAMES). This one is a guess: check it
+  excluded columns: customer_id, from the schema's own key declarations (primaryKeys, isPartOfKey, isPartitioningKey) and the label itself
+
+Proposed:
+modelguard link \
+  --model churn_model \
+  --features analytics.customer_features \
+  --label-column churned \
+  --exclude customer_id
+
+Declare this? [Y/n]
+```
+
+There is no LLM in that, and nothing is written until you answer. A column that
+already carries the label term was *declared* rather than guessed, and the
+proposal says so; where nothing in the graph names a label at all, it refuses to
+invent one and asks for `--label-column`, because a wrong label makes every
+leakage verdict wrong in both directions. Exclusions come only from the
+warehouse's own key declarations, never from column names that look like
+identifiers: `customer_id` is usually a join key and `score_id` is usually a
+feature, and no rule over names tells them apart.
+
+Prefer to type it, or the graph is too quiet to infer from? It is one call from
+the script that trains the model:
 
 ```bash
 modelguard link \
@@ -147,7 +216,7 @@ demo does, on your data.
 
 Run `link` again after each ingestion of the model. DataHub's mlflow source
 upserts the whole `mlModelProperties` aspect and drops the features (reported as
-[feedback #14](docs/most-valuable-feedback.md)); the arguments are recorded on the
+[feedback #14](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/most-valuable-feedback.md)); the arguments are recorded on the
 model in an aspect ingestion does not touch, so the replay needs no arguments at
 all, and one command covers every model at once:
 
@@ -170,9 +239,55 @@ check, the missing metadata, and how to supply it:
 | Freshness + blast radius | the `operation` aspect on the table | dbt, Airflow, Spark, or the SDK's `report_operation` |
 | Target leakage | features with source columns, plus a column carrying the label term | `modelguard link` |
 | Schema drift | a training-time schema snapshot on the training run | `modelguard link` |
+| Sensitive source | features with source columns, plus `MODELGUARD_SENSITIVE_TAG_URNS` or `..._TERM_URNS` | your classifier, or a human in the UI |
+| Deprecated input | the model's training run, and the `deprecation` aspect | the table's own owners |
 
 Already have a glossary term for labels? Point `MODELGUARD_LABEL_TERM_URN` at it
 in `.env` and the detector honors yours instead of creating one.
+
+### The two checks that read the governance graph
+
+The first three checks ask whether a model's data is *correct*. The last two ask
+something the organization has already answered elsewhere in DataHub, and that
+nothing today joins back to the model.
+
+**Sensitive source.** Somebody classified a column as PII, PHI, or restricted.
+Three joins downstream, a feature derives from it, and a live model trains on
+that feature. Nothing is broken and the model works; what is wrong is what it was
+allowed to see, and the derivation is far enough upstream that neither team would
+notice. It is the leakage walk with a different mark, so it produces the same
+auditable proof:
+
+> `credit_risk_v3` feature `applicant_income` derives, through
+> `applicant_income <- income`, from `loans_raw.income`, classified
+> `modelguard.sensitive`.
+
+Point it at your own taxonomy, comma-separated, either surface or both:
+
+```bash
+MODELGUARD_SENSITIVE_TAG_URNS=urn:li:tag:PII,urn:li:tag:Confidential
+MODELGUARD_SENSITIVE_TERM_URNS=urn:li:glossaryTerm:Classification.Restricted
+```
+
+There is deliberately no default. A guessed classification URN either matches
+nothing or matches a term that means something else in your catalog, and a false
+incident about a compliance exposure is the worst kind to be wrong about. Leave
+both empty and every scan reports the check as **not evaluated**, never as clean.
+
+**Deprecated input.** A table's owners marked it deprecated, with a note and
+sometimes a decommission date. They have no way to know a model depends on it,
+and the model's team has no way to know the flag was set. This needs no
+configuration: `deprecation` is DataHub's own aspect with one meaning everywhere.
+It is never more than `medium` severity, because it is a deadline rather than a
+defect.
+
+Both are reversible scenarios, so you can watch them fire and clear:
+
+```bash
+modelguard-scenario --scenario sensitive-source
+modelguard scan --model credit_risk_v3
+modelguard-scenario --scenario sensitive-source --revert
+```
 
 ## Block a bad model before it merges
 
@@ -204,6 +319,48 @@ In a workflow, via the bundled action:
     gms-token: ${{ secrets.DATAHUB_GMS_TOKEN }}
 ```
 
+The verdict lands on the run's own summary page, not just in the log: findings,
+severities, trust scores, and the checks that could not run, as a table the
+reviewer sees without opening anything. That needs no input and no token, because
+GitHub already gives every step a `GITHUB_STEP_SUMMARY` file to append markdown
+to; outside Actions the variable is unset and nothing is written.
+
+Routing findings somewhere ModelGuard does not know about? Both `scan` and `gate`
+take `--format json` and put the whole report (evidence, models at risk, trust
+deductions, the gate's violations) on stdout as one parseable document, with
+progress lines moved to stderr so the stream stays clean.
+
+## Call it from your training script
+
+The command line is the main interface, but there is one place ModelGuard belongs
+inside your code: the script that trains the model. That is the only moment when
+the feature table, the label column, and the training-time schema are all known,
+and shelling out to a CLI from inside it is a worse interface than a function
+call.
+
+```python
+from modelguard import link_model, scan_model
+
+link_model(
+    model="churn_model",
+    features="analytics.customer_features",
+    label_column="churned",
+    exclude=["customer_id"],
+)
+
+report = scan_model(model="churn_model", dry_run=True)
+if not report.clean:
+    raise SystemExit(f"{len(report.writes)} finding(s) before this model ships")
+```
+
+Two functions and their result types, and deliberately no more: those names are
+the supported surface a script may pin to. They are thin wrappers over exactly
+the functions `modelguard link` and `modelguard scan` call, so a finding found
+here is found identically at the command line. Both read `.env` the same way the
+CLI does; pass `conn=` to reuse one connection across many models. Everything
+else in the package is importable and documented, but its shape is free to
+change, so import a submodule knowingly when you need to go deeper.
+
 ## Ask it, don't type it
 
 ```bash
@@ -218,6 +375,16 @@ in dry-run with no way to turn that off: the model on the other end of an MCP cl
 is not ModelGuard's own narrator, it is outside this project's control entirely, so
 it gets to ask what is wrong and nothing more.
 
+It is meant to run *beside* DataHub's own
+[`mcp-server-datahub`](https://github.com/acryldata/mcp-server-datahub), not instead
+of it. That server answers what the catalog contains: search, lineage, schemas,
+ownership, the open-ended questions where a model's job is to explore. ModelGuard
+answers the three that have to be reproducible, with the column chain as evidence
+and no LLM anywhere in the decision. Configuring both, and the argument for keeping
+detection deterministic rather than asking a capable model to eyeball a lineage
+graph, is in
+[skill/datahub-ml-guard/references/mcp-composition.md](https://github.com/Ahmedxsaad/DataHub/blob/main/skill/datahub-ml-guard/references/mcp-composition.md).
+
 ## Run it without a Python install
 
 ```bash
@@ -228,7 +395,7 @@ docker compose run --rm modelguard gate --model credit_risk_v3 --block-at-or-abo
 docker compose up modelguard-mcp       # long-running, stdio
 ```
 
-[`docker-compose.yml`](docker-compose.yml) adds ModelGuard to the Docker network
+[`docker-compose.yml`](https://github.com/Ahmedxsaad/DataHub/blob/main/docker-compose.yml) adds ModelGuard to the Docker network
 `datahub docker quickstart` already creates, rather than reimplementing DataHub's own
 multi-container stack (GMS, MySQL, Kafka, OpenSearch, frontend) inside this repo:
 composing what is already shipped, not rebuilding it. `docker compose up` with no
@@ -240,7 +407,7 @@ The project is named `modelguard` explicitly in that file, not left to compose's
 directory-name default: DataHub's own Quickstart compose defaults to the same
 project name (`datahub`), and sharing it would make an ordinary `docker compose
 down --remove-orphans` here treat the entire Quickstart as orphaned containers of
-this project and stop it. [`Dockerfile`](Dockerfile) builds a non-root image (pinned
+this project and stop it. [`Dockerfile`](https://github.com/Ahmedxsaad/DataHub/blob/main/Dockerfile) builds a non-root image (pinned
 to the exact patch version this project develops against, `python:3.11.14-slim`)
 with all four console scripts installed; `docker build --build-arg
 MODELGUARD_EXTRAS=agent,mcp,anthropic` (or `openai`/`google`) bakes an LLM provider
@@ -261,19 +428,19 @@ helm install my-watch charts/modelguard-watch \
 
 `.github/workflows/publish-image.yml` builds and pushes that image to GHCR on
 every version tag, so the chart has somewhere real to pull from rather than a
-placeholder. See [`charts/modelguard-watch/README.md`](charts/modelguard-watch/README.md)
+placeholder. See [`charts/modelguard-watch/README.md`](https://github.com/Ahmedxsaad/DataHub/blob/main/charts/modelguard-watch/README.md)
 for secret handling (`existingSecret` is the path meant for real use) and what
 the chart deliberately leaves out (autoscaling, probes that would check nothing
 real, an Ingress nothing needs).
 
 ## More sample output
 
-Sample outputs, generated by a real run, are in [examples/](examples/).
+Sample outputs, generated by a real run, are in [examples/](https://github.com/Ahmedxsaad/DataHub/tree/main/examples).
 To verify the whole loop against a live DataHub: `pytest -m integration`.
 
 ## Is it any good?
 
-Measured, not asserted. [ModelGuard-Bench](benchmarks/RESULTS.md) scores the detectors
+Measured, not asserted. [ModelGuard-Bench](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md) scores the detectors
 against a live DataHub (never against fixtures, which would only measure the fixtures):
 
 ```bash
@@ -286,30 +453,9 @@ obvious 30-hour failure, because that is where a detector actually goes wrong: c
 one comparison from `>` to `>=` is caught by the trial sitting exactly on the SLA, and
 scores a clean 1.00 under the demo scenario alone.
 
-### Why column-level lineage, measured
-
-The claim everywhere else in these docs is that only cross-boundary, *column-level*
-lineage both roots a failure to the exact upstream column and names the model at risk.
-Here it is a number. The same graph, the same ground truth, scored per **feature**,
-because every approach can tell that a leaking model leaks; the question that separates
-them is *which* of its features leaks, which is what somebody has to go and fix.
-
-| Approach | Precision | Recall | Still alerting after the fix |
-|---|---|---|---|
-| ModelGuard (column-level lineage) | 1.00 | 1.00 | 0 features |
-| Table-level lineage | 0.25 | 1.00 | 2 features |
-| Table quality checks, no lineage | - | 0.00 | 0 features |
-
-Note the middle row's **perfect recall**: table-level lineage does catch the leak. It
-just cannot say which of the two features carries it, because both descend from the same
-labelled table. And having never seen the column edge, it cannot see the column edge
-being removed either, so it keeps alerting on a graph somebody has already fixed. That
-last column is what gets a reliability tool switched off.
-
-These are implementations of an *approach*, handed ModelGuard's own label index so
-nothing is won by starting better informed; no Great Expectations or Evidently process
-was run. [RESULTS.md](benchmarks/RESULTS.md) says so, and states what is still not
-measured: no scale test, and no scoring of narrative quality.
+The per-feature comparison against table-level lineage is
+[above](#the-one-thing-nothing-else-does-measured); the full numbers, and what is
+still not measured, are in [RESULTS.md](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md).
 
 ## Security and privacy
 
@@ -373,7 +519,7 @@ result rather than a heuristic somebody liked:
 | The prompt-injection and sensitive-disclosure threat model | OWASP Top 10 for LLM Applications (2025), LLM01 and LLM06 |
 
 Full reading list with what each one changed here:
-[docs/plan/resources.md](docs/plan/resources.md).
+[docs/plan/resources.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/resources.md).
 
 ## OSS contributions
 
@@ -381,12 +527,12 @@ Built alongside ModelGuard and offered back to the DataHub ecosystem:
 
 | Contribution | What it is |
 |---|---|
-| [skill/datahub-ml-guard/](skill/datahub-ml-guard/) | The `datahub-ml-guard` skill: traces model features back to source columns to catch leakage, drift, and blast radius, and guides the write-back. Unlike the several ML-reliability skills already submitted to the registry, it is a thin wrapper around a real, tested, deterministic detection engine (this repo), not an LLM asked to eyeball a lineage graph. Destined for [datahub-project/datahub-skills](https://github.com/datahub-project/datahub-skills). |
-| [mcp_ext/raise_incident_tool.py](mcp_ext/raise_incident_tool.py) | A thin `raise_incident` mutation tool for [acryldata/mcp-server-datahub](https://github.com/acryldata/mcp-server-datahub), which today has no incident-write tool. Ships with [an RFC](mcp_ext/RFC-ml-incidents.md) for first-class ML incidents. |
-| [docs/most-valuable-feedback.md](docs/most-valuable-feedback.md) | Fourteen concrete, reproducible bugs and doc gaps found while building, each with a repro and a workaround. |
+| [skill/datahub-ml-guard/](https://github.com/Ahmedxsaad/DataHub/tree/main/skill/datahub-ml-guard) | The `datahub-ml-guard` skill: traces model features back to source columns to catch leakage, drift, and blast radius, and guides the write-back. Unlike the several ML-reliability skills already submitted to the registry, it is a thin wrapper around a real, tested, deterministic detection engine (this repo), not an LLM asked to eyeball a lineage graph. Destined for [datahub-project/datahub-skills](https://github.com/datahub-project/datahub-skills). |
+| [mcp_ext/raise_incident_tool.py](https://github.com/Ahmedxsaad/DataHub/blob/main/mcp_ext/raise_incident_tool.py) | A thin `raise_incident` mutation tool for [acryldata/mcp-server-datahub](https://github.com/acryldata/mcp-server-datahub), which today has no incident-write tool. Ships with [an RFC](https://github.com/Ahmedxsaad/DataHub/blob/main/mcp_ext/RFC-ml-incidents.md) for first-class ML incidents. |
+| [docs/most-valuable-feedback.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/most-valuable-feedback.md) | Fourteen concrete, reproducible bugs and doc gaps found while building, each with a repro and a workaround. |
 
 ## Contributing
 
 Team conventions (commit format, code rules, formatting rules) live in
-[CLAUDE.md](CLAUDE.md). Each directory has its own CLAUDE.md with local rules.
-License: [Apache 2.0](LICENSE).
+[CLAUDE.md](https://github.com/Ahmedxsaad/DataHub/blob/main/CLAUDE.md). Each directory has its own CLAUDE.md with local rules.
+License: [Apache 2.0](https://github.com/Ahmedxsaad/DataHub/blob/main/LICENSE).

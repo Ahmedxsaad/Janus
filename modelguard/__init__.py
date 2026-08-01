@@ -12,7 +12,37 @@ Package layout:
     writeback/  idempotent DataHub mutations
     agent/      LangGraph orchestration with a human approval gate
 
+Using it from Python
+--------------------
+The command line is the main interface, but the one place ModelGuard belongs
+*inside* somebody's code is the script that trains the model, because that is the
+only moment when the feature table, the label column, and the training-time
+schema are all known::
+
+    from modelguard import link_model, scan_model
+
+    link_model(model="churn_model", features="analytics.customer_features",
+               label_column="churned", exclude=["customer_id"])
+    report = scan_model(model="churn_model", dry_run=True)
+
+Those two names, plus their result types, are the supported public surface: they
+are what a script may pin to, and they are thin wrappers over exactly the
+functions the CLI calls (:mod:`modelguard.api`). Everything else in this package
+is importable and documented, but its shape is free to change; import a submodule
+directly when you need more, knowingly.
+
 See docs/plan/architecture.md for the full design.
 """
 
+from modelguard.api import LinkError, LinkResult, ScanReport, link_model, scan_model
+
 __version__ = "0.1.0"
+
+__all__ = [
+    "LinkError",
+    "LinkResult",
+    "ScanReport",
+    "__version__",
+    "link_model",
+    "scan_model",
+]

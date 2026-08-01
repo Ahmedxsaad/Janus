@@ -36,7 +36,7 @@ from __future__ import annotations
 import argparse
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -48,14 +48,17 @@ from benchmarks.inject import (
     build_trials,
     restore_baseline,
 )
+from benchmarks.scale import ScaleMeasurement, measure_scale
 from modelguard.agent.pipeline import run_scan
 from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import blast_radius
+from modelguard.detect.governance import deprecated_input_findings, sensitive_source_findings
 from modelguard.detect.leakage import leakage_findings
 from modelguard.detect.schema_drift import schema_drift_findings
 from modelguard.models import FindingType
 from modelguard.seed import graph_spec as spec
+from modelguard.seed import scenarios
 from modelguard.seed.scenarios import plant_stale_source
 from modelguard.writeback.incidents import attached_incident_urns
 from modelguard.writeback.properties import TRUST_BAND, TRUST_SCORE, read_properties
@@ -96,6 +99,13 @@ def _observe(conn: DataHubConnection, config: ScanConfig, trial: Trial, now_ms: 
         return bool(leakage_findings(conn, str(spec.model_urn()), config))
     if trial.family is FindingType.INPUT_SCHEMA_DRIFT:
         return bool(schema_drift_findings(conn, str(spec.model_urn()), config))
+    if trial.family is FindingType.SENSITIVE_SOURCE:
+        return bool(sensitive_source_findings(conn, str(spec.model_urn()), config))
+    if trial.family is FindingType.DEPRECATED_INPUT:
+        return bool(deprecated_input_findings(conn, str(spec.model_urn()), config))
+    # Raises rather than returning False: a finding type nobody registered would
+    # otherwise be scored as a detector that never fires, which is a perfect
+    # false-negative rate reported as a measurement.
     raise ValueError(f"no detector registered for {trial.family}")
 
 
@@ -310,7 +320,30 @@ _DETECTOR_LABELS = {
     FindingType.UPSTREAM_FRESHNESS: "Upstream freshness (P2)",
     FindingType.TARGET_LEAKAGE: "Target leakage (P1)",
     FindingType.INPUT_SCHEMA_DRIFT: "Input schema drift (P3)",
+    FindingType.SENSITIVE_SOURCE: "Sensitive source (P5)",
+    FindingType.DEPRECATED_INPUT: "Deprecated input (P6)",
 }
+
+
+def _scale_disclosure(scale: Sequence[ScaleMeasurement]) -> list[str]:
+    """Return the "what this does not measure" lines about scale.
+
+    Follows what was actually run rather than carrying a fixed caveat: a report
+    that still says "no scale test" beside a scale table is a report nobody
+    should trust about anything else either.
+    """
+    if not scale:
+        return [
+            "- One seeded graph, one model. These are correctness and boundary",
+            "  measurements, not a scale test; throughput and a 10k/100k-entity",
+            "  curve are not run here.",
+        ]
+    return [
+        "- One seeded graph for the detection numbers, which are correctness and",
+        f"  boundary measurements. The scale table sweeps up to {max(m.models for m in scale)}",
+        "  models on one machine; a 10k/100k-entity curve, a contended instance, and",
+        "  a catalog whose models do not share one feature table are not measured.",
+    ]
 
 
 def render_results(
@@ -321,6 +354,7 @@ def render_results(
     *,
     generated_at: datetime,
     approaches: Sequence[ApproachScore] = (),
+    scale: Sequence[ScaleMeasurement] = (),
 ) -> str:
     """Render RESULTS.md. Pure: every number comes from the arguments."""
     grouped = _by_family(outcomes)
@@ -337,6 +371,8 @@ def render_results(
         f"- Run at: {generated_at.strftime('%Y-%m-%d %H:%M:%S %Z')}",
         f"- Freshness SLA under test: {config.freshness_sla_hours:g} hours",
         f"- Blast-radius hop cap: {config.max_hops}; leakage hop cap: {config.leakage_max_hops}",
+        f"- Sensitive classifications under test: "
+        f"{', '.join(config.sensitive_tag_urns + config.sensitive_term_urns) or 'none'}",
         f"- Trials: {len(outcomes)} ({len(errors)} unscoreable)",
         "",
         "## Detection",
@@ -497,6 +533,42 @@ def render_results(
         f"- Trust band written to the model: {writeback.trust_band_written}",
     ]
 
+    if scale:
+        lines += [
+            "",
+            "## Scale",
+            "",
+            "`modelguard scan --all-models` runs one independent scan per model, so the",
+            "question is whether that stays linear. Each replica is a real mlModel carrying",
+            "the seeded model's features and training run, so every detector does its full",
+            "job on it; the replicas share one feature table, because the question is what a",
+            "sweep costs and duplicating the warehouse side would measure the seeder. Scans",
+            "are dry-run: this is the read path.",
+            "",
+            "Graph reads are counted at the connection, and they are what the wall clock is",
+            "made of: a per-model figure that stays flat as the catalog grows is what says",
+            "the cost is the catalog's size and not the traversal's shape.",
+            "",
+            "| Models | Total | Per model | Graph reads | Reads per model |",
+            "|---|---|---|---|---|",
+        ]
+        for measurement in scale:
+            lines.append(
+                f"| {measurement.models} "
+                f"| {metrics.format_seconds(measurement.seconds)} "
+                f"| {metrics.format_seconds(measurement.seconds_per_model)} "
+                f"| {measurement.graph_reads} "
+                f"| {measurement.reads_per_model:.1f} |"
+            )
+        lines += [
+            "",
+            "Measured against a local Docker Quickstart on one developer machine, which is",
+            "the slowest realistic deployment and the only one every reader can reproduce.",
+            "No target is scored here: there is no published number for how fast a metadata",
+            "sweep should be, and inventing one to pass it would be worse than the plain",
+            "measurement.",
+        ]
+
     if errors:
         lines += [
             "",
@@ -515,8 +587,7 @@ def render_results(
         "",
         "Stated so the numbers are not read as more than they are:",
         "",
-        "- One seeded graph, one model. These are correctness and boundary measurements,",
-        "  not a scale test; throughput and a 10k/100k-entity curve are not run here.",
+        *_scale_disclosure(scale),
         "- No Great Expectations, Deequ, Evidently or NannyML *process* was run. The",
         "  approaches compared above are implementations written here, so the table",
         "  measures what an approach can see, never a named product's behaviour.",
@@ -543,7 +614,13 @@ def main() -> None:
     except DataHubConnectionError as exc:
         raise SystemExit(f"{exc}") from exc
 
-    config = ScanConfig.from_env()
+    # The sensitive-source detector is configuration-gated by design: with no
+    # classification named it does not run, and a scan reports it as not
+    # evaluated (D-079). That is the right default for a user and the wrong one
+    # for a benchmark, which would score a detector it never let run, so the
+    # classification the scenario plants is supplied here explicitly. The report
+    # says so, and every other value still comes from the environment.
+    config = replace(ScanConfig.from_env(), sensitive_tag_urns=(scenarios.SENSITIVE_TAG_URN,))
     trials = build_trials(config)
 
     print(f"ModelGuard-Bench: {len(trials)} trials against {conn.gms_url}\n")
@@ -558,6 +635,9 @@ def main() -> None:
     print("Comparing against approaches without column-level lineage...")
     approaches = measure_leakage_approaches(conn, config)
 
+    print("Scale: replicating models and sweeping the catalog...")
+    scale = measure_scale(conn, config)
+
     print("Restoring the seeded baseline...")
     restore_baseline(conn)
 
@@ -568,6 +648,7 @@ def main() -> None:
         config,
         generated_at=datetime.now(UTC),
         approaches=approaches,
+        scale=scale,
     )
     args.out.write_text(report)
     print(f"\nWrote {args.out}")

@@ -56,8 +56,10 @@ from modelguard.agent.pipeline import (
     TrustWrite,
     _detect,
     _persist_trust,
+    _project_trust_history,
     _reconcile_stale_findings,
     _trust_scores,
+    _with_previous_scores,
     _write_back,
     new_run_id,
     written_assertion_yaml,
@@ -211,11 +213,16 @@ def build_scan_graph(
         whose problem is fixed still has an incident, a tag, and a trust score to
         clear (D-070).
         """
+        trust_history = _project_trust_history(conn, artifacts.trust, run_id)
         writes = tuple(
-            _write_back(conn, finding, narrative, config, run_id, observed_at)
+            _write_back(conn, finding, narrative, config, run_id, observed_at, trust_history)
             for finding, narrative in zip(artifacts.findings, artifacts.narratives, strict=True)
         )
-        _persist_trust(conn, artifacts.trust)
+        # Assigned on the holder, not rebound: `artifacts` is the closure's
+        # in-process carrier, and rebinding the name here would make it a local
+        # and drop everything the earlier nodes put on it.
+        artifacts.trust = _with_previous_scores(artifacts.trust, trust_history)
+        _persist_trust(conn, artifacts.trust, trust_history)
         _reconcile_stale_findings(
             conn,
             config,

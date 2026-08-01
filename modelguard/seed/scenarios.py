@@ -30,15 +30,19 @@ from dataclasses import dataclass
 
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.metadata.schema_classes import (
+    DeprecationClass,
     FineGrainedLineageClass,
+    GlobalTagsClass,
     OperationClass,
     OperationTypeClass,
+    TagAssociationClass,
 )
 from datahub.sdk.dataset import Dataset, parse_cll_mapping
 from datahub.specific.dataset import DatasetPatchBuilder
 
 from modelguard.client import DataHubConnection
 from modelguard.seed import graph_spec as spec
+from modelguard.writeback.labels import ensure_tag
 
 #: Names the scenario in the operation aspect's custom properties, so a reader of
 #: the graph can tell a planted failure from a real one.
@@ -57,6 +61,41 @@ SCHEMA_DRIFT = "input-schema-drift"
 #: it (D-032), so before this scenario existed the flagship detector had no
 #: negative control at all: no way to show the graph going clean.
 TARGET_LEAKAGE = "target-leakage"
+
+#: The governance scenarios. A classified column upstream of a feature, and a
+#: training input its owners have marked deprecated. Both are facts an
+#: organization records about its own data and that nothing today joins back to
+#: the models trained on it.
+SENSITIVE_SOURCE = "sensitive-source"
+DEPRECATED_INPUT = "deprecated-input"
+
+#: The tag the sensitive-source scenario applies to the label's own source table
+#: column. A tag rather than a glossary term on purpose: the leakage detector
+#: already exercises the term route on this same column, so using a tag here
+#: means the benchmark covers both classification surfaces rather than one twice.
+SENSITIVE_TAG_URN = "urn:li:tag:modelguard.sensitive"
+SENSITIVE_TAG_NAME = "modelguard.sensitive"
+SENSITIVE_TAG_DESCRIPTION = (
+    "Demo classification: a column whose contents a model must not learn from. "
+    "Planted by modelguard-scenario; stands in for whatever PII or restricted "
+    "tag an organization already uses."
+)
+
+#: The column the sensitive scenario classifies: the source table's self-reported
+#: income. Chosen because it is upstream of an actual model *feature*
+#: (``applicant_income``) through the seeded column lineage, which is what makes
+#: the walk reach it. Classifying ``applicant_id`` instead would look more
+#: obviously sensitive and prove nothing: it feeds the feature table's primary
+#: key, not a feature, so no model consumes it and no walk would ever start there.
+SENSITIVE_SOURCE_COLUMN = "income"
+
+#: What the deprecation scenario records, quoted back in the finding. It is set
+#: on the feature table, because that is the dataset the seeded training run
+#: records as its input, and the deprecation detector reads a model's inputs.
+DEPRECATION_NOTE = (
+    "Planted by modelguard-scenario. Superseded by the v2 feature pipeline; "
+    "this table stops being written after the migration."
+)
 
 #: The drift the demo plants on the feature table, chosen to leave the columns the
 #: leakage traversal depends on (applicant_id, prior_default_flag) untouched, so
@@ -377,6 +416,105 @@ def revert_leakage(conn: DataHubConnection) -> LeakageResult:
     )
 
 
+@dataclass(frozen=True)
+class GovernanceResult:
+    """What a governance scenario declared, so a caller can report or undo it."""
+
+    name: str
+    resource_urn: str
+    """The column or dataset the declaration was written on."""
+    declared: bool
+    """Whether the declaration is currently in place. False after a revert."""
+    detail: str
+    """The classification or note now recorded, empty after a revert."""
+
+
+def _set_sensitive_tag(conn: DataHubConnection, *, tagged: bool) -> GovernanceResult:
+    """Apply or remove the demo classification on the source table's income column.
+
+    Written on the ``schemaField`` entity's own ``globalTags``, which is the route
+    an ingestion source or a classifier takes. The detector also reads the parent
+    dataset's ``editableSchemaMetadata``, which is the route the UI takes; either
+    is enough, and using the schemaField here keeps the scenario from colliding
+    with anything a human does in the UI while the demo runs.
+
+    Reverting writes the aspect with an empty tag list rather than deleting it:
+    the same shape as the leakage revert, and positive evidence that the
+    classification is gone rather than an absence a reader has to interpret.
+    """
+    column_urn = str(spec.source_column_urn(SENSITIVE_SOURCE_COLUMN))
+    tags = [TagAssociationClass(tag=SENSITIVE_TAG_URN)] if tagged else []
+    conn.graph.emit(
+        MetadataChangeProposalWrapper(entityUrn=column_urn, aspect=GlobalTagsClass(tags=tags))
+    )
+    return GovernanceResult(
+        name=SENSITIVE_SOURCE,
+        resource_urn=column_urn,
+        declared=tagged,
+        detail=SENSITIVE_TAG_URN if tagged else "",
+    )
+
+
+def plant_sensitive_source(conn: DataHubConnection) -> GovernanceResult:
+    """Classify the column a model feature derives from as sensitive.
+
+    The demo's governance failure: nothing about the model changes, and nothing
+    breaks. Somebody classifies a column three hops upstream, and a feature the
+    live model trains on turns out to descend from it.
+
+    The tag itself is created first, so the classification a judge clicks into in
+    the UI has a name and a description rather than being a bare URN.
+    """
+    ensure_tag(conn, SENSITIVE_TAG_NAME, SENSITIVE_TAG_DESCRIPTION)
+    return _set_sensitive_tag(conn, tagged=True)
+
+
+def revert_sensitive_source(conn: DataHubConnection) -> GovernanceResult:
+    """Remove the classification, leaving the column, the feature and the model.
+
+    The negative control: the derivation still exists and the model still
+    consumes the feature. Only the organization's declaration is gone, so a scan
+    going quiet isolates the one signal this detector keys on.
+    """
+    return _set_sensitive_tag(conn, tagged=False)
+
+
+def _set_deprecation(conn: DataHubConnection, *, deprecated: bool) -> GovernanceResult:
+    """Mark the model's training input deprecated, or lift the deprecation.
+
+    Lifting writes ``deprecated=False`` rather than removing the aspect, because
+    that is how DataHub itself records a deprecation being withdrawn, and it is
+    the state the detector is written to treat as healthy.
+    """
+    dataset_urn = str(spec.feature_table_dataset_urn())
+    conn.graph.emit(
+        MetadataChangeProposalWrapper(
+            entityUrn=dataset_urn,
+            aspect=DeprecationClass(
+                deprecated=deprecated,
+                note=DEPRECATION_NOTE if deprecated else "",
+                actor=SCENARIO_ACTOR,
+            ),
+        )
+    )
+    return GovernanceResult(
+        name=DEPRECATED_INPUT,
+        resource_urn=dataset_urn,
+        declared=deprecated,
+        detail=DEPRECATION_NOTE if deprecated else "",
+    )
+
+
+def plant_deprecated_input(conn: DataHubConnection) -> GovernanceResult:
+    """Mark the table the model trains on as deprecated by its owners."""
+    return _set_deprecation(conn, deprecated=True)
+
+
+def revert_deprecated_input(conn: DataHubConnection) -> GovernanceResult:
+    """Withdraw the deprecation, the way a team that changed its mind would."""
+    return _set_deprecation(conn, deprecated=False)
+
+
 def _drifted_columns() -> tuple[spec.Column, ...]:
     """Return the feature table's columns after the planted drift.
 
@@ -415,7 +553,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Plant or revert a failure ModelGuard detects.")
     parser.add_argument(
         "--scenario",
-        choices=[STALE_SOURCE, SCHEMA_DRIFT, TARGET_LEAKAGE],
+        choices=[STALE_SOURCE, SCHEMA_DRIFT, TARGET_LEAKAGE, SENSITIVE_SOURCE, DEPRECATED_INPUT],
         default=STALE_SOURCE,
         help=f"Which failure to plant (default: {STALE_SOURCE}).",
     )
@@ -455,6 +593,33 @@ def main() -> None:
                 f"{', '.join(leak.upstream_columns)}, which is the label."
             )
         console.print(_INDEXING_NOTE)
+        return
+
+    if args.scenario in (SENSITIVE_SOURCE, DEPRECATED_INPUT):
+        if args.scenario == SENSITIVE_SOURCE:
+            declared = (
+                revert_sensitive_source(conn) if args.revert else plant_sensitive_source(conn)
+            )
+        else:
+            declared = (
+                revert_deprecated_input(conn) if args.revert else plant_deprecated_input(conn)
+            )
+
+        verb = "Reverted" if args.revert else "Planted"
+        color = "green" if args.revert else "yellow"
+        console.print(f"[{color}]{verb}[/{color}] {declared.name} on {declared.resource_urn}")
+        console.print(
+            f"Now declared: {declared.detail}"
+            if declared.declared
+            else "The declaration is withdrawn; a scan of the model finds nothing."
+        )
+        if declared.name == SENSITIVE_SOURCE:
+            console.print(
+                "[dim]The sensitive-source check only runs once a classification is "
+                f"configured. Set MODELGUARD_SENSITIVE_TAG_URNS={SENSITIVE_TAG_URN} "
+                "in .env, or a scan reports the check as not evaluated.[/dim]"
+            )
+            console.print(_INDEXING_NOTE)
         return
 
     if args.scenario == SCHEMA_DRIFT:
