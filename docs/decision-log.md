@@ -124,8 +124,26 @@ Entry template:
   0.06s median, DataHub index convergence 2.91s median and not ours to control,
   poll interval operator-set). A single blended number would have hidden which
   term moved when the budget is spent.
-- Result: `pytest` green (385 passed, 42 integration deselected), ruff and mypy
-  clean. **Migration note**, the same shape as D-070's: fix (1) changes the
+- Result: `pytest` green (385 passed), ruff and mypy clean. **Verified on the
+  live judge VM**, not only offline: the branch was deployed there, the image
+  rebuilt, and all 42 integration tests run against its DataHub (42 passed).
+  Two scans of the demo graph reused both existing incidents and converged on
+  the same two document URNs, so the write path is still idempotent under the
+  new document id. `watch --once` against a healthy table printed the corrected
+  `clean: no findings.` and both of the new scan log lines (`dry_run=true` for
+  the preview poll, `dry_run=false` for the write). ModelGuard-Bench was rerun
+  against that graph and still scores 1.00 precision / 1.00 recall / 0.00
+  false-positive rate on all three detectors with 0 duplicates, so none of the
+  detector changes moved a measured number.
+  **One flake worth naming rather than rerunning past:** the first integration
+  run failed `test_the_assertion_run_records_the_failure_this_scan_actually_measured`
+  and the identical second run passed. Cause found, not shrugged at: the live
+  `modelguard watch` service was polling the same table, an assertion run event
+  is a timeseries append, and the test reads the *latest* one, so the watcher's
+  event can become the latest between the test's scan and its read. A test
+  hazard, not a product defect; recorded as a precondition in tests/CLAUDE.md
+  rule 2 so an intermittent red is not chased as a bug.
+  **Migration note**, the same shape as D-070's: fix (1) changes the
   impact-report document id, so reports published by an earlier version no
   longer converge and are left orphaned beside the new ones on the model's page.
   The judge VM carries exactly two of them
