@@ -47,6 +47,7 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
 )
 from datahub.metadata.urns import DatasetUrn, MlFeatureUrn, SchemaFieldUrn
+from datahub.sdk.search_filters import FilterDsl as F
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
@@ -100,6 +101,22 @@ def recorded_link(conn: DataHubConnection, model_urn: str) -> RecordedLink | Non
         label_column_urn=str(label[0]),
         exclude=frozenset(str(value) for value in values.get(PROP_EXCLUDED, [])),
     )
+
+
+def models_with_recorded_link(conn: DataHubConnection) -> tuple[tuple[str, RecordedLink], ...]:
+    """Return every model in the graph that a previous ``link`` call described.
+
+    This is what makes "replay the links after tonight's ingestion" one command
+    rather than one per model. A model nobody has linked is skipped rather than
+    guessed at: there is no honest default for which table a model trained on.
+    """
+    found: list[tuple[str, RecordedLink]] = []
+    for urn in conn.client.search.get_urns(filter=F.entity_type("mlModel")):
+        model_urn = str(urn)
+        previous = recorded_link(conn, model_urn)
+        if previous is not None:
+            found.append((model_urn, previous))
+    return tuple(sorted(found, key=lambda pair: pair[0]))
 
 
 class LinkError(ValueError):

@@ -51,7 +51,12 @@ from modelguard.models import (
     SchemaDriftFinding,
     Severity,
 )
-from modelguard.writeback.link import LinkError, link_model, recorded_link
+from modelguard.writeback.link import (
+    LinkError,
+    link_model,
+    models_with_recorded_link,
+    recorded_link,
+)
 
 app = typer.Typer(
     add_completion=False,
@@ -121,6 +126,16 @@ def _no_match_hint(conn: DataHubConnection) -> str:
         "Pass a full URN. A bare name matches only the entity's full name or its "
         "last dotted segment, so a partial word never resolves."
     )
+
+
+def _model_urns(conn: DataHubConnection, *, limit: int | None = None) -> tuple[str, ...]:
+    """Return every mlModel in the graph, sorted, optionally capped.
+
+    Sorted so a bulk run reads the same way twice and a caller can tell which
+    models a cap left out.
+    """
+    urns = sorted(str(urn) for urn in conn.client.search.get_urns(filter=F.entity_type("mlModel")))
+    return tuple(urns[:limit] if limit is not None else urns)
 
 
 class TableResolutionError(ValueError):
@@ -605,6 +620,51 @@ def _run_review(
     return report
 
 
+def _scan_all_models(
+    *,
+    sla_hours: float | None,
+    dry_run: bool,
+    no_llm: bool,
+    llm_provider: str | None,
+    llm_model: str | None,
+    forbidden: dict[str, bool],
+) -> None:
+    """Run one scan per model in the graph, sharing a single connection.
+
+    The options this refuses alongside ``--all-models`` all mean "one target":
+    a report path names one file, a contract describes one model, and the review
+    agent stops for a human, which across a whole catalog is a prompt storm
+    nobody reads to the end. Refusing them beats guessing which model wins.
+    """
+    named = sorted(flag for flag, given in forbidden.items() if given)
+    if named:
+        console.print(f"[red]--all-models cannot be combined with {', '.join(named)}.[/red]")
+        raise typer.Exit(code=2)
+
+    try:
+        config = ScanConfig.from_env()
+        if sla_hours is not None:
+            config = replace(config, freshness_sla_hours=sla_hours)
+        llm = _resolve_llm(no_llm=no_llm, provider=llm_provider, model=llm_model)
+        conn = connect()
+    except (ConfigError, DataHubConnectionError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    model_urns = _model_urns(conn)
+    if not model_urns:
+        console.print(f"[yellow]No models in {conn.gms_url}.[/yellow] {_no_match_hint(conn)}")
+        return
+
+    if not dry_run and not conn.has_token:
+        console.print("[yellow]No DATAHUB_GMS_TOKEN set; writing unauthenticated.[/yellow]")
+
+    for model_urn in model_urns:
+        console.print(f"\nScanning [bold]{model_urn}[/bold]")
+        report = run_scan(conn, config, model_urn=model_urn, llm=llm, dry_run=dry_run)
+        _print_report(report)
+
+
 @app.command()
 def scan(
     table: Annotated[
@@ -672,17 +732,40 @@ def scan(
             help="Run the agent but write without prompting. For the recorded demo.",
         ),
     ] = False,
+    all_models: Annotated[
+        bool,
+        typer.Option("--all-models", help="Audit every model in the graph, one after another."),
+    ] = False,
 ) -> None:
     """Audit a table for stale data, a model for target leakage, or both.
 
     The two targets ask different questions of the graph. ``--table`` asks what a
     table's going stale endangers downstream. ``--model`` asks whether a model is
-    training on its own label. At least one is required.
+    training on its own label. At least one is required, or ``--all-models`` to
+    sweep every model the graph holds.
 
     By default the writes land straight away. ``--review`` (or ``--auto-approve``
     for the demo) instead runs the LangGraph agent, which pauses after detection so
     a human can approve the mutations before they are written.
     """
+    if all_models:
+        _scan_all_models(
+            sla_hours=sla_hours,
+            dry_run=dry_run,
+            no_llm=no_llm,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            forbidden={
+                "--table": table is not None,
+                "--model": model is not None,
+                "--review/--auto-approve": review or auto_approve,
+                "--report-out/--assertion-out/--contract-out": any(
+                    path is not None for path in (report_out, assertion_out, contract_out)
+                ),
+            },
+        )
+        return
+
     if contract_out is not None and model is None:
         console.print("[red]--contract-out describes a model's inputs; pass --model.[/red]")
         raise typer.Exit(code=2)
@@ -1028,9 +1111,7 @@ def inventory(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from exc
 
-    model_urns = [str(urn) for urn in conn.client.search.get_urns(filter=F.entity_type("mlModel"))][
-        :limit
-    ]
+    model_urns = _model_urns(conn, limit=limit)
     if not model_urns:
         console.print(f"[yellow]No models in {conn.gms_url}.[/yellow] {_no_match_hint(conn)}")
         raise typer.Exit(code=0)
@@ -1061,12 +1142,73 @@ def inventory(
         )
 
 
+def _link_all(*, dry_run: bool, named: tuple[object, ...]) -> None:
+    """Re-apply every link the graph already records, for the post-ingestion step.
+
+    An ingestion run drops the features `link` wrote (D-074), so on any real
+    schedule the links have to be replayed. Replaying them one model at a time is
+    a loop somebody has to maintain and keep in step with the models that exist,
+    which is how a model quietly stops being checked; this is the same loop, run
+    off what the graph itself records.
+    """
+    if any(value for value in named):
+        console.print("[red]--all replays what was recorded; pass no other options with it.[/red]")
+        raise typer.Exit(code=2)
+
+    try:
+        config = ScanConfig.from_env()
+        conn = connect()
+    except (ConfigError, DataHubConnectionError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    recorded = models_with_recorded_link(conn)
+    if not recorded:
+        console.print(
+            f"[yellow]No model in {conn.gms_url} carries a recorded link.[/yellow] "
+            "Link one first: modelguard link --model <name> --features <table> "
+            "--label-column <column>"
+        )
+        return
+
+    if not dry_run and not conn.has_token:
+        console.print("[yellow]No DATAHUB_GMS_TOKEN set; writing unauthenticated.[/yellow]")
+
+    for model_urn, previous in recorded:
+        name = MlModelUrn.from_string(model_urn).name
+        try:
+            result = link_model(
+                conn,
+                config,
+                model_urn=model_urn,
+                feature_dataset_urn=previous.feature_dataset_urn,
+                label_column_urn=previous.label_column_urn,
+                exclude=previous.exclude,
+                dry_run=dry_run,
+            )
+        except LinkError as exc:
+            # One model whose feature table was dropped must not stop the rest:
+            # the whole point of the sweep is that everything else stays checked.
+            console.print(f"[red]{name}[/red]  {exc}")
+            continue
+        console.print(
+            f"[green]{name}[/green]  {len(result.feature_urns)} feature(s), "
+            f"{len(result.training_runs)} run(s)"
+        )
+
+    if dry_run:
+        console.print("\n[dim]Dry run: nothing was written.[/dim]")
+
+
 @app.command()
 def link(
     model: Annotated[
-        str,
-        typer.Option("--model", help="The trained model: a full mlModel URN, or a name."),
-    ],
+        str | None,
+        typer.Option(
+            "--model",
+            help="The trained model: a full mlModel URN, or a name. Omit only with --all.",
+        ),
+    ] = None,
     features: Annotated[
         str | None,
         typer.Option(
@@ -1100,6 +1242,14 @@ def link(
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Show what would be declared, write nothing.")
     ] = False,
+    all_models: Annotated[
+        bool,
+        typer.Option(
+            "--all",
+            help="Replay the recorded link for every model that has one. For the "
+            "step after an ingestion run.",
+        ),
+    ] = False,
 ) -> None:
     """Tell DataHub which columns a model trains on, and which one is its label.
 
@@ -1123,6 +1273,14 @@ def link(
     structured properties on the model, which ingestion does not touch, so the
     replay is just ``modelguard link --model <name>``.
     """
+    if all_models:
+        _link_all(dry_run=dry_run, named=(model, features, label_table, label_column, exclude))
+        return
+
+    if model is None:
+        console.print("[red]link needs --model, or --all to replay every recorded link.[/red]")
+        raise typer.Exit(code=2)
+
     conn, config, _, feature_urn, model_urn = _prepare(
         table=features,
         model=model,
