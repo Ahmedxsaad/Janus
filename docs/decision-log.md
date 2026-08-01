@@ -16,6 +16,113 @@ Entry template:
 
 ---
 
+## D-073: A review pass over the whole implementation: seven code defects and four stale claims (2026-08-01)
+- Decided by: Ghassen Naouar (asked for a review of the current implementation
+  looking for inconsistencies, gaps and unfinished work, and for them to be
+  finished), applied by Claude
+- Decision: fixed every defect the review confirmed, and closed the four
+  checklist items the project was claiming credit for without having built.
+  Each code fix carries a regression test that was run against the pre-fix code
+  and confirmed red (tests/CLAUDE.md rule 6).
+
+  **The code defects**
+  1. **Two impact reports collapsed into one.** `_document_id` keyed on
+     `(model, resource_urn)`, but the resource does not separate the detectors:
+     when the table a model trains on is also the table that went stale, the
+     freshness finding and the schema-drift finding carry the identical
+     `resource_urn`, so the second `publish_impact_report` of the scan
+     overwrote the first. The finding type joins the key, mirroring the incident
+     dedup key that already separates the same case.
+  2. **One malformed property killed a whole model's leakage scan.**
+     `modelguard.source_column` is free text anything can write. An unparseable
+     value reached `SchemaFieldUrn.from_string` inside `leak_path` with no
+     guard, and the exception left `leakage_findings` entirely, so a model with
+     one bad feature got no leakage detection at all rather than one skipped
+     feature. It is now treated as an absent property, which is the detector's
+     own positive-evidence rule (detect/CLAUDE.md rule 5).
+  3. **The leak path was not deterministic.** `leak_path` returned on the first
+     chain reaching a label, and above two hops DataHub answers from a
+     full-graph search in network order. Two scans of an unchanged graph could
+     quote different derivation chains as the auditable proof a human reads.
+     Every match is collected and the shortest returned, ties broken on the
+     label URN and then the chain.
+  4. **Downstream datasets and features were counted twice.** The same
+     full-graph search that can return one model by two paths (already handled
+     with `min()` over the hops, D-020) can return a dataset or a feature twice.
+     Both lists kept the duplicate, so the impact report listed the URN twice
+     and overcounted "Downstream datasets: N".
+  5. **The narrator could ship a prompt missing its evidence.**
+     `_evidence_detail` was the one dispatcher of four whose base case returned
+     `""` instead of raising, so a future finding type nobody registered would
+     have reached an LLM silently short of its facts. It raises like its
+     siblings; `narrate`'s existing fallback still degrades to the template.
+  6. **`gate` could print the DataHub token into a CI log.** Its top-level
+     handler printed `str(exc)` raw, and an exception surfacing from the SDK may
+     quote a request or a header we handed the token to. It goes through
+     `env.scrub()` now (root CLAUDE.md rule 6d); `client._gms_token` is public
+     as `gms_token` for exactly that, documented as the one function there that
+     hands out a secret.
+  7. **`watch` announced a recovery that never happened.** `WatchState.signature`
+     starts as `None`, which is not an empty set, so the first poll of an
+     already-healthy target printed "recovered: no findings" for an incident
+     that had never existed. It says "clean" there. The write on that poll
+     stays, deliberately: it is what reconciles findings an earlier process
+     raised and never resolved, and the docstring now says so instead of
+     claiming a steady state is quiet from the first poll.
+
+  **The stale claims**, each one something a judge could check and find false:
+  - SKILL.md, the README and `05-oss-delivery.md` told readers to
+    `pip install modelguard-datahub`. It is not published: `/simple/` 404s and
+    no tag has been pushed, which D-072 states plainly and the three of them
+    contradicted. They now name the clone-and-install path that works today and
+    the `pip install` from the first release on, and the delivery plan says not
+    to submit the skill upstream ahead of that release.
+  - `benchmarks/run_bench.py` generated a "does not measure" bullet saying the
+    baseline comparison was not run, directly under the section that runs it
+    (D-050). Corrected at the source, since RESULTS.md is generated and never
+    hand-edited.
+  - The hardening checklist had four items unticked. Three were pure doc gaps:
+    the README said nothing about the security model, nothing about the
+    metadata-only privacy property, and cited no literature by name. It now
+    carries all three, including a limit rather than a claim where DataHub OSS
+    offers no per-operation token scope.
+  - The fourth, self-observability, needed code, and got the smallest thing that
+    genuinely serves the SLO: one `logfmt` line per scan carrying `run_id`, both
+    targets, `dry_run`, and `findings`/`writes`/`warnings`/`detect_ms`/`total_ms`.
+- Options considered: for (1), keeping the old id and special-casing the drift
+  collision (rejected: the special case decays and the collision is general)
+  versus folding the finding type into the hash (chosen). For (2), a `try`
+  around the `leak_path` call in the loop versus validating where the property
+  is read (chosen: one choke point, and the check belongs with the value it
+  distrusts). For (6), a global scrub in `main()` covering every command
+  (rejected: it would swallow the traceback developers debug `scan` with, and
+  D-049 already ruled on the traceback vector) versus scrubbing the one handler
+  that prints into CI. For self-observability, OpenTelemetry plus a Prometheus
+  exporter (rejected for now, and named as unbuilt in the plan rather than
+  quietly skipped: two dependencies and a scrape endpoint for numbers a log line
+  already carries at one-model scale) versus stdlib `logging` in `logfmt`
+  (chosen); the library only emits and `watch`, the one unattended entry point,
+  configures the handler.
+- Why the SLO is stated the way it is: "95% of upstream freshness failures
+  produce an incident within 60 seconds of DataHub indexing the change", with
+  each of its three terms measured in RESULTS.md rather than estimated (detector
+  0.06s median, DataHub index convergence 2.91s median and not ours to control,
+  poll interval operator-set). A single blended number would have hidden which
+  term moved when the budget is spent.
+- Result: `pytest` green (385 passed, 42 integration deselected), ruff and mypy
+  clean. **Migration note**, the same shape as D-070's: fix (1) changes the
+  impact-report document id, so reports published by an earlier version no
+  longer converge and are left orphaned beside the new ones on the model's page.
+  The judge VM carries exactly two of them
+  (`modelguard-impact-credit_risk_v3-b02815b129df` and `-f11cac0ff133`); delete
+  them once, or re-seed. Deliberately no legacy-id compatibility code, for the
+  same reason D-070 declined it. **Also verified, closing D-070's own open
+  migration note:** the judge VM's incidents were listed and there is no
+  drift incident on it at all, legacy-titled or otherwise, so the by-hand
+  cleanup D-070 asked for has nothing to clean up.
+
+---
+
 ## D-072: A PyPI release workflow, on a tag, via Trusted Publishing (2026-08-01)
 - Decided by: Ahmed Saad (asked for the PyPI package to be set up as part of
   submission readiness)

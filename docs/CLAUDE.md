@@ -31,3 +31,4 @@ Reference material, not code. Layers:
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: doc layers and maintenance rules |
 | 2026-07-23 | Claude (for Ahmed Saad) | Add deploy/: the Azure judge-facing demo VM runbook (D-057) |
+| 2026-08-01 | Claude (for Ghassen Naouar) | D-073: the hardening checklist's four open items closed and its benchmark item corrected; the PyPI install instruction in 05-oss-delivery.md fixed to match reality (rule 1: the plan does not get to rot) |
