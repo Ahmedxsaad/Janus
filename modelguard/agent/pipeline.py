@@ -541,15 +541,15 @@ def _reconcile_stale_findings(
         # D-067 rejected: it lives in the graph, it is written by the same scan
         # that raised the incident, and losing it costs a stale incident, never a
         # wrong verdict.
-        candidates: dict[str, str | None] = dict.fromkeys(
-            _recorded_leak_columns(conn, model_urn)
-        )
+        candidates: dict[str, str | None] = dict.fromkeys(_recorded_leak_columns(conn, model_urn))
         for feature_urn in (properties.mlFeatures or []) if properties else []:
             source_column = feature_source_column(conn, feature_urn)
             if source_column is not None:
                 candidates[source_column] = feature_urn
 
-        for source_column, known_feature_urn in sorted(candidates.items(), key=lambda pair: pair[0]):
+        for source_column, known_feature_urn in sorted(
+            candidates.items(), key=lambda pair: pair[0]
+        ):
             if (source_column, "FIELD") in current_keys:
                 continue
             field_path = SchemaFieldUrn.from_string(source_column).field_path
