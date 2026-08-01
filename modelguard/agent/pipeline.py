@@ -52,6 +52,7 @@ from modelguard.detect.blast_radius import (
     finding_for,
     freshness_signal,
 )
+from modelguard.detect.coverage import Unevaluated, coverage_gaps
 from modelguard.detect.graph_reads import model_ref
 from modelguard.detect.leakage import feature_source_column, leakage_findings
 from modelguard.detect.schema_drift import schema_drift_candidate_resources, schema_drift_findings
@@ -167,6 +168,10 @@ class ScanReport:
     """The guarding assertion a freshness finding would leave. Rendered even on a
     dry run, so the caller can see the artifact that was not written."""
     warnings: tuple[str, ...] = field(default_factory=tuple)
+    not_evaluated: tuple[Unevaluated, ...] = field(default_factory=tuple)
+    """Checks this scan asked for but could not perform, with the metadata each
+    one is missing. A clean scan is only meaningful alongside this: without it,
+    "no finding" reads the same whether a check passed or never ran."""
 
     @property
     def clean(self) -> bool:
@@ -362,11 +367,12 @@ def _detect(
     table_urn: str | None,
     model_urn: str | None,
     observed_at: int,
-) -> tuple[list[Finding], list[str]]:
+) -> tuple[list[Finding], list[str], tuple[Unevaluated, ...]]:
     """Run every detector the caller asked for. Deterministic, and no writes.
 
     Returns:
-        The findings, worst first, and any warnings worth surfacing.
+        The findings worst first, any warnings worth surfacing, and the checks
+        that could not run at all for want of the metadata they read.
     """
     findings: list[Finding] = []
     warnings: list[str] = []
@@ -386,7 +392,14 @@ def _detect(
         findings.extend(schema_drift_findings(conn, model_urn, config))
 
     findings.sort(key=lambda finding: severity_rank(finding.severity))
-    return findings, warnings
+    gaps = coverage_gaps(
+        conn,
+        config,
+        table_urn=table_urn,
+        model_urn=model_urn,
+        findings=tuple(findings),
+    )
+    return findings, warnings, gaps
 
 
 def _recovery_message(run_id: str) -> str:
@@ -655,7 +668,7 @@ def run_scan(
     # perf_counter, not the clock: this measures an elapsed duration, and the
     # wall clock can step sideways under NTP mid-scan.
     started = time.perf_counter()
-    findings, warnings = _detect(conn, config, table_urn, model_urn, observed_at)
+    findings, warnings, gaps = _detect(conn, config, table_urn, model_urn, observed_at)
     detect_seconds = time.perf_counter() - started
 
     # Rendered either way: a dry run must be able to show the assertion it would
@@ -692,6 +705,7 @@ def run_scan(
             trust=trust,
             assertion_yaml=assertion_yaml,
             warnings=tuple(warnings),
+            not_evaluated=gaps,
         )
 
     writes = tuple(
@@ -736,4 +750,5 @@ def run_scan(
         trust=trust,
         assertion_yaml=written_assertion_yaml(writes),
         warnings=tuple(warnings),
+        not_evaluated=gaps,
     )

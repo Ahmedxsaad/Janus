@@ -32,6 +32,7 @@ from modelguard.client import (
     DataHubConnectionError,
     connect,
     gms_token,
+    is_local_gms,
 )
 from modelguard.config import ScanConfig
 from modelguard.env import ConfigError, scrub
@@ -69,6 +70,15 @@ app = typer.Typer(
 # soft_wrap: URNs are long and must stay on one line to be copy-pasteable.
 console = Console(soft_wrap=True)
 
+# The SDK logs a paragraph about `max_hops` above 2 on every lineage query, and
+# with no handler configured it lands on stderr through logging's last-resort
+# handler: twice per scan, in the middle of a report a human is reading, and in
+# every CI log `gate` writes. It is not about a mistake here. Above two hops
+# DataHub switches to a full-graph search and can return results beyond the cap,
+# which the detector already knows and already filters for (see
+# ScanConfig.max_hops), so the one thing the message warns about is handled.
+logging.getLogger("datahub.sdk.lineage_client").setLevel(logging.ERROR)
+
 WATCH_MAX_BACKOFF_SECONDS = 300.0
 
 
@@ -92,6 +102,24 @@ def _main() -> None:
     callback the tool would be invoked as ``modelguard --table ...`` and adding
     ``watch`` later would silently change ``scan``'s invocation.
     """
+
+
+def _no_match_hint(conn: DataHubConnection) -> str:
+    """The advice to append when a name matched nothing in the graph.
+
+    ``modelguard-seed`` writes the demo ML supply chain. That is the right next
+    step against a local Quickstart, where an empty graph usually means the demo
+    has not been built yet, and exactly the wrong one against somebody's real
+    catalog, where it would put demo datasets into production metadata. So the
+    hint that names it is gated on the instance being local, and a remote
+    instance gets the advice that actually applies there: how names are matched.
+    """
+    if is_local_gms(conn.gms_url):
+        return "Pass a full URN, or seed the demo graph first with: modelguard-seed"
+    return (
+        "Pass a full URN. A bare name matches only the entity's full name or its "
+        "last dotted segment, so a partial word never resolves."
+    )
 
 
 class TableResolutionError(ValueError):
@@ -127,10 +155,7 @@ def resolve_table(conn: DataHubConnection, table: str) -> str:
 
     unique = sorted(set(matches))
     if not unique:
-        raise TableResolutionError(
-            f"no dataset named {table!r}. Pass a full dataset URN, or seed the "
-            "demo graph first with: modelguard-seed"
-        )
+        raise TableResolutionError(f"no dataset named {table!r}. {_no_match_hint(conn)}")
     if len(unique) > 1:
         listed = "\n  ".join(unique)
         raise TableResolutionError(
@@ -169,10 +194,7 @@ def resolve_model(conn: DataHubConnection, model: str) -> str:
 
     unique = sorted(set(matches))
     if not unique:
-        raise ModelResolutionError(
-            f"no model named {model!r}. Pass a full mlModel URN, or seed the "
-            "demo graph first with: modelguard-seed"
-        )
+        raise ModelResolutionError(f"no model named {model!r}. {_no_match_hint(conn)}")
     if len(unique) > 1:
         listed = "\n  ".join(unique)
         raise ModelResolutionError(
@@ -266,10 +288,43 @@ def _print_writes(write: FindingWrites) -> None:
         console.print(f"  impact report    {document.urn}")
 
 
+def _print_not_evaluated(report: ScanReport) -> None:
+    """Render the checks that could not run, and what each one needs.
+
+    Printed on every scan, clean or not. A check that never ran is the thing a
+    reader is most likely to mistake for a check that passed, and the mistake
+    costs the most on somebody's real catalog, where a table with no operation
+    aspect and a model with no declared features are the normal case rather than
+    the exception.
+    """
+    for gap in report.not_evaluated:
+        console.print(f"[yellow]not evaluated:[/yellow] {gap.check} on {gap.target_urn}")
+        console.print(f"  reason  {gap.reason}")
+        console.print(f"  to fix  {gap.remedy}")
+
+
 def _print_clean(report: ScanReport) -> None:
-    """Render a scan that found nothing: the healthy targets and any warnings."""
+    """Render a scan that found nothing: what passed, what never ran, any warnings."""
     targets = [urn for urn in (report.table_urn, report.model_urn) if urn is not None]
-    console.print(f"[green]No finding.[/green] {' and '.join(targets)} healthy.")
+    # A table target buys one check (freshness); a model target buys two (target
+    # leakage, schema drift). Every gap is one of those checks that never ran, so
+    # the difference is how many actually measured something.
+    asked = (1 if report.table_urn else 0) + (2 if report.model_urn else 0)
+    ran = asked - len(report.not_evaluated)
+
+    if ran == asked:
+        console.print(f"[green]No finding.[/green] {' and '.join(targets)} healthy.")
+    elif ran > 0:
+        console.print(
+            f"[green]No finding[/green] from the {ran} of {asked} checks that ran on "
+            f"{' and '.join(targets)}."
+        )
+    else:
+        # Nothing was measured, so nothing may be called healthy. Saying so is the
+        # whole point: silence here means "no metadata to check with".
+        console.print("[yellow]Nothing was evaluated.[/yellow] No check had the metadata it needs.")
+
+    _print_not_evaluated(report)
     for warning in report.warnings:
         console.print(f"[yellow]warning:[/yellow] {warning}")
 
@@ -286,6 +341,7 @@ def _print_findings_and_trust(report: ScanReport) -> None:
             f"\n[dim]assessment ({write.narrative.source}):[/dim] {write.narrative.assessment}\n"
         )
 
+    _print_not_evaluated(report)
     for warning in report.warnings:
         console.print(f"[yellow]warning:[/yellow] {warning}")
 
@@ -331,12 +387,19 @@ def _prepare(
     no_llm: bool,
     llm_provider: str | None,
     llm_model: str | None,
+    writes: bool,
 ) -> tuple[DataHubConnection, ScanConfig, LLMConfig | None, str | None, str | None]:
     """Do the setup ``scan`` and ``watch`` share: config, LLM, connect, resolve.
 
     Both commands need the same five things before they can run a scan, and both
     fail the same way on the same mistakes. Keeping it in one place means a change
     to how a target is resolved or a credential is read cannot drift between them.
+
+    Args:
+        writes: Whether this invocation can mutate the graph. Only the warning
+            about running unauthenticated depends on it: a ``--dry-run`` scan and
+            a plain ``gate`` write nothing, so telling their user that writes are
+            unauthenticated describes a write that is never attempted.
 
     Raises:
         typer.Exit: A target is missing, the config or LLM is unusable, DataHub is
@@ -375,7 +438,7 @@ def _prepare(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from exc
 
-    if not conn.has_token:
+    if writes and not conn.has_token:
         console.print("[yellow]No DATAHUB_GMS_TOKEN set; writing unauthenticated.[/yellow]")
 
     return conn, config, llm, table_urn, model_urn
@@ -630,6 +693,7 @@ def scan(
         no_llm=no_llm,
         llm_provider=llm_provider,
         llm_model=llm_model,
+        writes=not dry_run,
     )
 
     for target in (table_urn, model_urn):
@@ -751,6 +815,7 @@ def watch(
         no_llm=no_llm,
         llm_provider=llm_provider,
         llm_model=llm_model,
+        writes=True,
     )
 
     for target in (table_urn, model_urn):
@@ -887,6 +952,7 @@ def gate(
             no_llm=no_llm,
             llm_provider=llm_provider,
             llm_model=llm_model,
+            writes=write,
         )
     except typer.Exit as exc:
         raise typer.Exit(code=EXIT_ERROR) from exc
@@ -911,6 +977,12 @@ def gate(
 
     for finding in (write_.finding for write_ in report.writes):
         _print_finding(finding)
+
+    # A gate that passes is a claim about the build, so it has to say which checks
+    # it could not make. Without this, a model whose features carry no lineage at
+    # all goes green for exactly the same reason a genuinely clean one does.
+    _print_not_evaluated(report)
+
     for line in github_annotations(verdict):
         # Printed raw: GitHub reads these as workflow commands and turns them into
         # inline pull-request annotations. Other CI systems see ordinary output.
