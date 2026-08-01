@@ -111,14 +111,30 @@ Elasticsearch + Kafka - see `resources.md §9`; our job is to traverse a bounded
   enables "what changed since last run" diffs.
 
 ### C.3 Self-observability (ModelGuard monitors itself)
-- **OpenTelemetry** traces per run (detect → traverse → reason → write); **Prometheus** counters
-  (findings, incidents raised, FPs suppressed, GMS latency); optional **Grafana** board.
-- Structured JSON logs with `run_id` correlation. This makes ModelGuard *operable* - the exact bar
-  `Reliable Machine Learning` sets.
+
+> **Landed 2026-08-01** (D-073), at the level the SLO below actually needs.
+> `agent/pipeline.py` emits one `logfmt` line per completed scan through the
+> stdlib logger: `run_id`, both targets, `dry_run`, and the counts and timings
+> (`findings`, `writes`, `warnings`, `detect_ms`, `total_ms`). `modelguard watch`,
+> the one entry point that runs unattended, configures the handler; the library
+> itself only emits, so an embedding application keeps the decision. The line
+> carries identifiers and counts only: no aspect content, no prose, no credential.
+
+- Still not built, and named so nobody reads the line above as more than it is:
+  **OpenTelemetry** traces per run (detect → traverse → reason → write),
+  **Prometheus** counters, a **Grafana** board. Each is a dependency and a scrape
+  endpoint in exchange for numbers a `logfmt` line already carries at this scale;
+  the upgrade path is one exporter reading the same fields.
 
 ### C.4 SRE framing (borrow from the SRE book + Reliable ML)
-- Define an **SLO**: e.g., "95% of upstream freshness failures on model-feeding tables produce an incident
-  within 60s." Track an **error budget** on missed/late detections.
+- **The SLO, stated:** *95% of upstream freshness failures on model-feeding tables produce an incident
+  within 60 seconds of DataHub indexing the change.* The three terms of that budget, measured in
+  `benchmarks/RESULTS.md` rather than estimated: the detector call (median 0.06s, slowest 0.17s), DataHub's
+  own index convergence (median 2.91s, slowest 5.76s, and not ModelGuard's to control), and the `watch`
+  poll interval (operator-set; 30s on the demo VM). At a 30s interval the worst case is roughly 36s, which
+  is what leaves the target this much headroom. `detect_ms` on every scan line is the term ModelGuard owns,
+  so a regression in it is visible before the budget is spent. Track an **error budget** on
+  missed/late detections.
 - Impact reports **are blameless postmortems**: what broke, blast radius, root cause, remediation, guarding
   assertion added. This reframes a hackathon artifact as a recognized SRE practice.
 
@@ -166,19 +182,33 @@ territory (`resources.md §10`). Controls:
 ## E. Definition of "production-grade" (the checklist judges can verify)
 
 - [~] `benchmarks/` folder: injection scripts (Jenga-based), `RESULTS.md` with precision/recall + the
-      baseline comparison table, and a scale-test curve. Partly done (D-047): injection and a measured
-      `RESULTS.md` with precision/recall/F1/FP-rate ship, against a live graph. The Jenga taxonomy, the
-      baseline comparison table and the scale-test curve are **not** built.
+      baseline comparison table, and a scale-test curve. Injection and a measured `RESULTS.md` with
+      precision/recall/F1/FP-rate ship against a live graph (D-047), and the baseline comparison table
+      landed with them (D-050: `benchmarks/baselines.py`, scored per feature). Still **not** built: the
+      Jenga taxonomy and the scale-test curve, both of which need a graph larger than the seeded one.
 - [x] Deterministic detection with unit tests (positives caught, negatives clean - no false positives).
       304 offline tests, plus the benchmark's own negative controls: false-positive rate 0.00 measured
       across every clean trial (D-047).
-- [ ] Idempotent, least-privilege, human-gated write-back; security notes in README.
+- [x] Idempotent, least-privilege, human-gated write-back; security notes in README.
+      Idempotency is measured, not asserted (0 duplicates on rerun, read back from the graph);
+      `scan --review` gates every write on a human and the MCP tools cannot write at all; the
+      README's "Security and privacy" section states the model, including the one thing DataHub
+      OSS does not offer, a per-operation token scope, rather than claiming it (D-073).
 - [x] `watch` mode (event-driven) **or** a documented polling fallback; `scan` mode for CI.
       Shipped as the polling fallback (`cli.py watch`, D-039); event-driven MCL/Kafka
       remains the documented upgrade path, not built.
-- [ ] Self-observability (structured logs + metrics) and a stated SLO/MTTD target.
-- [ ] "No raw data to the LLM" privacy property called out explicitly.
-- [ ] Every literature claim in reports/README cites a named source from `resources.md`.
+- [x] Self-observability (structured logs + metrics) and a stated SLO/MTTD target.
+      One `logfmt` line per scan carrying `run_id`, counts and phase timings (C.3), and the SLO
+      in C.4 with each of its three terms measured rather than estimated (D-073). OpenTelemetry
+      and Prometheus are named there as the unbuilt upgrade, not implied.
+- [x] "No raw data to the LLM" privacy property called out explicitly.
+      Leads the README's "Security and privacy" section, with the reason it holds structurally:
+      ModelGuard never connects to the warehouse, so there is no path for a row to reach a
+      provider (D-073).
+- [x] Every literature claim in reports/README cites a named source from `resources.md`.
+      Each detector's module docstring cites its paper, the impact reports quote Kaufman and
+      Breck by name in the text a human reads, and the README carries the claim-to-source table
+      (D-073).
 
 > These items are inexpensive relative to their scoring leverage: they turn "cool demo" into "a real data/ML
 > platform team would run this," which is precisely the **Real-World Usefulness** + **Technical Execution**
