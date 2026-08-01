@@ -1,0 +1,95 @@
+# Builds the wheel and sdist and publishes them to PyPI, so `pip install
+# modelguard-datahub` works for anyone pointing the CLI at their own DataHub
+# (README's "Try it" says it does, and until this workflow existed it did not).
+#
+# Triggers only on a version tag (v*.*.*), the same deliberate gate
+# publish-image.yml uses and for the same reason: publishing to PyPI is
+# public and, unlike a container tag, effectively irreversible. A release can
+# be yanked but its version number is burned forever, so this must never fire
+# on an ordinary merge to main.
+#
+# Authentication is Trusted Publishing (OIDC), not an API token. GitHub mints
+# a short-lived, workflow-scoped identity that PyPI verifies against the
+# publisher configured on the project, so there is no long-lived
+# PYPI_API_TOKEN secret in this repository to leak, rotate, or accidentally
+# print. See docs/deploy/pypi-release.md for the one-time PyPI-side setup this
+# depends on.
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build the distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          # The same pinned interpreter CI and developers use, not a range:
+          # a wheel built on a different minor could embed a different
+          # metadata shape than the one every other job validated.
+          python-version-file: .python-version
+
+      - name: Build the wheel and the sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      # twine check catches a malformed long_description before PyPI rejects
+      # the upload, which is the failure that otherwise burns a version number
+      # (a tag cannot be re-pushed to fix it without deleting the release).
+      - name: Validate the distribution metadata
+        run: |
+          python -m pip install twine
+          twine check dist/*
+
+      # The tag is the source of truth for the released version, so a tag that
+      # disagrees with pyproject.toml is a mistake, not something to paper
+      # over: publishing v0.2.0 from a tree that says 0.1.0 puts a version on
+      # PyPI that no commit in this repository declares.
+      - name: The tag matches the version in pyproject.toml
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pyproject="$(python -c 'import tomllib,pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')"
+          if [ "$tag" != "$pyproject" ]; then
+            echo "::error::tag $GITHUB_REF_NAME implies version $tag, but pyproject.toml declares $pyproject"
+            exit 1
+          fi
+          echo "tag and pyproject.toml agree on $pyproject"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+  publish:
+    name: publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # A separate job with its own minimal permissions, so the OIDC identity
+    # that can publish to PyPI exists only in the job that publishes and is
+    # not handed to the build step that runs the project's own build backend.
+    permissions:
+      id-token: write
+    # Named so the repository can require a manual approval on it, and so a
+    # publish is visible in the repo's Environments view rather than buried in
+    # a workflow log.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/modelguard-datahub
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
