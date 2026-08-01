@@ -37,6 +37,37 @@ to see any of it.
 Prefer to run it yourself? [Try it](#try-it) below is the same loop against a
 local Quickstart, and it is the path the rest of this README documents.
 
+## The one thing nothing else does, measured
+
+DataHub holds two graphs that no other catalog holds together: column-level
+lineage across the warehouse, and ML metadata for the models. Nothing joins
+them, so a model is not connected to a single column and a data failure cannot
+be traced to the model it breaks. **ModelGuard writes that join** (`modelguard
+link`) and then reads across it, which is what makes every detector below
+possible.
+
+That is a claim, so here it is as a number. The same graph, the same ground
+truth, three ways of reading it, scored per **feature**: every approach can tell
+that a leaking model leaks, and the question that separates them is *which* of
+its features leaks, which is what somebody has to go and fix.
+
+| Approach | Precision | Recall | Still alerting after the fix |
+|---|---|---|---|
+| ModelGuard (column-level lineage) | 1.00 | 1.00 | 0 features |
+| Table-level lineage | 0.25 | 1.00 | 2 features |
+| Table quality checks, no lineage | - | 0.00 | 0 features |
+
+Note the middle row's **perfect recall**: table-level lineage does catch the leak. It
+just cannot say which of the two features carries it, because both descend from the same
+labelled table. And having never seen the column edge, it cannot see the column edge
+being removed either, so it keeps alerting on a graph somebody has already fixed. That
+last column is what gets a reliability tool switched off.
+
+These are implementations of an *approach*, handed ModelGuard's own label index so
+nothing is won by starting better informed; no Great Expectations or Evidently process
+was run. [RESULTS.md](benchmarks/RESULTS.md) says so, and states what is still not
+measured: no scale test, and no scoring of narrative quality.
+
 ## Documentation
 
 | Doc | What it answers |
@@ -205,6 +236,17 @@ In a workflow, via the bundled action:
     gms-token: ${{ secrets.DATAHUB_GMS_TOKEN }}
 ```
 
+The verdict lands on the run's own summary page, not just in the log: findings,
+severities, trust scores, and the checks that could not run, as a table the
+reviewer sees without opening anything. That needs no input and no token, because
+GitHub already gives every step a `GITHUB_STEP_SUMMARY` file to append markdown
+to; outside Actions the variable is unset and nothing is written.
+
+Routing findings somewhere ModelGuard does not know about? Both `scan` and `gate`
+take `--format json` and put the whole report (evidence, models at risk, trust
+deductions, the gate's violations) on stdout as one parseable document, with
+progress lines moved to stderr so the stream stays clean.
+
 ## Ask it, don't type it
 
 ```bash
@@ -287,30 +329,9 @@ obvious 30-hour failure, because that is where a detector actually goes wrong: c
 one comparison from `>` to `>=` is caught by the trial sitting exactly on the SLA, and
 scores a clean 1.00 under the demo scenario alone.
 
-### Why column-level lineage, measured
-
-The claim everywhere else in these docs is that only cross-boundary, *column-level*
-lineage both roots a failure to the exact upstream column and names the model at risk.
-Here it is a number. The same graph, the same ground truth, scored per **feature**,
-because every approach can tell that a leaking model leaks; the question that separates
-them is *which* of its features leaks, which is what somebody has to go and fix.
-
-| Approach | Precision | Recall | Still alerting after the fix |
-|---|---|---|---|
-| ModelGuard (column-level lineage) | 1.00 | 1.00 | 0 features |
-| Table-level lineage | 0.25 | 1.00 | 2 features |
-| Table quality checks, no lineage | - | 0.00 | 0 features |
-
-Note the middle row's **perfect recall**: table-level lineage does catch the leak. It
-just cannot say which of the two features carries it, because both descend from the same
-labelled table. And having never seen the column edge, it cannot see the column edge
-being removed either, so it keeps alerting on a graph somebody has already fixed. That
-last column is what gets a reliability tool switched off.
-
-These are implementations of an *approach*, handed ModelGuard's own label index so
-nothing is won by starting better informed; no Great Expectations or Evidently process
-was run. [RESULTS.md](benchmarks/RESULTS.md) says so, and states what is still not
-measured: no scale test, and no scoring of narrative quality.
+The per-feature comparison against table-level lineage is
+[above](#the-one-thing-nothing-else-does-measured); the full numbers, and what is
+still not measured, are in [RESULTS.md](benchmarks/RESULTS.md).
 
 ## Security and privacy
 

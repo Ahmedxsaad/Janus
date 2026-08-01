@@ -51,6 +51,12 @@ from modelguard.models import (
     SchemaDriftFinding,
     Severity,
 )
+from modelguard.render import (
+    OutputFormat,
+    job_summary_markdown,
+    report_json,
+    write_job_summary,
+)
 from modelguard.writeback.link import (
     LinkError,
     link_model,
@@ -75,6 +81,12 @@ app = typer.Typer(
 
 # soft_wrap: URNs are long and must stay on one line to be copy-pasteable.
 console = Console(soft_wrap=True)
+
+# Where progress lines and warnings go when stdout is carrying machine-readable
+# output. `--format json` promises a parseable document on stdout, and a single
+# "Scanning loans_raw" or "No token set" printed alongside it breaks every
+# consumer. Those lines are still worth having, so they move rather than vanish.
+err_console = Console(stderr=True, soft_wrap=True)
 
 # The SDK logs a paragraph about `max_hops` above 2 on every lineage query, and
 # with no handler configured it lands on stderr through logging's last-resort
@@ -404,6 +416,7 @@ def _prepare(
     llm_provider: str | None,
     llm_model: str | None,
     writes: bool,
+    chatter: Console | None = None,
 ) -> tuple[DataHubConnection, ScanConfig, LLMConfig | None, str | None, str | None]:
     """Do the setup ``scan`` and ``watch`` share: config, LLM, connect, resolve.
 
@@ -422,6 +435,10 @@ def _prepare(
             about running unauthenticated depends on it: a ``--dry-run`` scan and
             a plain ``gate`` write nothing, so telling their user that writes are
             unauthenticated describes a write that is never attempted.
+        chatter: Where the unauthenticated-writes warning goes. Defaults to
+            stdout, and a caller emitting JSON on stdout passes the stderr
+            console instead, so the warning is still seen without landing in the
+            middle of the document a program is parsing.
 
     Raises:
         typer.Exit: A target is missing, the config or LLM is unusable, DataHub is
@@ -461,7 +478,9 @@ def _prepare(
         raise typer.Exit(code=2) from exc
 
     if writes and not conn.has_token:
-        console.print("[yellow]No DATAHUB_GMS_TOKEN set; writing unauthenticated.[/yellow]")
+        (chatter or console).print(
+            "[yellow]No DATAHUB_GMS_TOKEN set; writing unauthenticated.[/yellow]"
+        )
 
     return conn, config, llm, table_urn, model_urn
 
@@ -631,10 +650,15 @@ def _scan_all_models(
 ) -> None:
     """Run one scan per model in the graph, sharing a single connection.
 
-    The options this refuses alongside ``--all-models`` all mean "one target":
-    a report path names one file, a contract describes one model, and the review
-    agent stops for a human, which across a whole catalog is a prompt storm
-    nobody reads to the end. Refusing them beats guessing which model wins.
+    Most of the options this refuses alongside ``--all-models`` mean "one
+    target": a report path names one file, a contract describes one model, and
+    the review agent stops for a human, which across a whole catalog is a prompt
+    storm nobody reads to the end. Refusing them beats guessing which model wins.
+
+    ``--format`` is refused for a different reason: a sweep produces one report
+    per model, and concatenated JSON documents are not a JSON document. Emitting
+    an array instead would be a second, differently-shaped output contract for
+    the same flag, which is worse than saying no until somebody needs it.
     """
     named = sorted(flag for flag, given in forbidden.items() if given)
     if named:
@@ -736,6 +760,14 @@ def scan(
         bool,
         typer.Option("--all-models", help="Audit every model in the graph, one after another."),
     ] = False,
+    output_format: Annotated[
+        OutputFormat,
+        typer.Option(
+            "--format",
+            help="text for a human, json for a program. json puts the whole report "
+            "on stdout and progress lines on stderr.",
+        ),
+    ] = OutputFormat.TEXT,
 ) -> None:
     """Audit a table for stale data, a model for target leakage, or both.
 
@@ -762,6 +794,7 @@ def scan(
                 "--report-out/--assertion-out/--contract-out": any(
                     path is not None for path in (report_out, assertion_out, contract_out)
                 ),
+                "--format": output_format is not OutputFormat.TEXT,
             },
         )
         return
@@ -772,9 +805,30 @@ def scan(
 
     use_agent = review or auto_approve
     if dry_run and use_agent:
-        console.print("[red]--dry-run and --review/--auto-approve are mutually exclusive: ")
-        console.print("--review already previews the findings before writing.[/red]")
+        # One call, not two. Rich parses each print independently, so an opening
+        # tag in one and its closing tag in the next raises MarkupError and the
+        # guard crashes instead of explaining itself (found by the --format json
+        # guard's test, which is the first test to invoke one of these paths).
+        console.print(
+            "[red]--dry-run and --review/--auto-approve are mutually exclusive: "
+            "--review already previews the findings before writing.[/red]"
+        )
         raise typer.Exit(code=2)
+
+    as_json = output_format is OutputFormat.JSON
+    if as_json and use_agent:
+        # --review is a conversation: it prints the findings and waits for a human
+        # to type an answer. There is no way to render that as one JSON document,
+        # and pretending otherwise would hang a script that never answers.
+        console.print(
+            "[red]--format json and --review/--auto-approve are incompatible: "
+            "the review agent prompts a human before it writes.[/red]"
+        )
+        raise typer.Exit(code=2)
+
+    # Everything that is not the report itself moves to stderr under --format
+    # json, so stdout carries exactly one parseable document.
+    chatter = err_console if as_json else console
 
     conn, config, llm, table_urn, model_urn = _prepare(
         table=table,
@@ -784,12 +838,13 @@ def scan(
         llm_provider=llm_provider,
         llm_model=llm_model,
         writes=not dry_run,
+        chatter=chatter,
     )
 
     for target in (table_urn, model_urn):
         if target is not None:
-            console.print(f"Scanning [bold]{target}[/bold]")
-    console.print()
+            chatter.print(f"Scanning [bold]{target}[/bold]")
+    chatter.print()
 
     if use_agent:
         report = _run_review(
@@ -804,7 +859,15 @@ def scan(
             llm=llm,
             dry_run=dry_run,
         )
-        _print_report(report)
+        if as_json:
+            print(report_json(report))
+        else:
+            _print_report(report)
+
+    # Unconditional, like the gate's GitHub annotations and for the same reason:
+    # it lands only where a CI runner has asked for it (GITHUB_STEP_SUMMARY set),
+    # and a flag somebody has to remember is a flag nobody sets.
+    write_job_summary(job_summary_markdown(report))
 
     # The input contract describes the model's expected inputs, not this scan's
     # findings, so it is written even when the scan is clean: a clean model still
@@ -814,16 +877,16 @@ def scan(
 
         try:
             contract_out.write_text(render_input_contract(conn, model_urn, config))
-            console.print(f"[dim]wrote {contract_out}[/dim]")
+            chatter.print(f"[dim]wrote {contract_out}[/dim]")
         except ContractError as exc:
-            console.print(f"[yellow]{exc}[/yellow]")
+            chatter.print(f"[yellow]{exc}[/yellow]")
 
     if report.clean:
         return
 
     if assertion_out is not None and report.assertion_yaml:
         assertion_out.write_text(report.assertion_yaml)
-        console.print(f"[dim]wrote {assertion_out}[/dim]")
+        chatter.print(f"[dim]wrote {assertion_out}[/dim]")
 
     if report_out is not None:
         from modelguard.writeback.documents import render_impact_report
@@ -834,7 +897,7 @@ def scan(
         report_out.write_text(
             render_impact_report(worst.finding, worst.narrative.assessment, report.run_id)
         )
-        console.print(f"[dim]wrote {report_out}[/dim]")
+        chatter.print(f"[dim]wrote {report_out}[/dim]")
 
 
 @app.command()
@@ -1000,6 +1063,14 @@ def gate(
     llm_model: Annotated[
         str | None, typer.Option("--llm-model", help="Override MODELGUARD_LLM_MODEL.")
     ] = None,
+    output_format: Annotated[
+        OutputFormat,
+        typer.Option(
+            "--format",
+            help="text for a CI log, json for a program. json also suppresses the "
+            "GitHub annotations, which are not JSON.",
+        ),
+    ] = OutputFormat.TEXT,
 ) -> None:
     """Fail the build when a change would ship an unsafe model.
 
@@ -1034,6 +1105,9 @@ def gate(
     # Any setup failure is "could not reach a verdict", so _prepare's own exit
     # codes are remapped onto EXIT_ERROR rather than leaking through as a policy
     # violation. This is the distinction the whole command rests on.
+    as_json = output_format is OutputFormat.JSON
+    chatter = err_console if as_json else console
+
     try:
         conn, config, llm, table_urn, model_urn = _prepare(
             table=table,
@@ -1043,6 +1117,7 @@ def gate(
             llm_provider=llm_provider,
             llm_model=llm_model,
             writes=write,
+            chatter=chatter,
         )
     except typer.Exit as exc:
         raise typer.Exit(code=EXIT_ERROR) from exc
@@ -1064,6 +1139,15 @@ def gate(
     except Exception as exc:
         console.print(f"[red]{safe_error(exc)}[/red]")
         raise typer.Exit(code=EXIT_ERROR) from exc
+
+    # The verdict on the run's own summary page, where the reviewer already is,
+    # instead of behind a click into the log. Lands only when GitHub Actions set
+    # GITHUB_STEP_SUMMARY, and is a no-op everywhere else.
+    write_job_summary(job_summary_markdown(report, verdict))
+
+    if as_json:
+        print(report_json(report, verdict))
+        raise typer.Exit(code=verdict.exit_code)
 
     for finding in (write_.finding for write_ in report.writes):
         _print_finding(finding)

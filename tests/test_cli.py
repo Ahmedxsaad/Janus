@@ -331,3 +331,44 @@ def test_a_first_poll_that_finds_something_says_detected(capsys):
 
     assert signature
     assert "detected" in capsys.readouterr().out
+
+
+def _invoke(*args: str):  # noqa: ANN202 - a typer Result, asserted on inline
+    """Run the CLI in-process. Only used for guards that fire before connecting."""
+    from typer.testing import CliRunner
+
+    return CliRunner().invoke(app, list(args))
+
+
+def test_json_output_refuses_the_review_agent_rather_than_hanging():
+    """--review prompts a human; there is no JSON document that can wait for that."""
+    result = _invoke("scan", "--model", "credit_risk_v3", "--format", "json", "--review")
+
+    assert result.exit_code == 2
+    assert "incompatible" in result.output
+
+
+def test_json_output_is_refused_on_a_whole_catalog_sweep():
+    """One report per model, concatenated, is not a JSON document."""
+    result = _invoke("scan", "--all-models", "--format", "json")
+
+    assert result.exit_code == 2
+    assert "--format" in result.output
+
+
+def test_an_unknown_output_format_is_a_usage_error_not_a_silent_default():
+    result = _invoke("scan", "--model", "credit_risk_v3", "--format", "yaml")
+
+    assert result.exit_code == 2
+
+
+def test_the_dry_run_review_guard_explains_itself_instead_of_crashing():
+    """The guard explains itself rather than dying in the markup parser.
+
+    Rich parses each print alone, so a tag opened in one call and closed in the
+    next raised MarkupError and the guard died mid-sentence.
+    """
+    result = _invoke("scan", "--model", "credit_risk_v3", "--dry-run", "--review")
+
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.output
