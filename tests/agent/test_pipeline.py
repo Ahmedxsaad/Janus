@@ -111,6 +111,13 @@ def _only(report: ScanReport) -> FindingWrites:
     return report.writes[0]
 
 
+def _scan_log_line(caplog: Any) -> str:
+    """The single 'scan complete' line a run emitted."""
+    lines = [r.getMessage() for r in caplog.records if "scan complete" in r.msg]
+    assert len(lines) == 1, f"expected one scan log line, got {len(lines)}"
+    return lines[0]
+
+
 def _aspects_of(graph: FakeGraph, aspect_type: type) -> list[Any]:
     return [mcp.aspect for mcp in graph.emitted if isinstance(mcp.aspect, aspect_type)]
 
@@ -884,3 +891,41 @@ def test_a_recovered_table_records_the_passing_assertion_run():
     assert events[0].result is not None
     assert events[0].result.type == "SUCCESS"
     assert events[0].asserteeUrn == TABLE_URN
+
+
+# --------------------------------------------------------------------------
+# What a run reports about itself
+# --------------------------------------------------------------------------
+
+
+def test_every_scan_logs_its_counts_and_timings_keyed_by_run_id(caplog):
+    """The self-observability line an operator greps and a log pipeline parses.
+
+    Not cosmetic: detect_ms is the only part of MTTD this process controls, and
+    a scan that does not say how long detection took cannot be held to an SLO.
+    """
+    graph = _graph(30.0)
+    graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
+
+    with caplog.at_level("INFO", logger="modelguard.agent.pipeline"):
+        report = _scan(graph, _client())
+
+    line = _scan_log_line(caplog)
+    assert f"run_id={report.run_id}" in line
+    assert f"table={TABLE_URN}" in line
+    assert "dry_run=false" in line
+    assert f"findings={len(report.writes)}" in line
+    assert f"writes={len(report.writes)}" in line
+    # Parsed as a duration, so the assertion fails on a literal format string.
+    assert int(line.split("detect_ms=")[1].split()[0]) >= 0
+
+
+def test_a_dry_run_logs_that_it_previewed_rather_than_wrote(caplog):
+    """The counts have to tell a preview from a write, or they mislead."""
+    with caplog.at_level("INFO", logger="modelguard.agent.pipeline"):
+        report = _scan(_graph(30.0), _client(), dry_run=True)
+
+    line = _scan_log_line(caplog)
+    assert "dry_run=true" in line
+    assert "writes=0" in line
+    assert f"findings={len(report.writes)}" in line

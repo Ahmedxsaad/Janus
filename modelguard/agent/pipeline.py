@@ -17,10 +17,21 @@ been. Phase 3 swaps this for a LangGraph ``StateGraph`` with a real
 Every write in a run carries the same ``run_id``. It is provenance, not a dedup
 key: it changes every run, so keying on it would duplicate every finding on
 every scan.
+
+What a run reports about itself
+-------------------------------
+Every scan logs one line keyed by ``run_id``, carrying the phase timings and the
+counts: how long detection took, how many findings it produced, how many writes
+landed. Those are the numbers an MTTD budget is made of, and they are emitted as
+``key=value`` pairs so a log pipeline can parse them without a custom format and
+a human can still read them. The library only emits; choosing a level and a
+destination belongs to whoever runs the process, which for the unattended path
+is ``modelguard watch``.
 """
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -98,6 +109,12 @@ LEAKAGE_RISK_TERM_DEFINITION = (
     "offline metrics are inflated and will not hold in production, where the label is "
     "not known at scoring time."
 )
+
+
+#: One logger for the whole loop, so every scan's timings arrive on one channel
+#: no matter which trigger woke it. No handler is attached here: a library that
+#: configures logging steals the decision from the application that imported it.
+logger = logging.getLogger(__name__)
 
 
 def new_run_id() -> str:
@@ -553,6 +570,48 @@ def _reconcile_stale_findings(
         )
 
 
+def _log_scan(
+    run_id: str,
+    *,
+    table_urn: str | None,
+    model_urn: str | None,
+    dry_run: bool,
+    findings: int,
+    warnings: int,
+    writes: int,
+    detect_seconds: float,
+    total_seconds: float,
+) -> None:
+    """Emit one machine-readable line summarizing a completed scan.
+
+    ``key=value`` rather than JSON, because it stays readable in a terminal
+    tailing ``modelguard watch`` and is still one ``logfmt`` parser away from a
+    metrics pipeline; a second format nobody has asked for is a second format to
+    keep correct.
+
+    ``detect_ms`` is the number an MTTD budget is actually built from: the rest
+    of the delay between a table breaking and an incident existing belongs to
+    the poll interval and to DataHub's own index convergence, neither of which
+    this process controls, and folding them into one figure would hide which
+    one moved. URNs are logged, values never are: everything here is an
+    identifier or a count that a detector measured, and no aspect content, no
+    prose, and no credential reaches this line.
+    """
+    logger.info(
+        "scan complete run_id=%s table=%s model=%s dry_run=%s "
+        "findings=%d writes=%d warnings=%d detect_ms=%d total_ms=%d",
+        run_id,
+        table_urn or "-",
+        model_urn or "-",
+        str(dry_run).lower(),
+        findings,
+        writes,
+        warnings,
+        round(detect_seconds * 1000),
+        round(total_seconds * 1000),
+    )
+
+
 def run_scan(
     conn: DataHubConnection,
     config: ScanConfig,
@@ -593,7 +652,11 @@ def run_scan(
     run_id = run_id or new_run_id()
     observed_at = now_ms if now_ms is not None else int(time.time() * 1000)
 
+    # perf_counter, not the clock: this measures an elapsed duration, and the
+    # wall clock can step sideways under NTP mid-scan.
+    started = time.perf_counter()
     findings, warnings = _detect(conn, config, table_urn, model_urn, observed_at)
+    detect_seconds = time.perf_counter() - started
 
     # Rendered either way: a dry run must be able to show the assertion it would
     # have written. Only meaningful for a table target.
@@ -606,6 +669,17 @@ def run_scan(
     trust = _trust_scores(findings, config)
 
     if dry_run:
+        _log_scan(
+            run_id,
+            table_urn=table_urn,
+            model_urn=model_urn,
+            dry_run=True,
+            findings=len(findings),
+            warnings=len(warnings),
+            writes=0,
+            detect_seconds=detect_seconds,
+            total_seconds=time.perf_counter() - started,
+        )
         return ScanReport(
             run_id=run_id,
             table_urn=table_urn,
@@ -639,6 +713,18 @@ def run_scan(
         findings=findings,
         run_id=run_id,
         observed_at=observed_at,
+    )
+
+    _log_scan(
+        run_id,
+        table_urn=table_urn,
+        model_urn=model_urn,
+        dry_run=False,
+        findings=len(findings),
+        warnings=len(warnings),
+        writes=len(writes),
+        detect_seconds=detect_seconds,
+        total_seconds=time.perf_counter() - started,
     )
 
     return ScanReport(

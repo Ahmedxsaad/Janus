@@ -14,6 +14,8 @@ never a guess: silently auditing the wrong table would be worse than failing.
 
 from __future__ import annotations
 
+import logging
+import sys
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -729,6 +731,19 @@ def watch(
     """
     # ponytail: polling loop, not the Actions/Kafka EntityChangeEvent consumer.
     # Wire datahub-actions here if sub-poll-interval latency ever matters.
+
+    # The one entry point that runs unattended for days, so it is the one that
+    # turns the pipeline's per-scan timing lines on. The other commands print a
+    # report to a human who is standing there and would only be talked over.
+    # basicConfig is a no-op if the embedding application already configured
+    # logging, which is what makes it safe to call from a command rather than
+    # at import.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        stream=sys.stderr,
+    )
+
     conn, config, llm, table_urn, model_urn = _prepare(
         table=table,
         model=model,
