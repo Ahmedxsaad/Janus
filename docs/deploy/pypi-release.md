@@ -5,9 +5,17 @@ on a `v*.*.*` tag. It authenticates with **Trusted Publishing** (OIDC), so
 there is no API token stored in this repository. That means one piece of
 setup has to happen on PyPI's side, once, before the first release.
 
-**Not yet run.** The workflow and this runbook exist; the PyPI project and its
-trusted publisher have not been created, and no version has been published.
-Do the one-time setup below before pushing the first tag.
+**Status, 2026-08-01:** the pending publisher has been created on PyPI, so the
+one-time setup below is done. Nothing is published yet: the authoritative
+check, `https://pypi.org/simple/modelguard-datahub/`, still returns 404. The
+first release is deliberately deferred until closer to submission, so the
+published version matches the final submitted state rather than an
+intermediate one. Skip to [Cutting a release](#cutting-a-release).
+
+Do not check whether a project exists by loading `pypi.org/project/<name>/` in
+a script: PyPI answers automated requests with a bot-challenge page that
+returns HTTP 200 regardless, which reads as "it exists" when it does not. The
+`/simple/` index is the honest check.
 
 ## One-time setup, on PyPI
 
