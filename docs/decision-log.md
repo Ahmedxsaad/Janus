@@ -47,6 +47,13 @@ Entry template:
   github.com/settings/personal-access-tokens. The runbook step is not optional
   and a future provision should not skip it: the VM is internet-facing.
 
+  One consequence, deliberately accepted: with the token gone the VM can no
+  longer `git fetch` a private repo, so it sits at the last commit it pulled
+  (877350e, every code change in D-074) while the branch head carries the
+  documentation written after it. Nothing the service runs differs. The next
+  deploy needs a credential pasted in for the duration of the pull, or the repo
+  to be public, which the hackathon rules require before submission anyway.
+
 ## D-074: Run ModelGuard against a real ML project, and fix what that broke (2026-08-01)
 - Decided by: Ghassen Naouar (asked to use the product as an ordinary user
   would on a real project, and to make it more solid and usable), applied by
