@@ -35,7 +35,12 @@ from datahub.metadata.urns import DatasetUrn, SchemaFieldUrn
 from modelguard.agent.narrate import Narrative, incident_description, narrate
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
-from modelguard.detect.blast_radius import blast_radius, downstream_models, finding_for
+from modelguard.detect.blast_radius import (
+    blast_radius,
+    downstream_models,
+    finding_for,
+    freshness_signal,
+)
 from modelguard.detect.graph_reads import model_ref
 from modelguard.detect.leakage import feature_source_column, leakage_findings
 from modelguard.detect.schema_drift import schema_drift_candidate_resources, schema_drift_findings
@@ -372,6 +377,43 @@ def _recovery_message(run_id: str) -> str:
     return f"Recovered by ModelGuard run {run_id}; the finding is no longer present."
 
 
+def _record_recovered_assertion(
+    conn: DataHubConnection,
+    config: ScanConfig,
+    table_urn: str,
+    run_id: str,
+    observed_at: int,
+) -> None:
+    """Write the passing run event for a table that is no longer stale.
+
+    The guarding assertion's latest run event is the FAILURE recorded when the
+    table went stale. Resolving the incident without recording the passing run
+    leaves the assertion red in the DataHub UI forever, so a recovered table
+    reads as still breaching the very check ModelGuard wrote to guard it.
+
+    Called only after a FRESHNESS incident was actually resolved, which means
+    the assertion already exists: a table that was never stale must not have one
+    conjured for it by a clean scan. ``upsert_guarding_assertion`` derives the
+    URN as a guid over the declaration, so this resolves to that same assertion
+    rather than creating a second one.
+
+    Does nothing when the table reports no ``operation`` aspect: with no signal
+    there is no measurement to record, and inventing one would assert a lag that
+    was never observed.
+    """
+    signal = freshness_signal(conn, table_urn, config, now_ms=observed_at)
+    if signal is None:
+        return
+    assertion = upsert_guarding_assertion(
+        conn,
+        table_urn=table_urn,
+        sla_hours=config.freshness_sla_hours,
+        freshness_field=config.freshness_field,
+        created_ms=observed_at,
+    )
+    record_assertion_result(conn, assertion_urn=assertion.urn, signal=signal, run_id=run_id)
+
+
 def _reconcile_stale_findings(
     conn: DataHubConnection,
     config: ScanConfig,
@@ -380,6 +422,7 @@ def _reconcile_stale_findings(
     model_urn: str | None,
     findings: list[Finding],
     run_id: str,
+    observed_at: int,
 ) -> None:
     """Resolve any stale ModelGuard incident and clear the risk it named.
 
@@ -412,6 +455,7 @@ def _reconcile_stale_findings(
         incident = find_active_incident(conn, table_urn, "FRESHNESS", title)
         if incident is not None:
             resolve_incident(conn, incident, _recovery_message(run_id))
+            _record_recovered_assertion(conn, config, table_urn, run_id, observed_at)
             for at_risk in downstream_models(conn, table_urn, config):
                 record(at_risk, FindingType.UPSTREAM_FRESHNESS)
 
@@ -423,6 +467,14 @@ def _reconcile_stale_findings(
         # incident's title also names the label reached, which is not
         # reconstructable once the leak is gone, so this matches by prefix
         # rather than find_active_incident's exact-title match.
+        #
+        # Known gap (D-069): this walks the model's *current* features, so a leak
+        # fixed by deleting the feature outright, rather than by severing its
+        # lineage the way seed/scenarios.py's revert_leakage does, leaves an
+        # incident with no path back into this walk and it stays open. Closing it
+        # needs a durable record of every resource a finding ever named, the
+        # side-channel state store D-067 deliberately rejected, so it is logged
+        # rather than built until a real deployment needs it.
         for feature_urn in (properties.mlFeatures or []) if properties else []:
             source_column = feature_source_column(conn, feature_urn)
             if source_column is None or (source_column, "FIELD") in current_keys:
@@ -445,19 +497,46 @@ def _reconcile_stale_findings(
         for dataset_urn in schema_drift_candidate_resources(conn, model_urn, config):
             if (dataset_urn, "DATA_SCHEMA") in current_keys:
                 continue
-            title = f"Training-serving schema drift in {DatasetUrn.from_string(dataset_urn).name}"
+            title = (
+                "Training-serving schema drift in "
+                f"{DatasetUrn.from_string(dataset_urn).name} for {model.name}"
+            )
             incident = find_active_incident(conn, dataset_urn, "DATA_SCHEMA", title)
             if incident is not None:
                 resolve_incident(conn, incident, _recovery_message(run_id))
                 record(model, FindingType.INPUT_SCHEMA_DRIFT)
 
+    # A risk flag is a finding type, but a model can carry one type from several
+    # resources at once: two stale upstream tables, two leaking features. One of
+    # them recovering does not clear the type, so a flag may only be dropped when
+    # this run raised no finding of that type for that model. Without this, a
+    # scan that resolves one resource and re-raises another in the same breath
+    # strips the flags and the at-risk tag off a model it just found failing, and
+    # overwrites the trust score _persist_trust wrote seconds earlier with a
+    # from-scratch "no findings" score (D-070).
+    current_flags: dict[str, set[str]] = {}
+    for finding in findings:
+        for at_risk_model in finding.models_at_risk:
+            current_flags.setdefault(at_risk_model.urn, set()).add(str(finding.finding_type))
+
     # One read-modify-write per affected model, after every resolve above, so
     # a model whose leakage and drift both recovered this run is cleared once
     # rather than raced across two partial writes.
     for urn, model in recovered_models.items():
+        cleared = recovered_flags[urn] - current_flags.get(urn, set())
+        if not cleared:
+            continue
         existing_flags = {str(flag) for flag in read_properties(conn, urn).get(RISK_FLAGS, [])}
-        remaining = existing_flags - recovered_flags[urn]
+        remaining = existing_flags - cleared
         if remaining:
+            # Flags only. The trust score is deliberately left alone: scoring the
+            # remaining flags would need the findings behind them, which a scan
+            # of a different target never produced, and a flag string carries no
+            # severity to reconstruct one from. The score stays as the last scan
+            # that did see those findings left it, which errs low (it still
+            # deducts for what was just resolved) and self-corrects the next time
+            # this model is scanned directly. Erring low is the safe direction:
+            # it never advertises a failing model as healthy.
             assign_properties(conn, urn, {RISK_FLAGS: sorted(remaining), RUN_ID: [run_id]})
             continue
         remove_properties(conn, urn, {RISK_FLAGS})
@@ -559,6 +638,7 @@ def run_scan(
         model_urn=model_urn,
         findings=findings,
         run_id=run_id,
+        observed_at=observed_at,
     )
 
     return ScanReport(
