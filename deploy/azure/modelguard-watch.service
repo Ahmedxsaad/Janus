@@ -38,6 +38,14 @@ ExecStart=/usr/bin/docker compose run --rm --name modelguard-watch-live modelgua
 # which is how a container came to outlive its unit in the first place (D-068
 # saw the symptom and read it as an async-cleanup race; it is not).
 ExecStop=/usr/bin/docker stop modelguard-watch-live
+# `docker stop` is a SIGTERM, so a deliberate operator stop exits 143 (or 130
+# for a Ctrl-C'd SIGINT) and systemd would otherwise leave the unit reading
+# `failed` after a perfectly clean shutdown. That matters more than tidiness:
+# the whole point of this VM is that somebody glancing at it can tell working
+# from broken, and a unit that cries failure every time it is asked to stop
+# teaches the reader to ignore the word. Restart behaviour is unchanged,
+# Restart=always does not consult exit status.
+SuccessExitStatus=130 143
 Restart=always
 # Not the default (100ms): GMS being briefly unreachable during its own
 # startup is the expected first failure, not an exceptional one, and
