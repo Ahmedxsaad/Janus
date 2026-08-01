@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 
 import pytest
 from datahub.metadata.schema_classes import (
@@ -69,9 +70,17 @@ def test_a_search_hit_whose_name_does_not_match_is_ignored():
         resolve_table(_conn([unrelated]), "loans_raw")
 
 
-def test_an_unknown_table_fails_loudly_and_points_at_the_seeder():
+def test_an_unknown_table_on_a_local_quickstart_points_at_the_seeder():
+    local = replace(_conn([]), gms_url="http://localhost:8080")
     with pytest.raises(TableResolutionError, match="modelguard-seed"):
+        resolve_table(local, "nonexistent")
+
+
+def test_an_unknown_table_on_a_remote_instance_never_suggests_seeding():
+    """Seeding somebody's real catalog would write demo datasets into it."""
+    with pytest.raises(TableResolutionError, match="no dataset named") as raised:
         resolve_table(_conn([]), "nonexistent")
+    assert "modelguard-seed" not in str(raised.value)
 
 
 def test_an_ambiguous_name_is_refused_rather_than_guessed():
