@@ -46,6 +46,7 @@ local Quickstart, and it is the path the rest of this README documents.
 | [docs/plan/02-implementation-plan.md](docs/plan/02-implementation-plan.md) | The build: phases, APIs, schedule |
 | [docs/plan/03-production-hardening.md](docs/plan/03-production-hardening.md) | Benchmark, scaling, security model |
 | [docs/plan/04-improvements.md](docs/plan/04-improvements.md) | Proposed improvements, pending decisions |
+| [docs/plan/06-judge-review-and-improvements.md](docs/plan/06-judge-review-and-improvements.md) | Review against the judging criteria, and what to land before the PyPI tag |
 | [docs/decision-log.md](docs/decision-log.md) | Decisions made, options, why, results |
 | [docs/hackathon-specs/](docs/hackathon-specs/) | Official hackathon rules and requirements |
 
