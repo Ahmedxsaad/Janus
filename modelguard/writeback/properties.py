@@ -46,6 +46,11 @@ RUN_ID = "modelguard.run_id"
 #: through, still gets its incident closed (D-069's gap, hit for real in D-074).
 OPEN_LEAK_COLUMNS = "modelguard.open_leak_columns"
 
+#: One entry per scan that scored a model, oldest first. A trust score on its own
+#: says nothing a reader can act on: 82 matters only next to the 95 it was last
+#: week, and the direction is what tells somebody that a change shipped.
+TRUST_HISTORY = "modelguard.trust_history"
+
 _VALID_CARDINALITIES = frozenset(
     {PropertyCardinalityClass.SINGLE, PropertyCardinalityClass.MULTIPLE}
 )

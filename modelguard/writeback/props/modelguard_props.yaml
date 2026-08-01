@@ -43,6 +43,17 @@ properties:
     cardinality: SINGLE
     entity_types: [mlModel]
 
+  - qualified_name: modelguard.trust_history
+    display_name: ModelGuard Trust History
+    description: >-
+      One entry per scan that scored this model, oldest first, as
+      "<ISO-8601 UTC>|<run_id>|<score>|<band>|<deductions>". A score on its own
+      says nothing: 82 matters only next to the 95 it was last Tuesday. The list
+      is capped, so it is a recent trend rather than an unbounded log.
+    value_type: string
+    cardinality: MULTIPLE
+    entity_types: [mlModel]
+
   - qualified_name: modelguard.open_leak_columns
     display_name: ModelGuard Open Leak Columns
     description: >-

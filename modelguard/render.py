@@ -120,6 +120,10 @@ def report_dict(report: ScanReport, verdict: GateVerdict | None = None) -> dict[
                 "model_name": trust.model_name,
                 "score": trust.score.value,
                 "band": trust.score.band.value,
+                # Null, not the current score, when this model has never been
+                # scored before: "unchanged" and "never measured" are different
+                # facts and only one of them is reassuring.
+                "previous_score": trust.previous_score,
                 "deductions": dict(trust.score.deductions),
             }
             for trust in report.trust

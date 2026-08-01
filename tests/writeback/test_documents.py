@@ -8,7 +8,9 @@ from modelguard.writeback.documents import (
     _document_id,
     publish_impact_report,
     render_impact_report,
+    render_trust_trend,
 )
+from modelguard.writeback.trust_history import TrustEntry
 from tests.conftest import MODEL_URN as MODEL
 from tests.conftest import TABLE_URN, FakeClient, FakeGraph, make_connection
 from tests.conftest import make_finding as _finding
@@ -165,3 +167,73 @@ def test_the_published_body_is_the_rendered_report():
         run_id="scan-abc",
     )
     assert write.markdown == client.entities.upserted[0].text
+
+
+# --------------------------------------------------------------------------
+# The trust trend section (D-081)
+# --------------------------------------------------------------------------
+
+
+def make_leakage_finding(**kwargs):  # noqa: ANN003 - alias for the shared fixture
+    return _leakage_finding(**kwargs)
+
+
+def _entry(recorded_at: str, score: int, *, deductions: tuple[str, ...] = ()) -> TrustEntry:
+    return TrustEntry(
+        recorded_at=recorded_at,
+        run_id=f"scan-{score}",
+        score=score,
+        band="healthy" if score >= 70 else "at-risk",
+        deductions=deductions,
+    )
+
+
+def test_one_scan_renders_no_trend_because_one_point_is_not_a_trend():
+    """A one-row table invites a reader to draw a line through a single point."""
+    assert render_trust_trend([_entry("2026-08-02T09:00:00Z", 82)]) == ""
+
+
+def test_two_scans_render_the_direction_and_the_deductions_that_moved_it():
+    trend = render_trust_trend(
+        [
+            _entry("2026-08-01T09:00:00Z", 95),
+            _entry("2026-08-02T09:00:00Z", 64, deductions=("leakage",)),
+        ]
+    )
+
+    assert "## Trust over time" in trend
+    assert "95/100" in trend
+    assert "64/100" in trend
+    assert "leakage" in trend
+    assert "down by 31 points" in trend
+
+
+def test_a_recovering_model_reads_as_up_not_merely_as_changed():
+    trend = render_trust_trend(
+        [_entry("2026-08-01T09:00:00Z", 40), _entry("2026-08-02T09:00:00Z", 90)]
+    )
+
+    assert "up by 50 points" in trend
+
+
+def test_an_unchanged_score_says_so_rather_than_reporting_a_zero_move():
+    trend = render_trust_trend(
+        [_entry("2026-08-01T09:00:00Z", 82), _entry("2026-08-02T09:00:00Z", 82)]
+    )
+
+    assert "unchanged." in trend
+    assert "0 points" not in trend
+
+
+def test_the_impact_report_carries_the_trend_when_there_is_one():
+    finding = make_leakage_finding()
+    history = [_entry("2026-08-01T09:00:00Z", 95), _entry("2026-08-02T09:00:00Z", 64)]
+
+    with_history = render_impact_report(finding, "assessment", "scan-1", history)
+    without = render_impact_report(finding, "assessment", "scan-1")
+
+    assert "## Trust over time" in with_history
+    assert "## Trust over time" not in without
+    # The finding's own sections are unchanged either way.
+    assert "## Assessment" in with_history
+    assert "## Assessment" in without

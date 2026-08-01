@@ -34,6 +34,7 @@ rendered as a quoted narrative section, never as a fact table.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import singledispatch
 
@@ -49,6 +50,7 @@ from modelguard.models import (
     ModelAtRisk,
     SchemaDriftFinding,
 )
+from modelguard.writeback.trust_history import TrustEntry
 
 #: Renders under the document's title in the UI, and groups ModelGuard's reports.
 REPORT_SUBTYPE = "Model Impact Report"
@@ -321,7 +323,49 @@ both from metadata DataHub holds. It did not query the warehouse.
 """
 
 
-def render_impact_report(finding: Finding, narrative: str, run_id: str) -> str:
+def render_trust_trend(history: Sequence[TrustEntry]) -> str:
+    """Render a model's recent trust scores as a markdown section, or ``""``.
+
+    Empty for a model with fewer than two entries, deliberately: one point is not
+    a trend, and a table of one row invites a reader to draw a line through it.
+    The section is what turns "82/100" into "82, down from 95 on Tuesday, and
+    here is the deduction that appeared in between".
+    """
+    if len(history) < 2:
+        return ""
+
+    lines = [
+        "## Trust over time",
+        "",
+        "Every scan that scored this model, most recent last. The score alone is not",
+        "the signal; the direction is, and the deductions column says what moved it.",
+        "",
+        "| When (UTC) | Score | Band | Deductions |",
+        "|---|---|---|---|",
+    ]
+    lines += [
+        f"| {entry.recorded_at} | {entry.score}/100 | {entry.band} "
+        f"| {', '.join(entry.deductions) or 'none'} |"
+        for entry in history
+    ]
+
+    change = history[-1].score - history[0].score
+    direction = "unchanged" if change == 0 else ("up" if change > 0 else "down")
+    lines += [
+        "",
+        f"Across these {len(history)} scans the score is {direction}"
+        + (f" by {abs(change)} points." if change else "."),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def render_impact_report(
+    finding: Finding,
+    narrative: str,
+    run_id: str,
+    history: Sequence[TrustEntry] = (),
+) -> str:
     """Render the Model Impact Report as markdown.
 
     The skeleton is shared; the sections that depend on what actually went wrong
@@ -333,6 +377,9 @@ def render_impact_report(finding: Finding, narrative: str, run_id: str) -> str:
         narrative: Prose explaining the finding. May be LLM-written or templated;
             it is quoted as narrative and never used as a source of fact.
         run_id: The scan that produced the report.
+        history: This model's recorded trust scores, oldest first. Omitted, or
+            shorter than two entries, and the trend section is left out entirely
+            rather than rendered empty.
 
     Returns:
         The markdown body.
@@ -345,7 +392,9 @@ def render_impact_report(finding: Finding, narrative: str, run_id: str) -> str:
         f"**Severity: {finding.severity}** | Models at risk: {len(models)} "
         f"(live: {live}) | Run: `{run_id}`\n\n"
     )
-    return header + _report_body(finding).replace("{narrative}", narrative)
+    body = _report_body(finding).replace("{narrative}", narrative)
+    trend = render_trust_trend(history)
+    return header + body + (f"\n\n{trend}" if trend else "")
 
 
 def publish_impact_report(
@@ -355,6 +404,7 @@ def publish_impact_report(
     finding: Finding,
     narrative: str,
     run_id: str,
+    history: Sequence[TrustEntry] = (),
 ) -> DocumentWrite:
     """Write the impact report as a knowledge document linked to the model.
 
@@ -365,11 +415,13 @@ def publish_impact_report(
         finding: The deterministic finding the report describes.
         narrative: Prose for the assessment section.
         run_id: Stamped on the document as provenance.
+        history: The model's recorded trust scores, oldest first, for the trend
+            section. Empty and the section is omitted.
 
     Returns:
         The document URN and the markdown that was published.
     """
-    markdown = render_impact_report(finding, narrative, run_id)
+    markdown = render_impact_report(finding, narrative, run_id, history)
     title = f"ModelGuard impact report: {report_subject(finding)}"
 
     document = Document.create_document(

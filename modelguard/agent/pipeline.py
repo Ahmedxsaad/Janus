@@ -34,7 +34,8 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 
 from datahub.metadata.schema_classes import (
     IncidentInfoClass,
@@ -102,6 +103,7 @@ from modelguard.writeback.properties import (
     remove_properties,
 )
 from modelguard.writeback.terms import add_term, ensure_term, remove_term
+from modelguard.writeback.trust_history import TrustEntry, project_history, write_history
 
 #: Description attached to the tag entity the first time it is created.
 AT_RISK_TAG_DESCRIPTION = (
@@ -155,6 +157,14 @@ class TrustWrite:
     model_urn: str
     model_name: str
     score: TrustScore
+    previous_score: int | None = None
+    """What this model scored on the previous scan, or None if it has none.
+
+    A score alone is not actionable: 82 out of 100 means one thing after a 95 and
+    another after a 64. Carried on the write so the CLI can report the direction
+    without a second read, and None rather than the current score when there is
+    no history, because "unchanged" and "never measured before" are different
+    facts and only one of them is reassuring."""
 
 
 @dataclass(frozen=True)
@@ -206,6 +216,7 @@ def _write_back(
     config: ScanConfig,
     run_id: str,
     observed_at_ms: int,
+    history: Mapping[str, tuple[TrustEntry, ...]] | None = None,
 ) -> FindingWrites:
     """Perform every mutation for one finding, idempotently.
 
@@ -292,6 +303,7 @@ def _write_back(
                 finding=finding,
                 narrative=narrative.assessment,
                 run_id=run_id,
+                history=(history or {}).get(model.urn, ()),
             )
         )
 
@@ -336,12 +348,54 @@ def _trust_scores(findings: list[Finding], config: ScanConfig) -> tuple[TrustWri
     return tuple(sorted(trust_writes, key=lambda w: (w.score.value, w.model_urn)))
 
 
-def _persist_trust(conn: DataHubConnection, trust_writes: tuple[TrustWrite, ...]) -> None:
-    """Write each model's trust score and band as structured properties.
+def _project_trust_history(
+    conn: DataHubConnection, trust_writes: tuple[TrustWrite, ...], run_id: str
+) -> dict[str, tuple[TrustEntry, ...]]:
+    """Return each scored model's history including this run, without writing.
+
+    Computed once, before the per-finding writes, so the impact report renders
+    the same trend the graph is about to hold. Reading it twice would let the
+    two disagree about the run they were both describing.
+    """
+    return {
+        write.model_urn: project_history(conn, write.model_urn, write.score, run_id)
+        for write in trust_writes
+    }
+
+
+def _with_previous_scores(
+    trust_writes: tuple[TrustWrite, ...],
+    history: Mapping[str, tuple[TrustEntry, ...]],
+) -> tuple[TrustWrite, ...]:
+    """Attach each model's previous score, read from the projection.
+
+    The projection's last entry is this run, so the one before it is the previous
+    scan. A model scored for the first time has no previous entry and keeps None,
+    which is what stops the report claiming a score is "unchanged" when it has
+    simply never been measured before.
+    """
+    attached: list[TrustWrite] = []
+    for write in trust_writes:
+        entries = history.get(write.model_urn, ())
+        previous = entries[-2].score if len(entries) >= 2 else None
+        attached.append(replace(write, previous_score=previous))
+    return tuple(attached)
+
+
+def _persist_trust(
+    conn: DataHubConnection,
+    trust_writes: tuple[TrustWrite, ...],
+    history: Mapping[str, tuple[TrustEntry, ...]],
+) -> None:
+    """Write each model's trust score, band, and one entry in its history.
 
     Read-then-merge inside ``assign_properties`` preserves the risk flags and run
     id an earlier per-finding write set on the same model, and rewriting an
     unchanged score is a no-op, so a rerun converges.
+
+    The history entry is keyed on ``run_id`` and replaces its own row rather than
+    appending a second, so the same convergence holds for it: a rerun of one scan
+    leaves one row, and a genuinely later scan leaves a new one.
     """
     for trust_write in trust_writes:
         assign_properties(
@@ -352,6 +406,7 @@ def _persist_trust(conn: DataHubConnection, trust_writes: tuple[TrustWrite, ...]
                 TRUST_BAND: [str(trust_write.score.band)],
             },
         )
+        write_history(conn, trust_write.model_urn, history.get(trust_write.model_urn, ()))
 
 
 def written_assertion_yaml(writes: tuple[FindingWrites, ...]) -> str:
@@ -840,13 +895,20 @@ def run_scan(
             not_evaluated=gaps,
         )
 
+    # Projected before anything is written, so the impact report each finding
+    # publishes can carry the same trend the graph will hold a moment later.
+    trust_history = _project_trust_history(conn, trust, run_id)
+
     writes = tuple(
-        _write_back(conn, finding, narrate(finding, llm), config, run_id, observed_at)
+        _write_back(
+            conn, finding, narrate(finding, llm), config, run_id, observed_at, trust_history
+        )
         for finding in findings
     )
     # After every per-finding write, so each model's risk flags are already on the
     # graph when the trust score reads and merges alongside them.
-    _persist_trust(conn, trust)
+    trust = _with_previous_scores(trust, trust_history)
+    _persist_trust(conn, trust, trust_history)
 
     # After this run's own writes, so reconciliation reads risk flags that
     # already include anything just raised above, and never fights the write

@@ -16,6 +16,71 @@ Entry template:
 
 ---
 
+## D-082: Measure what a whole-catalog sweep costs (2026-08-02)
+- Decided by: Ghassen Naouar (item E of docs/plan/06), applied by Claude
+- Decision: `benchmarks/scale.py` creates N replica models carrying the seeded
+  model's features and training run, sweeps them dry-run at 1/10/50, and reports
+  wall clock plus graph reads counted at the connection. Replicas are
+  hard-deleted afterwards, including on failure. `RESULTS.md` gains a Scale
+  section, and its "no scale test" caveat is replaced by the ceiling that was
+  actually measured.
+- Options considered:
+  1. Extrapolate from the single seeded model. Rejected: a curve nobody
+     measured, presented as one, is the kind of number a benchmark exists to
+     replace.
+  2. Add `--replicas N` to `modelguard-seed`. Rejected: every URN in
+     `graph_spec` is a fixed function today, so parameterising it touches the
+     whole seeder to serve one benchmark, and production seed code would grow a
+     feature only the benchmark uses.
+  3. Replicate only the ML side, in `benchmarks/`, chosen. The replicas share
+     one feature table because the question is what a *sweep* costs; duplicating
+     the warehouse side would measure the seeder instead. Stated in the report.
+- Why: `RESULTS.md` has said "no scale test" since the benchmark landed, and it
+  is the first question anyone running a real catalog asks of a command that
+  performs one independent scan per model.
+- Result: the section renders whatever was measured, and nothing is scored
+  against a target: there is no published number for how fast a metadata sweep
+  should be, and inventing one to pass would be worse than the plain figure. The
+  graph-read count is the diagnostic: a per-model figure that stays flat as the
+  catalog grows is what says the cost is the catalog's size and not the
+  traversal's shape. Two mutations confirmed red.
+
+  Two gaps found while wiring it. `_observe` had no branch for the two new
+  finding types, so the governance trials would have raised
+  `no detector registered` on the first live run; and the sensitive detector is
+  configuration-gated, so the benchmark now supplies the classification the
+  scenario plants and says so in the report, rather than scoring a detector it
+  never let run.
+
+## D-081: A trust score with a direction (2026-08-02)
+- Decided by: Ghassen Naouar (item C of docs/plan/06), applied by Claude
+- Decision: each scan that scores a model appends one capped entry to a new
+  `modelguard.trust_history` structured property, keyed on `run_id` so a rerun
+  replaces its own row. The impact report gains a "Trust over time" section, the
+  CLI prints the direction under each score, and `--format json` carries
+  `previous_score`.
+- Options considered:
+  1. A custom timeseries aspect, which would give DataHub's UI a real chart.
+     Rejected: that is a change to DataHub's own metadata model, which belongs
+     in the RFC lane (`mcp_ext/`), not in an agent that composes shipped
+     features.
+  2. Append rows to the impact report Document. Rejected: the document is keyed
+     per (model, finding type, resource), so a model with two findings would
+     carry two partial histories of itself.
+  3. A multi-valued structured property on the model, chosen. One list per
+     model, ordered, visible in the UI, and capped at 20 so a `watch` polling
+     every thirty seconds cannot turn it into an unbounded log.
+- Why: 82 out of 100 is neither good nor bad until you know it was 95 last
+  Tuesday. The direction is the actionable part, and nothing recorded it.
+- Result: 12 offline tests plus 5 on the report section, three mutations
+  confirmed red. Two details worth recording. The history is *projected* before
+  the per-finding writes and the projection is what both the report renders and
+  the graph stores, because the report is published before the trust score is
+  persisted and a trend table stopping one scan short of the scan that produced
+  it reads as a bug. And `previous_score` is None rather than the current score
+  for a first-ever scan: "unchanged" and "never measured before" are different
+  facts, and only one of them is reassuring.
+
 ## D-080: link --infer proposes the join, a human still confirms it (2026-08-02)
 - Decided by: Ghassen Naouar (item A of docs/plan/06), applied by Claude
 - Decision: `modelguard/writeback/link_infer.py` reads a model's link out of the

@@ -382,6 +382,18 @@ def _print_findings_and_trust(report: ScanReport) -> None:
             console.print(
                 f"  {trust.model_name}: {trust.score.value}/100 ({trust.score.band}) - {reasons}"
             )
+            # The direction, when there is one to report. A score on its own is
+            # not actionable: 82 matters against the 95 it was last week, and
+            # that is the number a reader is looking for here.
+            if trust.previous_score is not None:
+                change = trust.score.value - trust.previous_score
+                arrow = (
+                    "unchanged from" if change == 0 else ("up from" if change > 0 else "DOWN from")
+                )
+                colour = "yellow" if change < 0 else "dim"
+                console.print(
+                    f"    [{colour}]{arrow} {trust.previous_score}/100 last scan[/{colour}]"
+                )
 
 
 def _print_writes_section(report: ScanReport) -> None:
