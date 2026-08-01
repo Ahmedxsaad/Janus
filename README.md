@@ -17,6 +17,26 @@ Model Impact Report are all written back to DataHub. Reruns never duplicate.
 Target leakage, training/serving schema drift, and the model trust score have
 landed, as has the human-approval agent (`scan --review`) and a polling `watch`.
 
+## Live demo
+
+**<https://modelguard.ahmedxsaad.me>**
+
+A real DataHub instance with the ML supply chain seeded, a failure planted, and
+`modelguard watch` running against it continuously, so what you are looking at
+is a graph ModelGuard is actively maintaining rather than a screenshot. Sign-in
+credentials are in the Devpost submission's testing instructions (they are
+deliberately not in this repository, since anything committed here stays in the
+git history forever).
+
+Once signed in, search `credit_risk_v3` for the model side (its
+`model-at-risk` tag, `modelguard.trust_score` and `trust_band` properties, and
+the linked Model Impact Report), or `loans_raw` for the data side (the open
+incident and the guarding freshness assertion). Nothing needs to be installed
+to see any of it.
+
+Prefer to run it yourself? [Try it](#try-it) below is the same loop against a
+local Quickstart, and it is the path the rest of this README documents.
+
 ## Documentation
 
 | Doc | What it answers |
