@@ -16,6 +16,116 @@ Entry template:
 
 ---
 
+## D-074: Run ModelGuard against a real ML project, and fix what that broke (2026-08-01)
+- Decided by: Ghassen Naouar (asked to use the product as an ordinary user
+  would on a real project, and to make it more solid and usable), applied by
+  Claude
+- Decision: built a genuine ML project on the demo VM and ran ModelGuard
+  against it as a new user, then fixed every gap that surfaced. The project is
+  the ordinary stack, nothing about it built for this tool: IBM's public Telco
+  churn dataset (7043 customers) landed in postgres, three dbt models building
+  a staging table, a feature table and a label table, a scikit-learn model
+  trained on them and tracked in MLflow, and DataHub's own postgres, dbt and
+  mlflow ingestion sources run against all three. The feature table carries the
+  ordinary mistake: `contract_renewed_flag` is `case when churn = 'No' then 1
+  else 0 end`, the label inverted, which an analyst writes while meaning
+  "account health". It trained to **ROC AUC 1.0000**. With the leak removed,
+  **0.8322**. That gap is what the detector exists to find, and it is not a
+  fixture.
+
+  **What the run found, in the order it hurt.**
+
+  1. **The package would not install at all.** `requires-python` capped at
+     `<3.12`, so `pip install` failed outright on Ubuntu 24.04 (3.12) and 25.04
+     (3.13), neither of which carries 3.11 in its default repositories. The cap
+     existed because acryl-datahub prints a *warning* above 3.11. Verified on
+     3.12.3 that install, `scan`, `gate`, leakage detection and the trust score
+     behave identically; the cap is now `<3.14`. This mattered doubly with a
+     PyPI release pending.
+  2. **A table nobody had instrumented was reported "healthy".** `No finding.
+     <urn> healthy.` on a dataset with no `operation` aspect, which is the
+     normal state of nearly every table in a real catalog. The detector was
+     right to stay silent (positive evidence only, detect/CLAUDE.md rule 5);
+     the CLI was wrong to translate silence into a green line. `detect/
+     coverage.py` now answers, per check, whether it had the metadata to run,
+     and the report distinguishes "clean" from "never evaluated" and says what
+     is missing and how to supply it. The same line now appears in `gate`'s CI
+     output, because a build that goes green having checked nothing is the
+     costliest version of this.
+  3. **The ecosystem does not connect models to data, and nothing said so.**
+     DataHub's mlflow source produces an mlModel with no features, no inputs on
+     its training run, and no link to a single column; its dbt source produces
+     excellent column-level lineage between tables. Nothing joins the two, so
+     every detector had nothing to read. `modelguard link` is that join, called
+     from the training script with what it already knows: the table it read,
+     the columns it used, the column it predicted. It declares one mlFeature
+     per column carrying its exact source column, applies the label term, and
+     captures the input schema as the drift baseline. After one call, the leak
+     above was caught on the real graph.
+  4. **A label declared where a data scientist would declare it was invisible.**
+     The label lives in its own mart (`customer_labels.churned`); the leaking
+     feature's upstream cone runs through `stg_customers.churn` and never
+     touches that mart. Declaring only the mart's column would have left the
+     detector looking somewhere no feature can reach. `link` therefore
+     propagates the declaration up the label's own lineage, which is not an
+     inference: those columns are where the label's values come from, by
+     DataHub's own lineage.
+  5. **Re-ingestion silently unlinked every model.** The mlflow source upserts
+     the whole `mlModelProperties` aspect, dropping the `mlFeatures` `link`
+     wrote, and empties the training run's `customProperties`, dropping the
+     drift baseline. On a nightly ingestion schedule that un-links every model
+     every night. Two answers: the arguments to `link` are now recorded as
+     structured properties, an aspect ingestion does not touch, so replaying it
+     is `modelguard link --model <name>`; and fix 2 means the next scan says
+     plainly that it can no longer see the model rather than calling it
+     healthy. Filed as feedback for DataHub (docs/most-valuable-feedback.md).
+  6. **D-069's known gap is not theoretical.** A leak fixed by deleting the
+     column outright, which is how a leak is actually fixed, left the incident
+     ACTIVE forever, because reconciliation walked only the model's *current*
+     features and a deleted column is in no feature list. D-069 said this needed
+     a durable record of every resource a finding named and would wait for a
+     real deployment to need it. A real deployment needed it. The scan that
+     raises a leakage incident now records the column on the model as a
+     structured property, and reconciliation walks the union of that record and
+     the current features. Verified live: re-introduced the leak, caught it,
+     deleted the column, and the incident closed itself.
+  7. **Smaller things a real graph exposed.** Demo-only advice ("seed the demo
+     graph first", "start the Quickstart") is now gated on the GMS being local,
+     since telling somebody pointed at their production catalog to run
+     `modelguard-seed` invites demo datasets into it. The SDK's per-query
+     `max_hops` paragraph no longer lands in the middle of a report or a CI log.
+     The unauthenticated-write warning no longer prints on `--dry-run` or on a
+     read-only `gate`. `MODELGUARD_LABEL_TERM_URN` exists, because `config.py`
+     documented the label term as configurable while `from_env` never read it,
+     so on a real catalog the detector could only ever look for a term that was
+     not there. A leak path across sibling entities (dbt and postgres both
+     describing one table) rendered as "x <- x <- y"; consecutive repeats now
+     collapse. A model whose `mlModelProperties.name` ingestion left unset
+     rendered as a full URN mid-sentence, and now reads as its URN name.
+     `modelguard inventory` lists every model in a graph with what can and
+     cannot be checked, which is the first thing to run against a DataHub you
+     did not seed.
+- Options considered: (a) document the gaps and change nothing, (b) fix the
+  output honesty only, (c) fix the honesty *and* build the bridge that makes
+  the detectors reach a real graph, (d) change the detectors to infer the
+  missing links heuristically. (d) was rejected on the design law: a detector
+  fires on positive evidence, and inferring which columns a model consumed
+  would be a guess dressed as a fact. (a) leaves a tool that reports healthy
+  over things it never looked at.
+- Why: every number in this project's benchmark comes from a seeded graph. A
+  seeded graph is exactly the one where the links the detectors need already
+  exist, which is precisely the assumption a real project breaks. Nothing about
+  the detection logic was wrong; everything about what the product assumed
+  somebody else would have written down was.
+- Result: the full loop verified on the real project: leak caught with the
+  measured AUC gap behind it, `gate` exiting 1 on it, writes idempotent across
+  reruns, the fix closing the incident automatically, and the retrained model
+  coming back clean with both checks actually running. 392 unit tests green,
+  ruff and mypy clean. The harness is committed at `examples/real-project/`.
+  Not fixed here, and now visible rather than hidden: a scan still names one
+  target at a time, and `modelguard link` still has to be re-run after every
+  ingestion of a model.
+
 ## D-073: A review pass over the whole implementation: eight defects and four stale claims (2026-08-01)
 - Decided by: Ghassen Naouar (asked for a review of the current implementation
   looking for inconsistencies, gaps and unfinished work, and for them to be

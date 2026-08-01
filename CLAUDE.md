@@ -18,7 +18,7 @@ Source of truth for what we build:
 | modelguard/ | The Python package: seed/, detect/, writeback/, agent/, client, CLI |
 | skill/ | OSS contribution: the datahub-ml-guard skill |
 | mcp_ext/ | OSS contribution (stretch): MCP raise_incident mutation tool |
-| examples/ | Sample generated artifacts for judges |
+| examples/ | Sample generated artifacts for judges, and real-project/, the live stack the product was validated against |
 | benchmarks/ | ModelGuard-Bench: injection, metrics, baselines, RESULTS.md |
 | tests/ | pytest unit and integration tests |
 | docs/ | hackathon-specs/ (official rules), plan/, decision-log.md |
@@ -123,3 +123,4 @@ Source of truth for what we build:
 | 2026-07-08 | Claude (for Ahmed Saad) | Note that the no-attribution rule is enforced via .claude/settings.json |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Code rule 6 rewritten: env.py is the sole config entry point, no fallbacks for identity values, all-or-nothing groups, secret hygiene, .env/.env.example parity. Add rule 8: provider-agnostic LLM |
 | 2026-07-23 | Claude (for Ahmed Saad) | Add charts/ to the repository map: the modelguard-watch Helm chart (D-056) |
+| 2026-08-01 | Claude (for Ghassen Naouar) | examples/ now also holds real-project/, the dbt + MLflow + postgres stack ModelGuard was validated against as an ordinary user would (D-074) |
