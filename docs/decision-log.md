@@ -16,6 +16,77 @@ Entry template:
 
 ---
 
+## D-072: A PyPI release workflow, on a tag, via Trusted Publishing (2026-08-01)
+- Decided by: Ahmed Saad (asked for the PyPI package to be set up as part of
+  submission readiness)
+- Decision: `.github/workflows/publish-pypi.yml` builds the wheel and sdist and
+  publishes them on a `v*.*.*` tag, authenticating with Trusted Publishing
+  (OIDC) rather than a stored API token. `docs/deploy/pypi-release.md` is the
+  runbook for the one-time PyPI-side setup, cutting a release, and what to do
+  when one is broken.
+- Options considered for auth: (a) a `PYPI_API_TOKEN` repository secret, (b)
+  Trusted Publishing; (b) chosen. A long-lived token that can publish under
+  this project's name is exactly the kind of credential this repo has spent
+  several decisions avoiding (D-062's clone-token placeholder, the deploy-key
+  option rejected for the VM), and OIDC removes it entirely: GitHub mints a
+  short-lived, workflow-scoped identity PyPI verifies against a publisher
+  pinned to this repo, this workflow file, and the `pypi` environment.
+- Options considered for the trigger: (a) publish on every merge to main, (b)
+  publish on a version tag; (b) chosen, matching `publish-image.yml`'s existing
+  gate and for a stronger version of the same reason. A container tag can be
+  overwritten; a PyPI version number cannot ever be reused, even after
+  deletion, so an accidental publish is unfixable rather than merely untidy.
+- A guard worth naming: the workflow fails when the tag and `pyproject.toml`
+  disagree on the version, because publishing `v0.2.0` from a tree that
+  declares `0.1.0` puts a version on PyPI that no commit in this repository
+  describes. Verified both directions locally before committing (a matching
+  tag passes, a mismatched one is rejected).
+- Result: the package itself was confirmed publishable before any of this was
+  written, not assumed: `python -m build` produces both artifacts, `twine
+  check` passes on both, all four console scripts are registered in the
+  wheel's `entry_points.txt`, and the sdist was grepped and contains no `.env`,
+  key, or token. **Not yet published:** the PyPI project and its pending
+  publisher do not exist yet, and no tag has been pushed. The runbook says so
+  at the top rather than reading as though the release already happened.
+
+---
+
+## D-071: The VM had no swap, which is what was actually killing OpenSearch (2026-08-01)
+- Decided by: Claude, investigating why the live VM's OpenSearch had restarted
+  again while redeploying it onto D-070
+- Decision: added a 4GB swap file to the demo VM, live, and codified it in
+  `deploy/azure/cloud-init.yaml` so a fresh provision gets one too.
+- What the evidence actually showed, which changed the diagnosis: D-065 read
+  the `unable to create native thread` crash as raw memory exhaustion and
+  mitigated it with a restart policy. Revisiting it with the container running,
+  the host had 1150 threads against a `kernel.threads-max` of 62881, and
+  OpenSearch's own cgroup allowed 9432 PIDs with no explicit `PidsLimit`, so it
+  was never near a thread or PID ceiling. The JVM heap is capped at 1GB
+  (`-Xmx1024m`) and the container was using 1.16GB total. What it could not do
+  was allocate a new thread's 1MB native stack (`-Xss1m`) during a spike, on a
+  box with `Swap: 0B` and 194MB genuinely free, because the kernel had no
+  fallback and `vm.overcommit_memory=0` refuses an allocation it cannot back.
+- Options considered: (a) add swap, (b) upsize the VM (D-065 already weighed
+  and declined this on budget), (c) tune the JVM heaps down further, (d) leave
+  it to the restart policy. (a) chosen: it is free (43GB of disk sitting
+  unused), reversible, and it addresses the allocation failure itself rather
+  than cleaning up after the outage the way (d) does. It does not replace the
+  restart policy, it means the restart policy should stop having to fire.
+- Why this was worth acting on rather than logging: the crash had recurred 13
+  times, with `RestartCount=4`, and each occurrence is a window where DataHub's
+  search and browse are broken. Judging runs Aug 17-31, unattended.
+- Result: swap active and validated to survive a reboot the honest way, by
+  running `swapoff` and then `swapon --all` and confirming the kernel picked
+  the entry back up out of `/etc/fstab`, rather than trusting that appending a
+  line was enough. `/etc/fstab` backed up to `/etc/fstab.bak-before-swap`
+  first. Both `cloud-init.yaml` steps are guarded (`swapon --show | grep -q .`
+  and `grep -q '^/swapfile' /etc/fstab`) so re-running them on a live VM cannot
+  corrupt an in-use swapfile or append a duplicate fstab line. Not yet proven:
+  whether swap actually stops the crashes, which only time on the live VM will
+  show.
+
+---
+
 ## D-070: A review of D-067's reconciliation found five real defects in it; all fixed (2026-07-30)
 - Decided by: Ghassen Naouar, applied by Claude
 - Decision: A careful pass over the reconciliation code D-067 landed (and D-069
