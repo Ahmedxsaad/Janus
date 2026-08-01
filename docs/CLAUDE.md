@@ -8,9 +8,10 @@ Reference material, not code. Layers:
   plan, resources, and improvement proposals. This is the source of truth for
   what we build.
 - decision-log.md: the running log of decisions (what, options, why, result).
-- deploy/: operational runbooks (the Azure judge-facing demo VM). Unlike
-  plan/, these describe infrastructure that exists and is meant to be
-  followed step by step, not a strategy.
+- deploy/: operational runbooks (the Azure judge-facing demo VM, the PyPI
+  release). Unlike plan/, these describe infrastructure that exists and is
+  meant to be followed step by step, not a strategy. A runbook whose steps
+  have not actually been run says so at the top: pypi-release.md does.
 
 ## Local rules
 
