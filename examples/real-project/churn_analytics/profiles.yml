@@ -1,0 +1,15 @@
+# Credentials come from the environment, never from this file: it is committed.
+#   export WAREHOUSE_HOST=localhost WAREHOUSE_PORT=5433
+#   export WAREHOUSE_USER=warehouse WAREHOUSE_PASSWORD=... WAREHOUSE_DB=warehouse
+churn_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('WAREHOUSE_HOST') }}"
+      port: "{{ env_var('WAREHOUSE_PORT') | int }}"
+      user: "{{ env_var('WAREHOUSE_USER') }}"
+      password: "{{ env_var('WAREHOUSE_PASSWORD') }}"
+      dbname: "{{ env_var('WAREHOUSE_DB') }}"
+      schema: analytics
+      threads: 4

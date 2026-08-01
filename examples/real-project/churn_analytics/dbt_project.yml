@@ -1,0 +1,8 @@
+name: churn_analytics
+version: "1.0.0"
+profile: churn_analytics
+model-paths: ["models"]
+target-path: "target"
+models:
+  churn_analytics:
+    +materialized: table

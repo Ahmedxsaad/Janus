@@ -1,0 +1,17 @@
+# The warehouse itself: tables, columns, types. What a platform team schedules
+# nightly, long before anybody thinks about ML.
+source:
+  type: postgres
+  config:
+    host_port: "${WAREHOUSE_HOST}:${WAREHOUSE_PORT}"
+    database: "${WAREHOUSE_DB}"
+    username: "${WAREHOUSE_USER}"
+    password: "${WAREHOUSE_PASSWORD}"
+    schema_pattern:
+      allow: ["raw", "analytics"]
+    profiling:
+      enabled: false
+sink:
+  type: datahub-rest
+  config:
+    server: "${DATAHUB_GMS_URL}"
