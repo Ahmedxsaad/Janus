@@ -183,6 +183,35 @@ def test_a_model_further_than_the_hop_cap_is_not_at_risk():
     assert radius.severity is Severity.MEDIUM
 
 
+def test_an_entity_reached_by_two_paths_is_counted_once():
+    """The full-graph search past hop 2 can return one entity via several paths.
+
+    Listing it twice would double-count it in "Downstream datasets: N" on the
+    impact report a human reads, and put the same URN on the page twice. The
+    model is deduped on its shortest hop, which is what a second, longer path
+    to the same model must not change.
+    """
+    client = FakeClient(
+        lineage_results=[
+            lineage_result(FEATURE_TABLE, 1),
+            lineage_result(FEATURE_INCOME, 2),
+            lineage_result(MODEL, 3),
+            # The same three entities again, reached the long way round.
+            lineage_result(FEATURE_TABLE, 2),
+            lineage_result(FEATURE_INCOME, 3),
+            lineage_result(MODEL, 3),
+        ]
+    )
+    radius = blast_radius(
+        make_connection(_graph(lag_hours=30.0), client), TABLE, ScanConfig(), now_ms=NOW
+    )
+
+    assert radius is not None
+    assert radius.downstream_datasets == (FEATURE_TABLE,)
+    assert radius.downstream_features == (FEATURE_INCOME,)
+    assert [model.urn for model in radius.models] == [MODEL]
+
+
 def test_a_deployed_but_not_serving_model_is_high_not_critical():
     graph = _graph(lag_hours=30.0, deployment_status=DeploymentStatusClass.OUT_OF_SERVICE)
     radius = blast_radius(make_connection(graph, _client()), TABLE, ScanConfig(), now_ms=NOW)
