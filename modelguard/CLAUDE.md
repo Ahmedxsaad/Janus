@@ -41,8 +41,10 @@ security and observability cross-cutting.
    model and the columns it trained on, because DataHub's own ingestion does
    not (mlflow gives a model with no features, dbt gives column-level lineage
    between tables, nothing joins them), and without it the detectors have
-   nothing to read on a real graph. inventory is run_scan in read-only bulk:
-   every model in the graph, and what can and cannot be checked on it.
+   nothing to read on a real graph, and `link --all` replays every link the
+   graph itself records, which is the step after an ingestion run. inventory is
+   run_scan in read-only bulk: every model in the graph, and what can and cannot
+   be checked on it; `scan --all-models` is the same sweep that writes.
    mcp_server.py exposes the same detectors to an MCP client (Claude Desktop or
    similar) as three tools, all read-only: the calling model is outside this
    project's control, so it gets to ask what is wrong, never to fix it. Writes
@@ -79,3 +81,4 @@ security and observability cross-cutting.
 | 2026-07-30 | Claude (for Ghassen Naouar) | Five defects found in D-067's reconciliation: a partial recovery cleared a still-failing model's flags, tag and score; the agent path never reconciled at all; a drift incident's title named only the dataset, so two models trained on one input shared a dedup key and each recovery closed the other's incident; a recovered table never recorded its passing assertion run (D-070) |
 | 2026-08-01 | Claude (for Ghassen Naouar) | Full-implementation review (D-073): seven defects fixed across detect, writeback, agent and cli. run_scan now emits one logfmt line per scan (run_id, counts, detect_ms/total_ms); `watch` is the entry point that configures the handler, the library only emits |
 | 2026-08-01 | Claude (for Ghassen Naouar) | D-074, from running the product on a real dbt + MLflow project: detect/coverage.py reports the checks a scan could not run, so silence is never rendered as "healthy"; `modelguard link` writes the model-to-column join no ingestion source produces, and records its own arguments so it survives the next ingest; `modelguard inventory` lists a graph's models and their coverage |
+| 2026-08-01 | Claude (for Ghassen Naouar) | The two sweeps land: `scan --all-models` audits every model in the graph, `link --all` replays every recorded link. Both refuse the single-target options rather than picking a winner among them (D-074) |

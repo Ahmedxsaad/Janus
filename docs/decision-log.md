@@ -16,6 +16,37 @@ Entry template:
 
 ---
 
+## D-075: Deploy the judge VM onto D-074, and a clone token still live on it (2026-08-01)
+- Decided by: Ghassen Naouar (asked for the remaining work to be finished),
+  applied by Claude
+- Decision: the demo VM now runs D-074's branch rather than main. `git fetch` +
+  checkout, `docker compose build modelguard-watch` (compose builds
+  `modelguard:local` from the repo, so a checkout alone changes nothing), then
+  `systemctl restart modelguard-watch`. Verified: the service is active, its
+  first scan wrote `findings=2 writes=2` reusing both open incidents rather than
+  duplicating, the freshness scenario is re-planted, and `loans_raw` carries
+  exactly one active incident, which is what the README tells a judge to look
+  for. The integration run before it had reverted the demo's planted scenario,
+  as it is designed to.
+- Options considered: (a) leave the VM on main until the branch merges,
+  (b) deploy the branch now. Judging opens 2026-08-17, and the branch is
+  strictly better at the thing a judge sees: it no longer reports an
+  unevaluated check as healthy. Reverting is `git checkout main` plus the same
+  rebuild.
+- Why: main's ModelGuard would tell a judge inspecting anything outside the
+  seeded pair that it was "healthy" when it had checked nothing.
+- Result: live and healthy. **One security finding, and it needs a human.** The
+  VM's git remote still carried the fine-grained clone token from provisioning,
+  in plaintext in `.git/config`, and `git fetch` proved it is still valid.
+  D-062 says to revoke it once the first provision is verified; that was
+  2026-07-30. It has been removed from `.git/config` and redacted out of the
+  reflogs (`/var/log/cloud-init-output.log` on this VM does not contain it), so
+  nothing on the box holds it any more, **but only the token's owner can revoke
+  it on GitHub, and until they do it remains a valid read credential for a
+  private repository.** Revoke it at
+  github.com/settings/personal-access-tokens. The runbook step is not optional
+  and a future provision should not skip it: the VM is internet-facing.
+
 ## D-074: Run ModelGuard against a real ML project, and fix what that broke (2026-08-01)
 - Decided by: Ghassen Naouar (asked to use the product as an ordinary user
   would on a real project, and to make it more solid and usable), applied by
@@ -122,9 +153,17 @@ Entry template:
   reruns, the fix closing the incident automatically, and the retrained model
   coming back clean with both checks actually running. 392 unit tests green,
   ruff and mypy clean. The harness is committed at `examples/real-project/`.
-  Not fixed here, and now visible rather than hidden: a scan still names one
-  target at a time, and `modelguard link` still has to be re-run after every
-  ingestion of a model.
+  The sweeps followed: `modelguard scan --all-models` audits every model in a
+  graph and `modelguard link --all` replays every recorded link, which is the
+  post-ingestion step reduced to one scheduled command (a model nobody linked is
+  skipped rather than guessed at). The 42 integration tests were run against the
+  live graph on this code, with `modelguard watch` stopped first per
+  tests/CLAUDE.md rule 2, and all pass.
+
+  Still true, and now visible rather than hidden: `link` has to run after each
+  ingestion, because the aspect it writes is not the one ingestion owns. The
+  benchmark was not re-run: detection logic is unchanged by all of this, and the
+  live integration suite is the targeted check for what did change.
 
 ## D-073: A review pass over the whole implementation: eight defects and four stale claims (2026-08-01)
 - Decided by: Ghassen Naouar (asked for a review of the current implementation

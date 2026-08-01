@@ -148,8 +148,17 @@ demo does, on your data.
 Run `link` again after each ingestion of the model. DataHub's mlflow source
 upserts the whole `mlModelProperties` aspect and drops the features (reported as
 [feedback #14](docs/most-valuable-feedback.md)); the arguments are recorded on the
-model in an aspect ingestion does not touch, so the replay is just `modelguard
-link --model churn_model`.
+model in an aspect ingestion does not touch, so the replay needs no arguments at
+all, and one command covers every model at once:
+
+```bash
+datahub ingest -c mlflow.yml     # your existing pipeline, unchanged
+modelguard link --all            # put back what it dropped, for every linked model
+modelguard scan --all-models     # audit the whole catalog
+```
+
+A model nobody has linked is skipped rather than guessed at, so `--all` is safe
+to run on a schedule.
 
 ### What each check needs, and what it says when it lacks it
 

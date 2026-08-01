@@ -56,7 +56,8 @@ Verified live on the demo VM, 2026-08-01, against DataHub GMS 1.5.0.6 with
    whole `mlModelProperties` aspect, dropping the features `link` wrote. Filed
    as [feedback #14](../../docs/most-valuable-feedback.md). ModelGuard records
    what `link` was told as structured properties, an aspect ingestion does not
-   touch, so replaying it is `modelguard link --model <name>`.
+   touch, so replaying it is `modelguard link --all`: no arguments, every linked
+   model, safe on a schedule.
 
 ## Running it yourself
 
@@ -86,6 +87,9 @@ modelguard link --model telco_churn_1 \
   --label-column churned --exclude customer_id
 modelguard scan --model telco_churn_1   # the leak, with its derivation
 ```
+
+On a schedule, the last three become `modelguard link --all && modelguard scan
+--all-models`, which is the post-ingestion step this stack actually needs.
 
 Then play the fix: delete the `contract_renewed_flag` line from
 `customer_features.sql`, drop it from `NUMERIC` in `ml/train_churn.py`, and
