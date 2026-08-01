@@ -242,6 +242,25 @@ def test_the_system_prompt_is_dispatched_per_finding_type_not_a_default():
         narrate_module._system_prompt(object())  # type: ignore[arg-type]
 
 
+def test_the_evidence_detail_is_dispatched_per_finding_type_not_a_default():
+    """The fourth dispatcher, held to the same rule as the other three.
+
+    Its base case used to return an empty string, so a future finding type whose
+    detail nobody registered would have shipped an LLM prompt quietly missing its
+    evidence, with no test and no log line saying so.
+    """
+    details = [
+        narrate_module._evidence_detail(finding)
+        for finding in (_finding(), _leakage_finding(), _drift_finding())
+    ]
+
+    assert all("models:" in detail for detail in details)
+    assert len(set(details)) == 3
+
+    with pytest.raises(NotImplementedError):
+        narrate_module._evidence_detail(object())  # type: ignore[arg-type]
+
+
 def test_the_drift_fact_block_and_template_name_the_changed_columns():
     finding = _drift_finding(live=True)
     block = fact_block(finding)

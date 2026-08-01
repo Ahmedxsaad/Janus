@@ -328,8 +328,14 @@ def _drift_template(finding: SchemaDriftFinding) -> str:
 
 @singledispatch
 def _evidence_detail(finding: Finding) -> str:
-    """Render the per-type detail the evidence mapping cannot carry."""
-    return ""
+    """Render the per-type detail the evidence mapping cannot carry.
+
+    Raises rather than returning nothing, like every other dispatcher here: a
+    new finding type that nobody registered would otherwise ship an LLM prompt
+    quietly missing its evidence, and a narrative reasoned from half the facts
+    is worse than no narrative at all.
+    """
+    raise NotImplementedError(f"no evidence detail for {type(finding).__name__}")
 
 
 @_evidence_detail.register
