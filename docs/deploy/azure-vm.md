@@ -265,6 +265,17 @@ sudo tail -100 /var/log/cloud-init-output.log
 
 systemctl status modelguard-watch.service
 curl -s http://localhost:8080/config   # GMS answering locally
+
+# Swap must be present: this VM runs tight on 8GB, and with no swap the JVM
+# cannot allocate a new thread's native stack during a spike, which is what
+# repeatedly killed OpenSearch (D-071). cloud-init.yaml creates this, so an
+# empty result here means that step did not run.
+swapon --show
+
+# How often the stack has had to self-heal. A non-zero, climbing RestartCount
+# on opensearch is the symptom D-071 addressed; it should stop climbing.
+sudo docker inspect datahub-opensearch-1 \
+  --format 'RestartCount={{.RestartCount}} Policy={{.HostConfig.RestartPolicy.Name}}'
 ```
 
 Then from a browser: `http://<public-ip>:9002`, log in (`datahub`/`datahub`

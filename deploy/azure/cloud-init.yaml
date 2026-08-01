@@ -49,6 +49,29 @@ runcmd:
   - [ufw, allow, "9002/tcp"]
   - [ufw, --force, enable]
 
+  # A 4GB swap file, because this image ships with none and the whole DataHub
+  # stack plus modelguard-watch runs tight on 8GB. Observed for real: OpenSearch
+  # died 13 times with "unable to create native thread", which is *not* a thread
+  # or PID limit (1150 threads against a 62881 host max, 9432 allowed in its own
+  # cgroup, both checked on the live VM). It is the JVM failing to allocate a new
+  # thread's 1MB native stack during a transient spike, with no swap for the
+  # kernel to fall back on. D-065's restart policy only cleans up after that
+  # outage; swap is what stops it happening (D-071). Costs nothing: the disk has
+  # over 40GB free.
+  #
+  # Guarded so a re-run cannot corrupt a live swapfile or append a duplicate
+  # fstab line: cloud-init runcmd is once-per-instance, but this file also gets
+  # pasted into a rebuilt VM, and the manual runbook says to re-apply it.
+  - >-
+    bash -c
+    "swapon --show | grep -q . ||
+    { fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile &&
+    swapon /swapfile; }"
+  - >-
+    bash -c
+    "grep -q '^/swapfile' /etc/fstab ||
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab"
+
   # get.docker.com is Docker's own, widely-used convenience install script.
   # Not pinned to a version: the base image's package repos age quickly
   # enough that pinning here would just mean debugging an install failure on
