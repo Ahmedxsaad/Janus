@@ -57,6 +57,7 @@ from datahub.metadata.schema_classes import (
     MLModelPropertiesClass,
 )
 from datahub.metadata.urns import DatasetUrn, MlFeatureUrn, SchemaFieldUrn
+from datahub.utilities.urns.error import InvalidUrnError
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
@@ -135,11 +136,27 @@ def feature_source_column(conn: DataHubConnection, feature_urn: str) -> str | No
     A feature with no recorded source column is not evidence of safety, it is the
     absence of evidence, and this detector fires only on positive evidence. Such a
     feature is skipped, never cleared (detect/CLAUDE.md rule 5).
+
+    The property is free text that anything may have written: another ingestion
+    job, a human editing the feature by hand, an older URN format. A value that
+    is not a parseable schemaField URN is treated exactly like an absent one,
+    because it says nothing about the feature either way. Returning it raw would
+    let one malformed property raise out of the traversal and abort the whole
+    model's leakage scan, turning a single unreadable feature into no detection
+    at all.
     """
     properties = conn.graph.get_aspect(feature_urn, MLFeaturePropertiesClass)
     if properties is None or not properties.customProperties:
         return None
-    return properties.customProperties.get(SOURCE_COLUMN_PROPERTY)
+
+    recorded = properties.customProperties.get(SOURCE_COLUMN_PROPERTY)
+    if recorded is None:
+        return None
+    try:
+        SchemaFieldUrn.from_string(recorded)
+    except InvalidUrnError:
+        return None
+    return recorded
 
 
 def leak_path(
@@ -153,6 +170,15 @@ def leak_path(
     Reads ``LineageResult.paths``, never ``LineageResult.urn``. See the module
     docstring: ``urn`` is the upstream dataset, and comparing it against a label
     column makes a leaking graph look clean.
+
+    A column's cone can reach a label by more than one chain. Every match is
+    collected and the shortest is returned, ties broken on the label URN and
+    then the chain itself, rather than returning whichever the server listed
+    first: above two hops DataHub answers from a full-graph search in
+    network-order, so a first-match return can quote a different derivation
+    chain on two scans of an unchanged graph. That chain is the auditable proof
+    a human reads in the incident, and proof that changes when nothing changed
+    is not proof.
 
     Returns:
         The label column's URN and the chain of column names walked to reach it,
@@ -176,6 +202,7 @@ def leak_path(
         count=config.lineage_result_cap,
     )
 
+    matches: list[tuple[str, tuple[str, ...]]] = []
     for result in results:
         # Above two hops DataHub switches to a full-graph search and returns
         # entities beyond the cap, so the cap is enforced here (D-020).
@@ -191,9 +218,12 @@ def leak_path(
                 # to a more distant ancestor must not be quoted as part of the
                 # derivation chain that proves this finding.
                 columns = tuple(hop.column_name for hop in path[: index + 1] if hop.column_name)
-                return step.urn, columns
+                matches.append((step.urn, columns))
+                break
 
-    return None
+    if not matches:
+        return None
+    return min(matches, key=lambda match: (len(match[1]), match[0], match[1]))
 
 
 def leakage_findings(

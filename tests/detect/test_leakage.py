@@ -376,3 +376,65 @@ def test_the_column_path_is_truncated_at_the_matched_label():
 
     assert finding.leak.column_path == ("prior_default_flag", "default_status")
     assert "some_upstream_of_the_label" not in finding.leak.path_text
+
+
+def test_a_malformed_source_column_property_skips_that_feature_and_scans_the_rest():
+    """A property anything can write must not be able to abort the whole scan.
+
+    ``modelguard.source_column`` is free text on the feature. A value that is not
+    a schemaField URN says nothing about the feature, so it is treated like an
+    absent one: the feature is skipped and the model's other features are still
+    audited. Before the guard, parsing it raised straight out of the detector and
+    one unreadable feature meant no leakage detection at all for that model.
+    """
+    _, client = _leaking_graph()
+    graph = FakeGraph(
+        aspects={  # type: ignore[arg-type]
+            (MODEL_URN, MLModelPropertiesClass): _model(CLEAN_FEATURE_URN, LEAK_FEATURE_URN),
+            # Not a URN at all: a dotted table.column, the shape a human types.
+            (CLEAN_FEATURE_URN, MLFeaturePropertiesClass): MLFeaturePropertiesClass(
+                sources=[FEATURE_TABLE_URN],
+                customProperties={SOURCE_COLUMN_PROPERTY: "loans_raw.applicant_income"},
+            ),
+            (LEAK_FEATURE_URN, MLFeaturePropertiesClass): _feature(LEAK_COLUMN_URN),
+            (LABEL_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN),
+        }
+    )
+
+    findings = leakage_findings(make_connection(graph, client), MODEL_URN, CONFIG)
+
+    assert [finding.leak.feature_urn for finding in findings] == [LEAK_FEATURE_URN]
+
+
+def test_the_reported_leak_path_does_not_depend_on_the_order_the_server_answered_in():
+    """Two chains to one label must always be quoted the same way.
+
+    Above two hops DataHub answers from a full-graph search in network order, so
+    a first-match return could quote a different derivation chain on two scans of
+    an unchanged graph. The chain is the auditable proof a human reads.
+    """
+    graph, _ = _leaking_graph()
+    detour = f"urn:li:schemaField:({TABLE_URN},default_status_copy)"
+    short = lineage_result(
+        TABLE_URN,
+        hops=1,
+        direction="upstream",
+        paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+    )
+    long = lineage_result(
+        TABLE_URN,
+        hops=2,
+        direction="upstream",
+        paths=column_path(LEAK_COLUMN_URN, detour, LABEL_COLUMN_URN),
+    )
+
+    paths = [
+        leakage_findings(
+            make_connection(graph, FakeClient(lineage_by_column={"prior_default_flag": order})),
+            MODEL_URN,
+            CONFIG,
+        )[0].leak.column_path
+        for order in ([short, long], [long, short])
+    ]
+
+    assert paths[0] == paths[1] == ("prior_default_flag", "default_status")
