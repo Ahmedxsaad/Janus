@@ -28,6 +28,7 @@ from modelguard.writeback.link import (
     PROP_FEATURE_TABLE,
     PROP_LABEL_COLUMN,
     LinkError,
+    LinkResult,
     link_model,
     models_with_recorded_link,
     recorded_link,
@@ -61,7 +62,7 @@ def _graph(*, with_run: bool = True) -> FakeGraph:
     return graph
 
 
-def _link(graph: FakeGraph, client: FakeClient | None = None, **kwargs: object):
+def _link(graph: FakeGraph, client: FakeClient | None = None, **kwargs: object) -> LinkResult:
     return link_model(
         make_connection(graph, client or FakeClient()),
         CONFIG,
