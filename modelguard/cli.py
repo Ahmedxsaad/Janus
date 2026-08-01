@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from datahub.metadata.urns import DatasetUrn, MlModelUrn, Urn
+from datahub.metadata.urns import DatasetUrn, MlModelUrn, SchemaFieldUrn, Urn
 from datahub.sdk.search_filters import FilterDsl as F
 from rich.console import Console
 
@@ -51,6 +51,7 @@ from modelguard.models import (
     SchemaDriftFinding,
     Severity,
 )
+from modelguard.writeback.link import LinkError, link_model, recorded_link
 
 app = typer.Typer(
     add_completion=False,
@@ -396,6 +397,12 @@ def _prepare(
     to how a target is resolved or a credential is read cannot drift between them.
 
     Args:
+        table: The ``--table`` argument: a dataset URN or a bare name, or None.
+        model: The ``--model`` argument: an mlModel URN or a bare name, or None.
+        sla_hours: A freshness SLA overriding the configured one, or None.
+        no_llm: Skip the narrator entirely and use template prose.
+        llm_provider: Override the configured provider, or None.
+        llm_model: Override the configured model id, or None.
         writes: Whether this invocation can mutate the graph. Only the warning
             about running unauthenticated depends on it: a ``--dry-run`` scan and
             a plain ``gate`` write nothing, so telling their user that writes are
@@ -994,6 +1001,219 @@ def gate(
         console.print(f"[dim]run id: {report.run_id}[/dim]")
 
     raise typer.Exit(code=verdict.exit_code)
+
+
+@app.command()
+def inventory(
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Stop after this many models."),
+    ] = 50,
+) -> None:
+    """List every model in the graph and say what can and cannot be checked.
+
+    The first command to run against a DataHub you did not seed. It writes
+    nothing, scans every model it finds, and answers the question a new user
+    actually has: what does this tool know about my project, and what would I
+    have to declare before it knows more.
+
+    A model shows as unlinked when nothing connects it to the columns it was
+    trained on, which is the out-of-the-box state of every model DataHub's own
+    ingestion produced. `modelguard link` is what changes that.
+    """
+    try:
+        config = ScanConfig.from_env()
+        conn = connect()
+    except (ConfigError, DataHubConnectionError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    model_urns = [str(urn) for urn in conn.client.search.get_urns(filter=F.entity_type("mlModel"))][
+        :limit
+    ]
+    if not model_urns:
+        console.print(f"[yellow]No models in {conn.gms_url}.[/yellow] {_no_match_hint(conn)}")
+        raise typer.Exit(code=0)
+
+    console.print(f"[bold]{len(model_urns)} model(s) in {conn.gms_url}[/bold]\n")
+    unchecked = 0
+    for model_urn in sorted(model_urns):
+        report = run_scan(conn, config, model_urn=model_urn, llm=None, dry_run=True)
+        name = MlModelUrn.from_string(model_urn).name
+
+        if report.writes:
+            worst = report.severity
+            titles = ", ".join(write.finding.title for write in report.writes)
+            console.print(f"[red]{name}[/red]  {len(report.writes)} finding(s), worst {worst}")
+            console.print(f"  {titles}")
+        elif report.not_evaluated:
+            unchecked += 1
+            checks = ", ".join(gap.check for gap in report.not_evaluated)
+            console.print(f"[yellow]{name}[/yellow]  not checked: {checks}")
+        else:
+            console.print(f"[green]{name}[/green]  clean, every check ran")
+
+    if unchecked:
+        console.print(
+            f"\n[dim]{unchecked} model(s) have nothing linking them to their training "
+            "data. Declare it with: modelguard link --model <name> --features <table> "
+            "--label-column <column>[/dim]"
+        )
+
+
+@app.command()
+def link(
+    model: Annotated[
+        str,
+        typer.Option("--model", help="The trained model: a full mlModel URN, or a name."),
+    ],
+    features: Annotated[
+        str | None,
+        typer.Option(
+            "--features",
+            help="The table the model trains on: a full dataset URN, or a name. "
+            "Omit to reuse what a previous link recorded.",
+        ),
+    ] = None,
+    label_column: Annotated[
+        str | None,
+        typer.Option(
+            "--label-column",
+            help="The column the model predicts, by name. Omit to reuse what a "
+            "previous link recorded.",
+        ),
+    ] = None,
+    label_table: Annotated[
+        str | None,
+        typer.Option(
+            "--label-table",
+            help="Table holding the label column. Defaults to the feature table.",
+        ),
+    ] = None,
+    exclude: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--exclude",
+            help="A feature-table column that is not a feature (a join key). Repeatable.",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Show what would be declared, write nothing.")
+    ] = False,
+) -> None:
+    """Tell DataHub which columns a model trains on, and which one is its label.
+
+    Run this once per training run, from the script that trains the model.
+
+    The detectors read a model through its features: leakage walks each feature's
+    source column upstream to see whether it descends from the label, and drift
+    diffs the schema captured at training time against the schema now. DataHub's
+    own ingestion does not produce those links. Its mlflow source records the
+    model and its run, its dbt and warehouse sources record excellent
+    column-level lineage between tables, and nothing joins the two, so a scan of
+    a freshly ingested model can only report that it had nothing to check.
+
+    This is the join, made from facts the training script already has: the table
+    it read, the columns it used, and the column it predicted.
+
+    Run it again after every ingestion of the model. DataHub's mlflow source
+    upserts the whole ``mlModelProperties`` aspect, which drops the features this
+    command attached (verified live, D-074), and a later scan will say so rather
+    than report a model it cannot see as healthy. The arguments are recorded as
+    structured properties on the model, which ingestion does not touch, so the
+    replay is just ``modelguard link --model <name>``.
+    """
+    conn, config, _, feature_urn, model_urn = _prepare(
+        table=features,
+        model=model,
+        sla_hours=None,
+        no_llm=True,
+        llm_provider=None,
+        llm_model=None,
+        writes=not dry_run,
+    )
+    if model_urn is None:
+        # _prepare only returns None for a target the caller did not pass, and
+        # --model is required here, so this is unreachable. A hard stop rather
+        # than an assert, which -O would strip out.
+        console.print("[red]link needs --model.[/red]")
+        raise typer.Exit(code=2)
+
+    # An ingestion run overwrites the model's aspect and drops the features, so a
+    # link is replayed regularly. Replaying it must not mean retyping it.
+    previous = recorded_link(conn, model_urn)
+
+    if label_column is not None:
+        try:
+            label_dataset_urn = (
+                resolve_table(conn, label_table) if label_table is not None else feature_urn
+            )
+        except TableResolutionError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=2) from exc
+        if label_dataset_urn is None:
+            console.print("[red]--label-column needs --label-table, or --features.[/red]")
+            raise typer.Exit(code=2)
+        label_column_urn = str(SchemaFieldUrn(label_dataset_urn, label_column))
+    elif previous is not None:
+        label_column_urn = previous.label_column_urn
+    else:
+        console.print(
+            "[red]link needs --label-column the first time. Later runs on this "
+            "model can omit it.[/red]"
+        )
+        raise typer.Exit(code=2)
+
+    if feature_urn is None:
+        if previous is None:
+            console.print(
+                "[red]link needs --features the first time. Later runs on this "
+                "model can omit it.[/red]"
+            )
+            raise typer.Exit(code=2)
+        feature_urn = previous.feature_dataset_urn
+        console.print(f"[dim]reusing the recorded link: {feature_urn}[/dim]")
+
+    excluded = frozenset(exclude) if exclude else (previous.exclude if previous else frozenset())
+
+    try:
+        result = link_model(
+            conn,
+            config,
+            model_urn=model_urn,
+            feature_dataset_urn=feature_urn,
+            label_column_urn=label_column_urn,
+            exclude=excluded,
+            dry_run=dry_run,
+        )
+    except LinkError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    console.print(f"features    {len(result.feature_urns)} declared on {result.model_urn}")
+    console.print(f"label       {label_column_urn}")
+    if len(result.label_column_urns) > 1:
+        # The ancestors matter to a reader: they are what a feature has to
+        # descend from to be caught, and they are columns the user did not name.
+        console.print(
+            f"            and {len(result.label_column_urns) - 1} upstream column(s) "
+            "it derives from, so a feature built from the same source is caught"
+        )
+    if result.training_runs:
+        console.print(
+            f"training    {len(result.training_runs)} run(s), "
+            f"{result.snapshot_columns} column(s) of schema captured"
+        )
+    else:
+        console.print(
+            "[yellow]training    no run recorded on the model, so schema drift "
+            "stays unevaluated[/yellow]"
+        )
+
+    if dry_run:
+        console.print("\n[dim]Dry run: nothing was written.[/dim]")
+    else:
+        console.print(f"\n[dim]Now run: modelguard scan --model {model}[/dim]")
 
 
 def main() -> None:

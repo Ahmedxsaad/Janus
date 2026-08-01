@@ -28,7 +28,20 @@ MODEL = "urn:li:mlModel:(urn:li:dataPlatform:mlflow,credit_risk_v3,PROD)"
 
 def test_the_shipped_declarations_parse_and_cover_the_planned_properties():
     names = {d.qualified_name for d in load_definitions()}
-    assert names == {TRUST_SCORE, TRUST_BAND, RISK_FLAGS, RUN_ID}
+    assert names == {
+        TRUST_SCORE,
+        TRUST_BAND,
+        RISK_FLAGS,
+        RUN_ID,
+        # The columns a model currently leaks through, so a scan after the leak
+        # was deleted outright can still close its incident (D-069, D-074).
+        "modelguard.open_leak_columns",
+        # What `modelguard link` was told, kept so it can be replayed after an
+        # ingestion run overwrites the model's own aspect (D-074).
+        "modelguard.feature_table",
+        "modelguard.label_column",
+        "modelguard.excluded_columns",
+    }
 
 
 def test_declarations_render_to_datahub_urn_forms():
@@ -64,7 +77,7 @@ def test_a_missing_field_is_reported_with_its_name(tmp_path: Path):
 def test_define_properties_emits_one_definition_per_declaration():
     graph = FakeGraph()
     urns = define_properties(make_connection(graph))
-    assert len(graph.emitted) == len(urns) == 4
+    assert len(graph.emitted) == len(urns) == len(load_definitions())
     assert "urn:li:structuredProperty:modelguard.trust_score" in urns
     assert "urn:li:structuredProperty:modelguard.trust_band" in urns
 
