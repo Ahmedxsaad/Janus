@@ -22,6 +22,7 @@ from modelguard.cli import (
     WATCH_FAILURE_ESCALATION_THRESHOLD,
     TableResolutionError,
     WatchState,
+    _print_proposal,
     _watch_failure_message,
     _watch_once,
     app,
@@ -30,6 +31,7 @@ from modelguard.cli import (
 )
 from modelguard.client import ENV_GMS_TOKEN, DataHubConnection
 from modelguard.config import ScanConfig
+from modelguard.writeback.link_infer import LinkProposal
 from tests.conftest import (
     DEPLOYMENT_URN,
     LEAK_FEATURE_URN,
@@ -412,6 +414,32 @@ def test_the_dry_run_review_guard_explains_itself_instead_of_crashing():
 
     assert result.exit_code == 2
     assert "mutually exclusive" in result.output
+
+
+def test_a_proposal_that_found_no_table_prints_the_shortlist_to_choose_from(capsys):
+    """F10: an inference that cannot resolve the table helps rather than refuses.
+
+    The user's next action is one word long, and it is only that short because
+    the candidates are on the screen: without them they go and read the catalog
+    themselves, which is the cliff --infer exists to remove.
+    """
+    other = "urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.credit_labels,PROD)"
+    _print_proposal(
+        LinkProposal(
+            model_urn=MODEL_URN,
+            feature_dataset_urn=None,
+            label_column_urn=None,
+            exclude=frozenset(),
+            reasons=("feature table: NOT FOUND. the training run records no inputs",),
+            candidates=(TABLE_URN, other),
+        )
+    )
+
+    printed = capsys.readouterr().out
+    assert "1. ecommerce.public.loans_raw" in printed
+    assert "2. ecommerce.public.credit_labels" in printed
+    # The rendered command keeps the blank visible rather than looking finished.
+    assert "--features <table>" in printed
 
 
 def test_infer_is_refused_on_a_whole_catalog_replay():

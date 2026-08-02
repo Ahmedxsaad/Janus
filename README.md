@@ -167,10 +167,15 @@ out for you:
 modelguard link --model churn_model --infer
 ```
 
-It reads the model's training run, the datasets that run recorded as inputs, and
-the schema of the one it found, and proposes the exact command a person would
-have typed, with one line per decision saying which aspect it came from and
-whether it is a fact or a guess:
+It works the training table out from whatever the graph does hold, trying four
+routes in descending order of confidence and telling you which one answered:
+the inputs the training run recorded (`dataProcessInstanceInput`), a run
+parameter naming a table (where DataHub's mlflow source puts MLflow params), a
+dataset the catalog already declares upstream of the model, and failing all of
+those, a shortlist of nearby tables for you to pick from. Then it reads that
+table's schema and proposes the exact command a person would have typed, with
+one line per decision saying which aspect it came from and whether it is a fact
+or a guess:
 
 ```
 Inferred from the graph:
@@ -196,6 +201,31 @@ leakage verdict wrong in both directions. Exclusions come only from the
 warehouse's own key declarations, never from column names that look like
 identifiers: `customer_id` is usually a join key and `score_id` is usually a
 feature, and no rule over names tells them apart.
+
+A plain mlflow ingest often carries none of the first three: it produces a model
+whose training run records no inputs at all (verified live, D-074). `--infer`
+then says so, names what would fix it, and lists the nearest tables by name
+instead of refusing:
+
+```
+Inferred from the graph:
+  feature table: NOT FOUND. churn_model's training run records no inputs and no dataset
+    parameter, which is the usual state after an mlflow ingest, and nothing in the catalog
+    declares a dataset upstream of it. Pass --features <table>, or log the training table as
+    an MLflow run parameter (modelguard_features=...) and re-ingest so this can be read
+    rather than guessed
+
+Nearest tables, for you to choose:
+  1. analytics.churn_features
+  2. analytics.churn_labels
+```
+
+One line in the training script makes the next ingest self-describing, and it is
+the same line that keeps the link alive (see below):
+
+```python
+mlflow.log_param("modelguard_features", "analytics.customer_features")
+```
 
 Prefer to type it, or the graph is too quiet to infer from? It is one call from
 the script that trains the model:

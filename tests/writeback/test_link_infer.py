@@ -17,6 +17,7 @@ from __future__ import annotations
 import pytest
 from datahub.metadata.schema_classes import (
     DataProcessInstanceInputClass,
+    DataProcessInstancePropertiesClass,
     GlossaryTermAssociationClass,
     GlossaryTermsClass,
     MLModelPropertiesClass,
@@ -37,6 +38,7 @@ from tests.conftest import (
     TRAINING_RUN_URN,
     FakeClient,
     FakeGraph,
+    lineage_result,
     make_connection,
 )
 
@@ -108,42 +110,109 @@ class TestFeatureTable:
         assert proposal.feature_dataset_urn == FEATURE_TABLE_URN
         assert "dataProcessInstanceInput" in proposal.reasons[0]
 
-    def test_several_inputs_are_a_question_not_a_coin_toss(self):
-        """Which table holds the features is not something the graph says."""
+    def test_several_inputs_become_the_shortlist_rather_than_a_coin_toss(self):
+        """Which table holds the features is not something the graph says.
+
+        It is, however, exactly the question the user can answer in one word, so
+        the tables that were found are offered instead of being discarded.
+        """
         graph = _graph(
             inputs={TRAINING_RUN_URN: [FEATURE_TABLE_URN, TABLE_URN]},
             schema=_default_schema(),
         )
 
-        with pytest.raises(InferenceError) as exc:
-            infer_link(make_connection(graph, FakeClient()), CONFIG, MODEL_URN)
+        proposal = infer_link(make_connection(graph, FakeClient()), CONFIG, MODEL_URN)
 
-        assert "--features" in str(exc.value)
-        assert "loans_raw" in str(exc.value)
+        assert proposal.feature_dataset_urn is None
+        assert not proposal.complete
+        assert set(proposal.candidates) == {FEATURE_TABLE_URN, TABLE_URN}
+        assert "--features" in proposal.reasons[0]
 
-    def test_no_training_run_names_the_arguments_that_would_work_instead(self):
+    def test_a_run_parameter_naming_a_table_is_resolved_and_labelled_a_convention(self):
+        """Route 2: what a plain mlflow ingest does carry, when the team logged it."""
+        graph = _graph(runs=[TRAINING_RUN_URN], inputs={TRAINING_RUN_URN: []})
+        graph.set_aspect(
+            TRAINING_RUN_URN,
+            DataProcessInstancePropertiesClass(
+                name="credit_risk_v3_run",
+                created=None,  # type: ignore[arg-type]
+                customProperties={"dataset": "customer_features"},
+            ),
+        )
+        graph.set_aspect(FEATURE_TABLE_URN, _default_schema())
+        conn = make_connection(graph, FakeClient(search_urns=[FEATURE_TABLE_URN, TABLE_URN]))
+
+        proposal = infer_link(conn, CONFIG, MODEL_URN)
+
+        assert proposal.feature_dataset_urn == FEATURE_TABLE_URN
+        assert "'dataset' parameter" in proposal.reasons[0]
+        assert "convention, not a declaration" in proposal.reasons[0]
+
+    def test_a_recorded_input_beats_a_run_parameter(self):
+        """A declaration outranks a convention, and the reason says which it was."""
+        graph = _graph(schema=_default_schema())
+        graph.set_aspect(
+            TRAINING_RUN_URN,
+            DataProcessInstancePropertiesClass(
+                name="credit_risk_v3_run",
+                created=None,  # type: ignore[arg-type]
+                customProperties={"dataset": "loans_raw"},
+            ),
+        )
+        conn = make_connection(graph, FakeClient(search_urns=[TABLE_URN]))
+
+        proposal = infer_link(conn, CONFIG, MODEL_URN)
+
+        assert proposal.feature_dataset_urn == FEATURE_TABLE_URN
+        assert "dataProcessInstanceInput" in proposal.reasons[0]
+
+    def test_dataset_to_model_lineage_is_read_when_the_run_says_nothing(self):
+        """Route 3: Spark and some sources declare this edge; reading it beats guessing."""
         graph = _graph(runs=[], inputs={}, schema=_default_schema())
+        client = FakeClient(lineage_results=[lineage_result(FEATURE_TABLE_URN, 1)])
 
-        with pytest.raises(InferenceError) as exc:
-            infer_link(make_connection(graph, FakeClient()), CONFIG, MODEL_URN)
+        proposal = infer_link(make_connection(graph, client), CONFIG, MODEL_URN)
 
-        assert "records no training run" in str(exc.value)
-        assert "--label-column" in str(exc.value)
+        assert proposal.feature_dataset_urn == FEATURE_TABLE_URN
+        assert "declares upstream of this model" in proposal.reasons[0]
 
-    def test_a_run_with_no_inputs_says_so_rather_than_searching_the_catalog(self):
-        """The usual state after an mlflow ingest, and guessing here would be wild."""
+    def test_a_run_with_no_inputs_explains_itself_instead_of_refusing(self):
+        """The usual state after an mlflow ingest (D-074), and the case F10 is about.
+
+        Raising here is what made --infer decline on precisely the stack this
+        project validated against. It now returns the incomplete proposal, names
+        the parameter that would fix it next time, and offers only tables that
+        actually share a word with the model: nothing here shortlists at random.
+        """
+        unrelated = "urn:li:dataset:(urn:li:dataPlatform:snowflake,marketing.public.sessions,PROD)"
         graph = _graph(inputs={TRAINING_RUN_URN: []}, schema=_default_schema())
+        client = FakeClient(search_urns=[FEATURE_TABLE_URN, unrelated])
 
-        with pytest.raises(InferenceError) as exc:
-            infer_link(make_connection(graph, FakeClient()), CONFIG, MODEL_URN)
+        proposal = infer_link(make_connection(graph, client), CONFIG, MODEL_URN)
 
-        assert "records no input datasets" in str(exc.value)
+        assert proposal.feature_dataset_urn is None
+        assert "records no inputs" in proposal.reasons[0]
+        assert "log the training table as an MLflow run parameter" in proposal.reasons[0]
+        # Neither table shares a word with credit_risk_v3, and the shortlist is
+        # filtered by shared word, so nothing irrelevant is offered.
+        assert proposal.candidates == ()
 
-    def test_an_inference_failure_is_catchable_as_a_link_failure(self):
-        """The CLI handles both through one path; a new subclass must not escape it."""
+    def test_the_shortlist_offers_tables_sharing_a_word_with_the_model(self):
         graph = _graph(runs=[], inputs={}, schema=_default_schema())
+        risky = (
+            "urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.credit_features,PROD)"
+        )
+        client = FakeClient(search_urns=[risky, TABLE_URN])
 
-        with pytest.raises(LinkError):
+        proposal = infer_link(make_connection(graph, client), CONFIG, MODEL_URN)
+
+        assert proposal.candidates == (risky,)
+
+    def test_an_uningested_model_is_still_a_hard_error(self):
+        """The CLI handles inference and link failures through one path."""
+        graph = FakeGraph()
+
+        with pytest.raises(LinkError, match="no mlModelProperties"):
             infer_link(make_connection(graph, FakeClient()), CONFIG, MODEL_URN)
 
     def test_a_table_with_no_schema_cannot_be_proposed_from(self):
