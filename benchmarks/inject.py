@@ -131,7 +131,16 @@ class Trial:
 
     def config(self, base: ScanConfig) -> ScanConfig:
         """Return the config this trial's detector runs under."""
-        return replace(base, **dict(self.overrides)) if self.overrides else base
+        if not self.overrides:
+            return base
+        # dataclasses.replace's stub checks each keyword against ScanConfig's
+        # exact field type, which a dict[str, object] built from an arbitrary
+        # (name, value) tuple can never satisfy statically: mypy has no way to
+        # know overrides.append(("leakage_max_hops", 1)) is an int and not,
+        # say, a str. A field name that does not exist on ScanConfig still
+        # fails at runtime, loudly, the moment this trial runs, which is the
+        # actual safety net rule 7's "a typo fails the run" describes.
+        return replace(base, **dict(self.overrides))  # type: ignore[arg-type]
 
 
 def _plant_freshness(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
