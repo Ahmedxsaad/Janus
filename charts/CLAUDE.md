@@ -35,3 +35,4 @@ standing workload, so it is the only one with a chart.
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-23 | Claude (for Ahmed Saad) | Initial version: modelguard-watch chart (Deployment, Secret, ServiceAccount), existingSecret as the recommended path, required-value guards, no fabricated probes (D-056) |
+| 2026-08-02 | Claude (for Ghassen Naouar) | replicaCount above 1 is refused and the strategy is Recreate: two watchers on one model lose each other's writes, which is correctness, not cost (D-090, F3). An opt-in CronJob replays `link --all` on a schedule, because DataHub's mlflow source drops the link on every ingest and nothing was putting it back (D-092, F11) |

@@ -16,6 +16,172 @@ Entry template:
 
 ---
 
+## D-094: F6 partly closed, the benchmark now says which rows could have failed (2026-08-02)
+- Decided by: Ghassen Naouar (asked for F6 with F3, F8, F10, F11), applied by Claude
+- Decision: two of F6's three steps. (1) The Detection table in RESULTS.md gains
+  two columns, "Boundary trials" and "Could this row have failed?", both derived
+  from the trials rather than typed: a family with no boundary trial prints "No:
+  presence or absence of one planted fact" beside its perfect score, which is
+  the honest reading of a construction proof. (2) Three boundary trials for
+  leakage, which had none: the leak at exactly the hop cap (must fire), the same
+  leak with the cap one lower (must not, and it is out of reach rather than
+  absent), and the leak planted with the configured label term pointed at a term
+  nothing carries (must not: the column is still *named* `default_status`, so a
+  detector matching on name instead of declaration fails here and nowhere else).
+- Options considered: (a) seed new tables for the four graph shapes F6 lists (a
+  common ancestor, a diamond, a chain the length of the hop cap), (b) hold the
+  graph fixed and move the config, (c) do the disclosure column only.
+- Why: (b) for these three, because a boundary is not always a graph shape: a
+  hop cap and the label term are configuration, and moving them asks the same
+  graph a question whose answer can genuinely go either way. `Trial` gained
+  `overrides` (applied with `dataclasses.replace`, so a typo in a field name
+  fails the run), `boundary`, and `planted`, the last because the precondition
+  must wait on what is in the graph and never on what the detector should say
+  (rule 7): two of the new trials plant the leak and expect silence.
+- Result: 58 offline benchmark tests pass, including two new report tests
+  mutation-checked per tests/CLAUDE.md rule 6 (counting every trial as a
+  boundary trial turns both red). **Not done, deliberately:** F6's step 3,
+  scoring against a graph DataHub's own ingestion built (`examples/real-project`
+  plus a planted leak), and the common-ancestor and diamond trials, which do
+  need new seeded tables. Both need a live Quickstart to be worth landing:
+  seeding code nobody has run against a server is exactly what benchmarks/
+  rule 6 exists to stop. RESULTS.md is therefore unchanged and still carries the
+  2026-08-01 run: it is generated, never hand-edited (rule 4), so the new
+  columns and the governance rows appear on the next real run.
+
+---
+
+## D-093: F8 partly closed, the six untested modules get integration tests (2026-08-02)
+- Decided by: Ghassen Naouar, applied by Claude
+- Decision: three integration test modules, all marked `integration` and all
+  skipping cleanly when no DataHub answers. `test_sensitive_source.py` is the
+  one that matters most: it is the only thing that proves a live GMS serves
+  `globalTags` from a `schemaField` entity, which the detector has always
+  assumed. `test_trust_history.py` writes a MULTIPLE structured property with
+  twenty values and reads it back, asserts a rerun under one `run_id` replaces
+  its row rather than appending, and that a score which moves shows up as a
+  trend. `test_link_infer.py` runs the inference against the seeded graph and
+  checks it field by field. A PR template lands beside them, asking for the
+  live run or a statement that the change touches no read or write path.
+- Options considered: (a) the three tests plus a CI job that fails when a
+  module has no integration reference, (b) the three tests plus a line in the
+  PR template, (c) tests only.
+- Why: (b). The CI job F8 suggests would have to encode which modules are
+  exempt (`render.py` is pure, `logs.py` is a formatter), and a list of
+  exemptions rots into a list of everything.
+- Result: The suites are written, linted and collected (52 integration tests
+  collect, 511 offline pass). **Not run**: this machine has no DataHub
+  Quickstart up, and the two things F8 asks for as evidence, a live run and a
+  regenerated RESULTS.md carrying the P5/P6 rows, both need one. The commands
+  are `pytest -m integration` and `python -m benchmarks.run_bench --out
+  benchmarks/RESULTS.md` against a seeded Quickstart; until they have been run,
+  F8 is written but not measured, and RESULTS.md still misrepresents the
+  project's coverage exactly as the finding says.
+- One thing the writing of `test_link_infer.py` found, worth its own finding:
+  `--infer` cannot resolve a label that lives in its own table, because
+  `_label_column` reads only the feature table's schema. On the seeded graph
+  the label is declared on `loans_raw.default_status` while the features come
+  from `customer_features`, so the proposal is always incomplete there, and
+  link.py's own docstring says a warehouse almost never puts the two in one
+  table. Pinned by a test that asserts the honest failure rather than papered
+  over, and left for a decision: it is outside F10's scope.
+
+---
+
+## D-092: F11 addressed, the link decay gets a schedule and a name (2026-08-02)
+- Decided by: Ghassen Naouar, applied by Claude
+- Decision: three of F11's four parts. (1) `charts/modelguard-watch` ships a
+  CronJob running `modelguard link --all`, off by default, `concurrencyPolicy:
+  Forbid`, one values block to enable. (2) The README's training-script section
+  shows the pipeline shape rather than only the call: `mlflow.log_param
+  ("modelguard_features", FEATURE_TABLE)` beside `link_model`, which is the same
+  line that feeds `--infer` (D-091), plus a plain statement that a link declared
+  once decays on a schedule the user does not control. (3) A model that carries
+  a recorded `modelguard.feature_table` but declares no features is now reported
+  as a distinct coverage gap naming the ingest that did it and the command that
+  repairs it, instead of the generic "this model declares no features".
+- Options considered: for (3), a new finding type (an incident) or a coverage
+  gap.
+- Why: a gap. Nothing is failing: the model is fine and the checks simply
+  cannot run, which is exactly what `Unevaluated` was built to say (D-074).
+  Raising an incident for it would put ModelGuard's own broken plumbing in a
+  user's incident list next to their data failures.
+- Result: `detect/coverage.py` now imports `read_properties` and the property
+  name from `writeback/properties.py`, the first import from writeback into
+  detect. The three `link` property names moved to `properties.py`, where the
+  rest of the registry already lives, and `link.py` aliases them under the names
+  it has always used. Layer purity is unaffected (detect still writes nothing),
+  and the alternative, duplicating the aspect read in detect, would have been
+  two places to get the same parse wrong. Chart verified with `helm lint
+  --strict` and three renders (default, `link.enabled=true`, and
+  `replicaCount=2`, which must fail). F11's fourth part, the upstream fix to
+  DataHub's mlflow source, stays where it is: reported as feedback #14, and a
+  contribution to pursue rather than something this branch can land.
+
+---
+
+## D-091: F10 fixed, --infer works out the feature table four ways (2026-08-02)
+- Decided by: Ghassen Naouar, applied by Claude
+- Decision: `link --infer` raised `InferenceError` whenever the model's training
+  run recorded no input datasets, which D-074 documents as the usual state after
+  an mlflow ingest: it declined on precisely the stack this project validated
+  against. It now tries four routes in descending order of confidence and says
+  which one answered: the run's recorded inputs (a declaration), a run parameter
+  naming a table (`dataProcessInstanceProperties.customProperties`, where
+  DataHub's mlflow source puts MLflow params, resolved against the catalog and
+  labelled a convention), a dataset the catalog declares upstream of the model,
+  and failing all three, an incomplete proposal carrying a shortlist of tables
+  whose names share a word with the model's. Several tables from any route is
+  also a shortlist rather than a coin toss, so the old "reads several tables"
+  refusal is gone too.
+- Options considered: (a) route 2 only, (b) all four, (c) all four plus a
+  fuzzy-search fallback ranked by DataHub's own relevance.
+- Why: (b). Not (c): search is used here to narrow the catalog, never to rank.
+  A fuzzy hit that shares no name with the value read off the run is not a
+  match, and a wrong feature table is a proposal a human confirms.
+- Result: `LinkProposal.feature_dataset_urn` is now optional and the dataclass
+  carries `candidates`; `command()` renders `--features <table>` rather than
+  omitting the flag, so what is printed stays the whole command with the blank
+  visible. The CLI prints the shortlist numbered by table name and refuses with
+  a message that points at it. Six new unit tests, and the four that encoded the
+  old refuse-behaviour rewritten; route precedence mutation-checked (disabling
+  route 1 turns eleven red). README updated to state plainly that a plain mlflow
+  ingest often carries none of the first three routes, with the one
+  `mlflow.log_param` line that fixes it for next time.
+
+---
+
+## D-090: F3 addressed as far as DataHub allows, and documented where it does not (2026-08-02)
+- Decided by: Ghassen Naouar, applied by Claude
+- Decision: F3's first two layers. The chart refuses `replicaCount` above 1 with
+  a message naming the race, and sets `strategy: Recreate` so a rollout never
+  runs two pods either; the chart README and values.yaml now say that one
+  `watch` per graph is a correctness limit rather than a cost one. And the trust
+  write is one `assign_properties` call carrying score, band and history instead
+  of two, so a scan opens two read-merge-write windows per model rather than
+  three.
+- Options considered: for the third layer, (a) leave read-merge-write and
+  document it, (b) switch `assign_properties` to the server-side JSON patch the
+  installed SDK exposes
+  (`datahub.specific.aspect_helpers.structured_properties.HasStructuredPropertiesPatch`,
+  introspected and confirmed present on acryl-datahub 1.6.0.13), which would
+  remove the merge window entirely.
+- Why: (a), for now. The SDK symbol exists; whether this project's GMS accepts a
+  PATCH on `structuredProperties` has not been verified against a live server,
+  and swapping every property write in the product to an unverified server
+  behaviour is a worse trade than a documented single-writer rule. Recorded as a
+  `ponytail:` comment in `properties.py` naming the ceiling and the upgrade path
+  (run the integration suite against a Quickstart with the patch builder in
+  place, then delete the read).
+- Result: A test pins the boundary honestly, and it is not the one F6's text
+  predicted: the merge is safe in *sequence* across different properties, and
+  lossy in *parallel* whichever properties the two writers touched, because a
+  stale read carries the whole aspect. The docs say that rather than the
+  comfortable version. A second test asserts the trust write stays one call
+  (mutation-checked: splitting it turns the test red).
+
+---
+
 ## D-089: F13 fixed, the narrator's LLM call now has a timeout (2026-08-02)
 - Decided by: Ahmed Saad (working through docs/plan/07's important findings one
   by one), applied by Claude
