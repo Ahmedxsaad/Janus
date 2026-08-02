@@ -95,3 +95,40 @@ def test_the_matrix_is_deterministic():
 
 def test_every_trial_can_plant_itself():
     assert all(callable(trial.plant) for trial in build_trials(CONFIG))
+
+
+def test_the_leakage_boundary_trials_move_the_question_not_the_graph():
+    """F6: the leak stays planted; the cap and the label term are what change.
+
+    That is what makes them cheap enough to have: no second warehouse to seed,
+    and each one can still go the wrong way. The precondition therefore has to
+    wait on ``graph_state`` (the leak is there) rather than on ``expected`` (the
+    detector must stay quiet), or the trial is unscoreable by construction.
+    """
+    boundary = {t.name: t for t in _trials(FindingType.TARGET_LEAKAGE) if t.boundary}
+
+    assert set(boundary) == {
+        "leakage-at-hop-cap",
+        "leakage-past-hop-cap",
+        "leakage-named-not-declared",
+    }
+    assert all(trial.graph_state is True for trial in boundary.values())
+    assert boundary["leakage-named-not-declared"].expected is False
+
+
+def test_a_trial_config_carries_only_that_trials_overrides():
+    trials = {trial.name: trial for trial in build_trials(CONFIG)}
+
+    capped = trials["leakage-past-hop-cap"].config(CONFIG)
+    plain = trials["leakage-planted"].config(CONFIG)
+
+    assert capped.leakage_max_hops == 0
+    assert capped.freshness_sla_hours == CONFIG.freshness_sla_hours
+    assert plain is CONFIG, "a trial with no override must not copy the config"
+
+
+def test_the_freshness_trials_near_the_sla_are_the_ones_marked_boundary():
+    """A 30h lag against a 6h SLA cannot fail; 5.5 and 6.5 can."""
+    marked = {t.lag_hours for t in _trials(FindingType.UPSTREAM_FRESHNESS) if t.boundary}
+
+    assert marked == {5.5, 6.0, 6.5}

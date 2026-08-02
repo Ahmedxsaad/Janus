@@ -121,10 +121,14 @@ def run_trials(
     for index, trial in enumerate(trials, start=1):
         now_ms = int(time.time() * 1000)
         trial.plant(conn, trial, now_ms)
-        settled = await_precondition(conn, trial, config, now_ms)
+        # The trial's own config, which for most trials is the run's config
+        # unchanged. A boundary trial moves a cap or a term instead of the graph,
+        # and both the precondition and the detector have to see the same one.
+        trial_config = trial.config(config)
+        settled = await_precondition(conn, trial, trial_config, now_ms)
 
         started = time.monotonic()
-        observed = _observe(conn, config, trial, now_ms)
+        observed = _observe(conn, trial_config, trial, now_ms)
         detect_seconds = time.monotonic() - started
 
         outcome = TrialOutcome(
@@ -325,6 +329,35 @@ _DETECTOR_LABELS = {
 }
 
 
+#: Per detector, the one-line mutation that a boundary trial in that family would
+#: catch. Prose, not a number: the renderer may explain, it may never state a
+#: measurement the run did not produce (benchmarks/CLAUDE.md rule 4). Whether a
+#: row gets to claim it *could* have failed is decided by the trials, below.
+_BOUNDARY_MUTATIONS = {
+    FindingType.UPSTREAM_FRESHNESS: "`>` to `>=` fails the trial at exactly the SLA",
+    FindingType.TARGET_LEAKAGE: (
+        "an off-by-one in the hop cap, or matching the label by column name "
+        "instead of by declared term"
+    ),
+}
+
+
+def _falsifiability(family: FindingType, outcomes: Sequence[TrialOutcome]) -> tuple[int, str]:
+    """Return a detector's boundary-trial count and whether its row could have failed.
+
+    A perfect precision and recall means one of two very different things, and
+    the table cannot tell them apart on its own: either every trial that could
+    have gone the wrong way went the right way, or no trial could have gone the
+    wrong way at all. The second is a construction proof wearing the shape of a
+    measurement, and it is the first thing a sceptical reader should be able to
+    check without reading the injector (F6).
+    """
+    boundary = sum(1 for outcome in outcomes if outcome.trial.boundary)
+    if not boundary:
+        return 0, "No: presence or absence of one planted fact"
+    return boundary, f"Yes: {_BOUNDARY_MUTATIONS[family]}"
+
+
 def _scale_disclosure(scale: Sequence[ScaleMeasurement]) -> list[str]:
     """Return the "what this does not measure" lines about scale.
 
@@ -380,22 +413,32 @@ def render_results(
         "Detectors are called directly, with no LLM and no writes, so these describe",
         "detection alone. A false positive is an alert on a clean graph.",
         "",
-        "| Detector | Trials | Precision | Recall | F1 | False-positive rate |",
-        "|---|---|---|---|---|---|",
+        "The last two columns are the ones to read first. A boundary trial is one that",
+        "could plausibly have gone the other way: a lag a hair either side of the SLA, a",
+        "leak exactly at the hop cap, a column named like a label without carrying the",
+        "term. A row with none of those is a construction proof rather than a",
+        "measurement, and says so here instead of leaving a perfect score to be read as",
+        "evidence it is not.",
+        "",
+        "| Detector | Trials | Precision | Recall | F1 | False-positive rate "
+        "| Boundary trials | Could this row have failed? |",
+        "|---|---|---|---|---|---|---|---|",
     ]
 
     for family, label in _DETECTOR_LABELS.items():
         found = grouped.get(family, [])
         if not found:
-            lines.append(f"| {label} | 0 | - | - | - | - |")
+            lines.append(f"| {label} | 0 | - | - | - | - | 0 | Not run |")
             continue
         matrix = metrics.confusion([(o.trial.expected, o.observed) for o in found])
+        boundary, verdict = _falsifiability(family, found)
         lines.append(
             f"| {label} | {matrix.total} "
             f"| {metrics.format_rate(matrix.precision)} "
             f"| {metrics.format_rate(matrix.recall)} "
             f"| {metrics.format_rate(matrix.f1)} "
-            f"| {metrics.format_rate(matrix.false_positive_rate)} |"
+            f"| {metrics.format_rate(matrix.false_positive_rate)} "
+            f"| {boundary} | {verdict} |"
         )
 
     overall = metrics.confusion([(o.trial.expected, o.observed) for o in outcomes if not o.errored])
