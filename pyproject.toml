@@ -60,14 +60,30 @@ classifiers = [
 # (see .python-version), which is what CI runs.
 requires-python = ">=3.11,<3.14"
 
-# Pins are exact.
+# modelguard-datahub is a library on PyPI now, not only an application: an
+# environment that already holds pydantic or rich for something else (FastAPI,
+# LangChain, dbt adapters, most ML tooling) must be able to install this next
+# to it. Exact pins fought the resolver instead (F2, docs/plan/07). The SDK is
+# the one exception, and stays exact rather than a floor-and-ceiling range: a
+# range here does not solve F2 at all (nobody else in a user's environment also
+# needs this exact SDK, unlike pydantic or rich, which are near-universal), and
+# widening it to `<2` was tried and reverted after it let CI resolve 1.6.0.17,
+# four patches past the one version (1.6.0.13) verified symbol by symbol
+# (D-012), and that patch changed the incident-entity-types schema enough to
+# fail tests written against 1.6.0.13's behaviour (INCIDENT_ENTITY_TYPES is
+# read from the installed package, so this is not hypothetical). A bump here
+# is a decision made by running `pytest -m integration` against the new
+# version and editing this line, never something a resolver picks on its own.
 dependencies = [
     "acryl-datahub[datahub-rest]==1.6.0.13",
-    "pydantic==2.13.4",
-    "python-dotenv==1.2.2",
-    "PyYAML==6.0.3",
-    "rich==15.0.0",
-    "typer==0.26.8",
+    # Used through a stable, small surface (BaseModel/SecretStr, a dotenv
+    # loader, safe_load, a Console, a Typer app): no reason to force a
+    # resolver's hand on any of these.
+    "pydantic>=2.7,<3",
+    "python-dotenv>=1.0,<2",
+    "PyYAML>=6.0,<7",
+    "rich>=13.0,<16",
+    "typer>=0.12,<1",
 ]
 
 [project.optional-dependencies]

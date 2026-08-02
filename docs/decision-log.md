@@ -16,6 +16,61 @@ Entry template:
 
 ---
 
+## D-086: F2 fixed, exact pins widened to floor/ceiling ranges (2026-08-02)
+- Decided by: Ahmed Saad (asked to work through docs/plan/07's important findings
+  one by one), applied by Claude
+- Decision: `pyproject.toml`'s core `dependencies` (everything but the SDK) move
+  from exact `==` pins to a floor and a compatible ceiling: `pydantic>=2.7,<3`,
+  `python-dotenv>=1.0,<2`, `PyYAML>=6.0,<7`, `rich>=13.0,<16`, `typer>=0.12,<1`.
+  `acryl-datahub` keeps its exact `==1.6.0.13` pin, unlike the rest: a range
+  does not serve F2 at all here, since nobody else in a user's environment also
+  needs this exact SDK the way pydantic or rich are near-universally needed,
+  and a `>=1.6.0.13,<2` range was tried first and reverted (see Result) after
+  it proved the doc's own caution about this dependency correct. The optional
+  LLM-provider extras
+  (`anthropic`, `openai`, `google`), `agent`, and `mcp` are unchanged: F2's
+  evidence and proposed fix named only the core dependency list, and widening
+  further than what was actually reviewed is its own decision, not this one.
+  `dev` stays exact, on purpose: that pins the *tested* environment, which is
+  where reproducibility is supposed to live now that the *published* one is wide.
+- Options considered: (a) leave the exact pins (rejected: F2's whole finding is
+  that this makes the now-published package fail to coexist with pydantic or
+  rich in an environment that already has FastAPI, LangChain, or most ML tooling
+  in it), (b) widen everything including the optional extras (rejected as scope
+  creep past what F2 actually reviewed), (c) widen only the core list, chosen.
+- Why: `modelguard-datahub` is a library on PyPI now, not only an application
+  developed in its own fresh venv. A conflict is invisible from the maintainers'
+  side, since the development environment is the one without the conflict, and
+  visible immediately to a real adopter installing next to their training code,
+  which is exactly the environment this project wants to reach.
+- Result: verified live, not just read. Installed into a venv with `pydantic`
+  pre-pinned to 2.12.0 and 2.9.0 in separate runs: both resolved and installed
+  cleanly (the old exact pin would have forced an upgrade at best and a hard
+  `ResolutionImpossible` against any other package with its own conflicting
+  exact pin at worst), `import modelguard` and `modelguard --help` both ran.
+  CI gains a permanent regression check for this exact class of bug: a new
+  `install-alongside` job installs `pydantic==2.9.0` first, then this project,
+  and asserts the install and a smoke import both succeed. 498 offline tests,
+  ruff, and mypy all pass unchanged.
+
+  **A live catch that changed the SDK's own pin.** The first version of this
+  fix widened `acryl-datahub` to `>=1.6.0.13,<2` too, matching the doc's code
+  example. CI's own offline-tests job, not local testing, caught what that
+  actually did: a clean install resolved `1.6.0.17`, four patches past
+  `1.6.0.13`, and `INCIDENT_ENTITY_TYPES` (read from the installed package's
+  own schema, writeback/incidents.py) had changed enough between those two
+  patches to fail two tests written against D-017's verified behaviour, that
+  GMS rejects an incident on an `mlModel`. Reproduced locally in a fresh venv
+  to confirm it was the pin and not a CI artifact, then reverted the SDK to
+  exact. The doc's own prose already said a bump here should be "deliberate,
+  after a run of `pytest -m integration`... never a resolver's own choice";
+  its code example just did not enforce that. This is the same finding stated
+  more strongly: even a patch-level range is too wide for a dependency whose
+  behaviour was verified symbol by symbol, and the CI job that caught it
+  stays as the reason to trust the next bump rather than fear it.
+
+---
+
 ## D-085: The live clone token from D-075 stays unrevoked, by an informed owner decision (2026-08-02)
 - Decided by: Ahmed Saad
 - Decision: D-075 found the demo VM's git remote still carried the fine-grained
