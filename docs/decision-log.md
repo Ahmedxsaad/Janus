@@ -16,6 +16,28 @@ Entry template:
 
 ---
 
+## D-085: The live clone token from D-075 stays unrevoked, by an informed owner decision (2026-08-02)
+- Decided by: Ahmed Saad
+- Decision: D-075 found the demo VM's git remote still carried the fine-grained
+  clone token from D-062's provisioning, past the point it should have been
+  revoked, and flagged that only the token's owner could act on it. The owner's
+  call: leave it live rather than revoke it now.
+- Why: the token is scoped read-only to this one repository (Contents:
+  Read-only, no write, no access to any other repo), so its worst case is
+  someone reading source that is about to be public anyway. The repository is
+  going public before or at submission, at which point the token secures
+  nothing a browser could not already reach, making revocation moot rather than
+  skipped.
+- Result: no action taken on the token itself. Also separately, the VM was shut
+  down the day before this decision (2026-08-01) to save cost while nothing
+  judge-facing needs it live yet; the token point is unaffected either way,
+  since it lived in the VM's git config regardless of the VM's power state.
+  Revisit at whichever comes first: the repository going public (revocation
+  becomes moot) or a decision to keep it private past submission (revocation
+  becomes worth doing).
+
+---
+
 ## D-084: Compose DataHub's own MCP server rather than absorb it (2026-08-02)
 - Decided by: Ghassen Naouar (item F of docs/plan/06), applied by Claude
 - Decision: `skill/datahub-ml-guard/references/mcp-composition.md` documents
