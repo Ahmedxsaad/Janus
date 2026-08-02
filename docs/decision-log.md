@@ -16,6 +16,35 @@ Entry template:
 
 ---
 
+## D-096: a sensitive-source scan crashed writing its own report (2026-08-02)
+- Decided by: found by the new integration suite (D-093), fixed by Claude
+- Decision: `documents.py` holds two `singledispatch` tables, `report_subject`
+  and `_report_body`, and D-079 registered the two governance findings in
+  narrate.py's four tables and in neither of these. A scan that found a
+  sensitive source therefore raised `NotImplementedError: no report subject for
+  SensitiveSourceFinding` from `publish_impact_report`, *after* the incident,
+  the term and the tag had already been written: a half-written graph and a
+  traceback, on a detector shipped two days earlier. Both types are now
+  registered, with a report body each.
+- Options considered: (a) register the two types, (b) make the dispatch fall
+  back to a generic body for an unregistered finding.
+- Why: (a). The fallback is how this class of bug hides: a generic report for
+  a governance finding would have shipped silently and said nothing useful,
+  which is worse than the crash that exposed it. The `raise` in the base case
+  is correct and stays.
+- Result: The sensitive-source report names the classification, the derivation
+  path and the exposed feature, and says plainly that nothing is broken (it is
+  a standing exposure, not an outage). The deprecated-input report quotes the
+  owners' note and their decommission time when they left one. Offline, one
+  test now renders a report for *every* concrete finding type, so the next
+  detector cannot land half-wired the same way; a live rerun of the
+  sensitive-source module passes.
+- Note for the audit: this is F8's argument in one paragraph. The modules had
+  unit tests against `FakeGraph` and a benchmark trial, and neither exercised
+  the write path far enough to reach the report.
+
+---
+
 ## D-095: --infer finds a label declared upstream, not only one in the feature table (2026-08-02)
 - Decided by: Ghassen Naouar (shown the gap, chose to fix it on this branch),
   applied by Claude
@@ -103,14 +132,16 @@ Entry template:
 - Why: (b). The CI job F8 suggests would have to encode which modules are
   exempt (`render.py` is pure, `logs.py` is a formatter), and a list of
   exemptions rots into a list of everything.
-- Result: The suites are written, linted and collected (52 integration tests
-  collect, 511 offline pass). **Not run**: this machine has no DataHub
-  Quickstart up, and the two things F8 asks for as evidence, a live run and a
-  regenerated RESULTS.md carrying the P5/P6 rows, both need one. The commands
-  are `pytest -m integration` and `python -m benchmarks.run_bench --out
-  benchmarks/RESULTS.md` against a seeded Quickstart; until they have been run,
-  F8 is written but not measured, and RESULTS.md still misrepresents the
-  project's coverage exactly as the finding says.
+- Result: **Run**, against a Quickstart (GMS 1.5.0.6) brought up for it: 52
+  integration tests pass, including the three new modules. The first run found a
+  real defect the whole offline suite had passed through, which is exactly the
+  case F8 argued for; see D-096. Two of the new tests were also wrong about the
+  product rather than the other way round, and were corrected: the
+  sensitive-source incident lands on the feature's *own* source column, not on
+  the classified ancestor (deliberate, and now pinned), and the trend test had
+  to wait for the reverted table to read fresh before scanning, since
+  `operation` is served from the index. Still outstanding: the benchmark rerun,
+  so RESULTS.md keeps the 2026-08-01 numbers and none of the new columns.
 - One thing the writing of `test_link_infer.py` found, outside F10's scope and
   fixed on the same branch once raised: `--infer` could not resolve a label that
   lives in its own table. See D-095.

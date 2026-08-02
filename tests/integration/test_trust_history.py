@@ -121,6 +121,15 @@ def test_a_score_that_moves_is_visible_as_a_trend_not_only_a_number(
     """
     table_urn = seeded.source_table
     revert_stale_source(conn)
+    # Waited on, not assumed. operation is a timeseries aspect served from the
+    # index, so an earlier module's planted staleness is still readable for a few
+    # seconds and the "fresh" scan would score the table stale, leaving two equal
+    # entries and a test that passes or fails on timing.
+    _eventually(
+        lambda: (signal := freshness_signal(conn, table_urn, config)) is not None
+        and signal.lag_hours <= config.freshness_sla_hours,
+        "the reverted table to read as fresh",
+    )
     run_scan(
         conn,
         config,

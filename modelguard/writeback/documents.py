@@ -43,12 +43,14 @@ from datahub.sdk.document import Document
 
 from modelguard.client import DataHubConnection
 from modelguard.models import (
+    DeprecatedInputFinding,
     Finding,
     FindingType,
     FreshnessFinding,
     LeakageFinding,
     ModelAtRisk,
     SchemaDriftFinding,
+    SensitiveSourceFinding,
 )
 from modelguard.writeback.trust_history import TrustEntry
 
@@ -131,6 +133,16 @@ def _leakage_subject(finding: LeakageFinding) -> str:
 
 @report_subject.register
 def _drift_subject(finding: SchemaDriftFinding) -> str:
+    return finding.model.name
+
+
+@report_subject.register
+def _sensitive_subject(finding: SensitiveSourceFinding) -> str:
+    return finding.model.name
+
+
+@report_subject.register
+def _deprecated_subject(finding: DeprecatedInputFinding) -> str:
     return finding.model.name
 
 
@@ -320,6 +332,143 @@ this model's predictions as scored on inputs it was not trained for.
 
 ModelGuard compares the training-time schema snapshot against the current schema, \
 both from metadata DataHub holds. It did not query the warehouse.
+"""
+
+
+@_report_body.register
+def _sensitive_body(finding: SensitiveSourceFinding) -> str:
+    exposure = finding.exposure
+    model = finding.model
+    serving = (
+        f"**Live**, serving through {len(model.live_deployments)} deployment(s)."
+        if model.is_live
+        else "Not currently serving."
+    )
+    owner = "Owned." if model.has_owner else "**Unowned**: nobody is on the hook to fix this."
+
+    return f"""## What happened
+
+The model **{model.name}** consumes the feature `{exposure.feature_name}`. Column-level \
+lineage shows it derives from `{exposure.sensitive_dataset_name}.\
+{exposure.sensitive_column_name}`, a column this organization classified as \
+`{exposure.marker_name}`.
+
+Nothing is broken. The model works, and what is wrong is what it was allowed to see.
+
+## The derivation path
+
+```
+{exposure.path_text.replace("`", "'")}
+```
+
+Every edge above is a declared column-level lineage edge in DataHub. ModelGuard \
+read the lineage and the classification, not the data.
+
+## Assessment
+
+{{narrative}}
+
+## Why this matters
+
+A classification is a commitment somebody made about how a column may be handled. \
+A model trained on data derived from it has absorbed that column's information into \
+its weights, several joins away from anyone who would recognise it, and no test \
+suite fails because of it. This is a standing exposure rather than an outage, which \
+is exactly why it survives so long unnoticed.
+
+## Model at risk
+
+### {model.name}
+
+- URN: `{model.urn}`
+- Severity: **{finding.severity}**
+- Serving status: {serving}
+- Ownership: {owner}
+- Exposed feature: `{exposure.feature_urn}`
+- Classification: `{exposure.marker_urn}`
+
+## What ModelGuard did
+
+1. Raised a `{finding.incident_type}` incident on the feature's own source column, \
+`{exposure.source_column_name}`.
+2. Tagged the model and recorded the risk flag as a structured property on it.
+
+## What to do
+
+Confirm with whoever owns the classification whether this model may learn from \
+`{exposure.sensitive_column_name}`. If it may not, rebuild `{exposure.feature_name}` \
+from a column that carries no such constraint, retrain, and revalidate.
+
+## Caveats
+
+ModelGuard reports the derivation and the classification as DataHub holds them. It \
+does not interpret what the classification permits: that is a policy question, and \
+this report is the input to it rather than the answer.
+"""
+
+
+@_report_body.register
+def _deprecated_body(finding: DeprecatedInputFinding) -> str:
+    model = finding.model
+    serving = (
+        f"**Live**, serving through {len(model.live_deployments)} deployment(s)."
+        if model.is_live
+        else "Not currently serving."
+    )
+    owner = "Owned." if model.has_owner else "**Unowned**: nobody is on the hook to fix this."
+    note = f"\n\nThe owners left this note:\n\n> {finding.note}" if finding.note else ""
+    deadline = (
+        f"\n- Decommission time recorded by its owners: `{finding.decommission_time_ms}` (epoch ms)"
+        if finding.decommission_time_ms is not None
+        else ""
+    )
+
+    return f"""## What happened
+
+The model **{model.name}** trains on `{finding.dataset_name}`, and that table's own \
+owners have marked it deprecated in DataHub.{note}
+
+Nothing has failed. This is the warning that arrives while there is still time to \
+act on it.
+
+## Assessment
+
+{{narrative}}
+
+## Why this matters
+
+A deprecation is a decision somebody already made and communicated. The team that \
+made it has no way of knowing a model depends on the table, and the team that owns \
+the model has no way of hearing about it, so the usual outcome is that the table \
+disappears and a training run fails weeks later with no obvious cause.
+
+## Model at risk
+
+### {model.name}
+
+- URN: `{model.urn}`
+- Severity: **{finding.severity}**
+- Serving status: {serving}
+- Ownership: {owner}
+- Deprecated input: `{finding.dataset_urn}`{deadline}
+
+## What ModelGuard did
+
+1. Raised a `{finding.incident_type}` incident on the deprecated dataset, where the \
+decision was made.
+2. Tagged the model and recorded the risk flag as a structured property on it.
+
+## What to do
+
+Talk to the table's owners about their timeline, then migrate this model onto \
+whatever replaces `{finding.dataset_name}` and retrain. If the deprecation was a \
+mistake, withdrawing it in DataHub closes this finding on the next scan.
+
+## Caveats
+
+ModelGuard reads the `deprecation` aspect and the model's recorded inputs. It has no \
+opinion on whether the deprecation is justified, and it cannot tell whether a \
+replacement table already exists.
 """
 
 

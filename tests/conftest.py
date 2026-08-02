@@ -24,6 +24,7 @@ from modelguard.client import DataHubConnection
 from modelguard.models import (
     BlastRadius,
     ChangeKind,
+    DeprecatedInputFinding,
     FreshnessFinding,
     FreshnessSignal,
     LeakageFinding,
@@ -32,6 +33,8 @@ from modelguard.models import (
     ModelRef,
     SchemaChange,
     SchemaDriftFinding,
+    SensitiveFeature,
+    SensitiveSourceFinding,
 )
 
 
@@ -447,4 +450,49 @@ def active_incident(
         description="body",
         status=IncidentStatusClass(state=IncidentStateClass.ACTIVE, lastUpdated=stamp),
         created=stamp,
+    )
+
+
+def make_sensitive_source_finding(
+    *, live: bool = True, has_owner: bool = False
+) -> SensitiveSourceFinding:
+    """Build a sensitive-source finding the way the detector would, without a graph."""
+    return SensitiveSourceFinding(
+        model=ModelRef(
+            urn=MODEL_URN,
+            name="Credit Risk v3",
+            deployments=(DEPLOYMENT_URN,),
+            live_deployments=(DEPLOYMENT_URN,) if live else (),
+            has_owner=has_owner,
+        ),
+        exposure=SensitiveFeature(
+            feature_urn=CLEAN_FEATURE_URN,
+            feature_name="applicant_income",
+            source_column_urn=CLEAN_COLUMN_URN,
+            source_column_name="applicant_income",
+            sensitive_column_urn=INCOME_COLUMN_URN,
+            sensitive_column_name="income",
+            sensitive_dataset_name="ecommerce.public.loans_raw",
+            marker_urn="urn:li:tag:modelguard.sensitive",
+            column_path=("applicant_income", "income"),
+        ),
+    )
+
+
+def make_deprecated_input_finding(
+    *, live: bool = True, has_owner: bool = False, note: str = "Replaced by loans_v2 on 2026-09-01."
+) -> DeprecatedInputFinding:
+    """Build a deprecated-input finding the way the detector would, without a graph."""
+    return DeprecatedInputFinding(
+        model=ModelRef(
+            urn=MODEL_URN,
+            name="Credit Risk v3",
+            deployments=(DEPLOYMENT_URN,),
+            live_deployments=(DEPLOYMENT_URN,) if live else (),
+            has_owner=has_owner,
+        ),
+        dataset_urn=FEATURE_TABLE_URN,
+        dataset_name="ecommerce.public.customer_features",
+        note=note,
+        decommission_time_ms=1_800_000_000_000,
     )

@@ -53,6 +53,10 @@ T = TypeVar("T")
 
 _INDEX_TIMEOUT_SECONDS = 90.0
 
+#: The feature-table column that descends from the classified one. The incident
+#: lands here, on the column this model actually reads.
+EXPOSED_FEATURE_COLUMN = "applicant_income"
+
 
 def _eventually(probe: Callable[[], T], what: str, timeout: float = _INDEX_TIMEOUT_SECONDS) -> T:
     """Poll until the probe returns something truthy, or fail with what was awaited."""
@@ -128,11 +132,17 @@ def test_a_classified_upstream_column_is_read_off_a_live_schema_field(
     assert finding.exposure.column_path[-1] == SENSITIVE_SOURCE_COLUMN
 
 
-def test_the_scan_writes_the_incident_on_the_classified_column(
+def test_the_scan_writes_the_incident_on_the_feature_own_source_column(
     conn: DataHubConnection, seeded: SeedResult, config: ScanConfig
 ) -> None:
+    """The incident lands on the model's own column, not on the classified ancestor.
+
+    Deliberate, and worth pinning: the classified column may be several joins
+    upstream and owned by another team, and the actionable column is the one this
+    model reads. The ancestor is named in the title instead.
+    """
     run_id = f"sensitive-{uuid.uuid4().hex[:8]}"
-    column_urn = str(spec.source_column_urn(SENSITIVE_SOURCE_COLUMN))
+    column_urn = str(spec.feature_column_urn(EXPOSED_FEATURE_COLUMN))
     # Start from a clean slate so this exercises the create path, not a rerun.
     for entity in conn.graph.get_related_entities(
         entity_urn=column_urn,
@@ -153,7 +163,10 @@ def test_the_scan_writes_the_incident_on_the_classified_column(
     assert len(sensitive) == 1
     assert sensitive[0].finding.resource_urn == column_urn
     title = sensitive[0].finding.title
+    # The title names the classified ancestor, which is what makes the incident
+    # readable by somebody who has never heard of this model.
     assert SENSITIVE_SOURCE_COLUMN in title
+    assert SENSITIVE_TAG_URN.rsplit(":", 1)[-1] in title
 
     _eventually(
         lambda: title in _incident_titles(conn, column_urn, active=True),
@@ -173,7 +186,7 @@ def test_withdrawing_the_classification_resolves_the_incident(
     arrives. A detector keying on the aspect's presence rather than its contents
     would keep firing here.
     """
-    column_urn = str(spec.source_column_urn(SENSITIVE_SOURCE_COLUMN))
+    column_urn = str(spec.feature_column_urn(EXPOSED_FEATURE_COLUMN))
     title = _eventually(
         lambda: next(iter(_incident_titles(conn, column_urn, active=True)), ""),
         "an active sensitive-source incident to resolve",
