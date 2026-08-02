@@ -16,6 +16,38 @@ Entry template:
 
 ---
 
+## D-087: F9 fixed, CI now runs offline tests on 3.11, 3.12 and 3.13 (2026-08-02)
+- Decided by: Ahmed Saad (working through docs/plan/07's important findings one
+  by one), applied by Claude
+- Decision: `pyproject.toml` advertises `requires-python = ">=3.11,<3.14"` and
+  classifiers for 3.11, 3.12, 3.13, but `.github/workflows/ci.yml` only ever
+  ran `.python-version` (3.11). D-074's 3.12 check was manual, once, by hand;
+  3.13 had never run at all. Split the old single `check` job into `lint`
+  (still pinned to 3.11, unmatrixed) and a matrixed `test` job running the
+  offline suite on all three advertised versions, `fail-fast: false` so a
+  3.13-only failure cannot hide a 3.12-only one.
+- Options considered: (a) matrix the whole job, lint included, matching the
+  doc's illustrative code snippet literally; (b) split lint out to run once,
+  matrix only the offline tests, matching the doc's own prose ("linting three
+  times reports the same findings three times, and mypy's python_version is
+  pinned in config anyway"); (b) chosen. The doc's snippet and its own prose
+  did not agree with each other here; the prose carries the actual reasoning,
+  so it won over the snippet, consistent with this whole document's rule of
+  verifying against the code rather than inferring from the docs.
+- Why: an advertised version nobody's CI has ever exercised is a promise
+  nobody is keeping. 3.12 and 3.13 are what current distributions ship
+  (Ubuntu 24.04 and 25.04, D-074), so they are the versions most real users
+  are actually on, not the one almost nobody has by default.
+- Result: `.github/workflows/ci.yml`'s `check` job becomes `lint` (single
+  version) and `test` (matrixed: 3.11, 3.12, 3.13). No job elsewhere in this
+  workflow or in the branch's protection rules referenced the old job name
+  (checked via the GitHub API before renaming, not assumed). 498 offline
+  tests, ruff, and mypy all pass unchanged on 3.11 locally; the matrix itself
+  is the verification that they also pass on 3.12 and 3.13, which local
+  testing on this machine's own 3.11 venv cannot substitute for.
+
+---
+
 ## D-086: F2 fixed, exact pins widened to floor/ceiling ranges (2026-08-02)
 - Decided by: Ahmed Saad (asked to work through docs/plan/07's important findings
   one by one), applied by Claude
