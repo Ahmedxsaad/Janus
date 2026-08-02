@@ -326,6 +326,48 @@ def test_a_stale_table_with_no_model_downstream_warns_and_tags_nothing():
     assert any("no model consumes it" in warning for warning in report.warnings)
 
 
+def test_a_truncated_downstream_walk_with_nothing_found_does_not_claim_no_model():
+    """F1, docs/plan/07: a capped, empty walk is uncertain, not a clean answer."""
+    graph = _graph(30.0)
+    graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
+    # One result at a cap of one: the walk saw exactly the cap, so a model
+    # beyond it may exist. This must not read the same as a walk that saw the
+    # table's whole downstream cone and genuinely found nothing.
+    client = FakeClient(lineage_results=[lineage_result(FEATURE_TABLE, 1)])
+
+    report = run_scan(
+        make_connection(graph, client),
+        replace(ScanConfig(), lineage_result_cap=1),
+        table_urn=TABLE_URN,
+        llm=None,
+        now_ms=NOW_MS,
+    )
+
+    # The old, confident phrasing ("no model consumes it within N hops") must
+    # not appear: that is exactly the false negative F1 exists to prevent.
+    assert not any("consumes it within" in warning for warning in report.warnings)
+    assert any("does not mean no model consumes it" in warning for warning in report.warnings)
+
+
+def test_a_truncated_downstream_walk_that_still_found_a_model_warns_of_more():
+    """A truncated walk with a hit is not wrong, just possibly incomplete."""
+    graph, client = _graph(30.0), _client()
+    graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
+
+    report = run_scan(
+        make_connection(graph, client),
+        replace(ScanConfig(), lineage_result_cap=len(client.lineage.results)),
+        table_urn=TABLE_URN,
+        llm=None,
+        now_ms=NOW_MS,
+    )
+
+    assert len(_only(report).tagged_models) == 1
+    assert any(
+        "may exist and is not among the ones tagged" in warning for warning in report.warnings
+    )
+
+
 # --------------------------------------------------------------------------
 # Provenance
 # --------------------------------------------------------------------------
