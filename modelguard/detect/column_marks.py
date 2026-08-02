@@ -33,6 +33,8 @@ ModelGuard configuration, and detection starts working on their models.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from datahub.metadata.schema_classes import (
     EditableSchemaMetadataClass,
     GlobalTagsClass,
@@ -42,6 +44,28 @@ from datahub.metadata.urns import SchemaFieldUrn
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
+
+
+@dataclass(frozen=True)
+class WalkResult:
+    """What one column's upstream walk found, and whether it saw everything.
+
+    ``get_lineage`` is capped at ``config.lineage_result_cap`` results with no
+    continuation token: a column whose upstream cone exceeds it is silently cut
+    off, and a walk that finds no mark in the results it did see cannot tell the
+    difference between "nothing upstream is marked" and "the mark was past the
+    cap". Reporting the second as the first is a false negative in exactly the
+    failure mode this project exists to catch, and it gets worse the wider the
+    cone, which is to say worst on the mature warehouses most likely to hold an
+    unnoticed leak (F1, docs/plan/07).
+    """
+
+    hit: tuple[str, str, tuple[str, ...]] | None
+    truncated: bool
+    """True when the walk saw exactly the cap's worth of results, so a mark
+    beyond it may exist and was never checked. Equality, not >=: the cap is a
+    hard limit, so exactly-the-cap is the only observable signature that more
+    might exist. One result short is a complete answer."""
 
 
 class ColumnMarkIndex:
@@ -157,7 +181,7 @@ def marked_ancestor(
     source_column_urn: str,
     index: ColumnMarkIndex,
     config: ScanConfig,
-) -> tuple[str, str, tuple[str, ...]] | None:
+) -> WalkResult:
     """Walk a column's upstream cone and return the marked column it reaches.
 
     Reads ``LineageResult.paths``, never ``LineageResult.urn``. See the module
@@ -180,9 +204,11 @@ def marked_ancestor(
         config: Supplies the hop cap and the lineage result cap.
 
     Returns:
-        The marked column's URN, the term or tag that marks it, and the chain of
-        column names walked to reach it, or None when the cone reaches nothing
-        marked.
+        A :class:`WalkResult`. Its ``hit`` is the marked column's URN, the term
+        or tag that marks it, and the chain of column names walked to reach it,
+        or None when the cone (as far as the walk could see) reaches nothing
+        marked. ``truncated`` says whether "as far as the walk could see" might
+        be short of the column's whole upstream cone.
     """
     field = SchemaFieldUrn.from_string(source_column_urn)
 
@@ -191,9 +217,10 @@ def marked_ancestor(
     # the ground truth, or straight from a restricted column. The traversal
     # below would never reveal it, since there is nothing left to derive from
     # once the column already is the thing, so it is checked explicitly first.
+    # Nothing was walked, so there is nothing that could have been truncated.
     direct = index.marker(source_column_urn)
     if direct is not None:
-        return source_column_urn, direct, (field.field_path,)
+        return WalkResult(hit=(source_column_urn, direct, (field.field_path,)), truncated=False)
 
     results = conn.client.lineage.get_lineage(
         source_urn=field.parent,
@@ -202,6 +229,9 @@ def marked_ancestor(
         max_hops=config.leakage_max_hops,
         count=config.lineage_result_cap,
     )
+    # Equality, not >=: the cap is a hard limit, so exactly-the-cap is the only
+    # observable signature that a result beyond it may exist (F1, docs/plan/07).
+    truncated = len(results) == config.lineage_result_cap
 
     matches: list[tuple[str, str, tuple[str, ...]]] = []
     for result in results:
@@ -224,5 +254,6 @@ def marked_ancestor(
                 break
 
     if not matches:
-        return None
-    return min(matches, key=lambda match: (len(match[2]), match[0], match[2]))
+        return WalkResult(hit=None, truncated=truncated)
+    best = min(matches, key=lambda match: (len(match[2]), match[0], match[2]))
+    return WalkResult(hit=best, truncated=truncated)

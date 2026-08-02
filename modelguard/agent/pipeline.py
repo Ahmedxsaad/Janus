@@ -444,10 +444,29 @@ def _detect(
         radius = blast_radius(conn, table_urn, config, now_ms=observed_at)
         if radius is not None:
             findings.append(finding_for(radius))
-            if not radius.models:
+            if not radius.models and radius.truncated:
+                # Not "no model was tagged" (that claims the walk saw the whole
+                # cone and it was empty): the walk saw exactly the lineage cap,
+                # so a model beyond it may exist and was never checked
+                # (F1, docs/plan/07). Reporting "no model consumes this table"
+                # here would be the false negative this project exists to catch.
+                warnings.append(
+                    "the table is stale, but its downstream traversal returned the "
+                    f"full {config.lineage_result_cap}-result cap with no model found, "
+                    "so this does not mean no model consumes it: raise "
+                    "MODELGUARD_LINEAGE_RESULT_CAP, or narrow the scan"
+                )
+            elif not radius.models:
                 warnings.append(
                     "the table is stale but no model consumes it within "
                     f"{config.max_hops} hops; no model was tagged"
+                )
+            elif radius.truncated:
+                warnings.append(
+                    "the table's downstream traversal returned the full "
+                    f"{config.lineage_result_cap}-result cap, so a model beyond it may "
+                    "exist and is not among the ones tagged below; raise "
+                    "MODELGUARD_LINEAGE_RESULT_CAP to see the whole blast radius"
                 )
 
     if model_urn is not None:

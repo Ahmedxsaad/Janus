@@ -111,12 +111,15 @@ def leak_path(
 
     Returns:
         The label column's URN and the chain of column names walked to reach it,
-        or None when the cone reaches no declared label.
+        or None when the cone reaches no declared label. Silent about
+        truncation: a caller that needs it (coverage.py, deciding whether a
+        clean answer here is trustworthy) calls marked_ancestor directly rather
+        than through this label-specific wrapper.
     """
-    hit = marked_ancestor(conn, source_column_urn, labels, config)
-    if hit is None:
+    walk = marked_ancestor(conn, source_column_urn, labels, config)
+    if walk.hit is None:
         return None
-    label_urn, _marker, column_path = hit
+    label_urn, _marker, column_path = walk.hit
     return label_urn, column_path
 
 

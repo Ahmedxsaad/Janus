@@ -10,6 +10,8 @@ normal case.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from datahub.metadata.schema_classes import (
     MLFeaturePropertiesClass,
     MLModelPropertiesClass,
@@ -25,7 +27,10 @@ from tests.conftest import (
     MODEL_URN,
     NOW_MS,
     TABLE_URN,
+    FakeClient,
     FakeGraph,
+    column_path,
+    lineage_result,
     make_connection,
     make_finding,
 )
@@ -33,11 +38,23 @@ from tests.conftest import (
 CONFIG = ScanConfig()
 
 
-def _gaps(graph: FakeGraph, **kwargs: object) -> tuple[str, ...]:
-    """Run the coverage read and return one description per gap."""
+def _gaps(
+    graph: FakeGraph,
+    *,
+    client: FakeClient | None = None,
+    config: ScanConfig = CONFIG,
+    **kwargs: object,
+) -> tuple[str, ...]:
+    """Run the coverage read and return one description per gap.
+
+    A default, empty ``FakeClient`` rather than ``make_connection``'s own
+    ``None``: the leakage and sensitive-source gap checks re-walk lineage to
+    tell a real "no leak" from a truncated one (F1, docs/plan/07), so they
+    need a working ``conn.client.lineage`` even on the already-clean path.
+    """
     gaps = coverage_gaps(
-        make_connection(graph),
-        CONFIG,
+        make_connection(graph, client or FakeClient()),
+        config,
         table_urn=kwargs.get("table_urn"),  # type: ignore[arg-type]
         model_urn=kwargs.get("model_urn"),  # type: ignore[arg-type]
         findings=kwargs.get("findings", ()),  # type: ignore[arg-type]
@@ -118,3 +135,65 @@ def test_a_fully_wired_model_leaves_no_leakage_gap():
     )
     described = _gaps(graph, model_urn=MODEL_URN)
     assert not any("target leakage" in line for line in described)
+
+
+def test_a_truncated_leakage_walk_is_reported_as_a_gap_not_clean():
+    """A walk that hit the cap with no leak found is uncertain, not clean.
+
+    leakage_findings() already ran and found nothing, which is why this gap
+    check is even asked, but "nothing found" and "nothing found because the
+    cap cut the walk short" read identically to a caller unless this checks
+    WalkResult.truncated itself (F1, docs/plan/07).
+    """
+    graph = FakeGraph(
+        aspects={
+            (MODEL_URN, MLModelPropertiesClass): MLModelPropertiesClass(
+                mlFeatures=[LEAK_FEATURE_URN]
+            ),
+            (LEAK_FEATURE_URN, MLFeaturePropertiesClass): MLFeaturePropertiesClass(
+                customProperties={SOURCE_COLUMN_PROPERTY: LEAK_COLUMN_URN}
+            ),
+        },
+        exists=True,
+    )
+    capped = replace(CONFIG, lineage_result_cap=1)
+    client = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(TABLE_URN, hops=1, direction="upstream", paths=column_path())
+            ]
+        }
+    )
+    described = _gaps(graph, model_urn=MODEL_URN, client=client, config=capped)
+    assert any(
+        "target leakage" in line and "cap" in line and "may not have" in line for line in described
+    )
+
+
+def test_a_truncated_sensitive_source_walk_is_reported_as_a_gap_not_clean():
+    graph = FakeGraph(
+        aspects={
+            (MODEL_URN, MLModelPropertiesClass): MLModelPropertiesClass(
+                mlFeatures=[LEAK_FEATURE_URN]
+            ),
+            (LEAK_FEATURE_URN, MLFeaturePropertiesClass): MLFeaturePropertiesClass(
+                customProperties={SOURCE_COLUMN_PROPERTY: LEAK_COLUMN_URN}
+            ),
+        },
+        exists=True,
+    )
+    capped = replace(
+        CONFIG, lineage_result_cap=1, sensitive_tag_urns=("urn:li:tag:modelguard.sensitive",)
+    )
+    client = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(TABLE_URN, hops=1, direction="upstream", paths=column_path())
+            ]
+        }
+    )
+    described = _gaps(graph, model_urn=MODEL_URN, client=client, config=capped)
+    assert any(
+        "sensitive source" in line and "cap" in line and "may not have" in line
+        for line in described
+    )
