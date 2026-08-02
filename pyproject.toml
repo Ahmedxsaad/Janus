@@ -60,14 +60,24 @@ classifiers = [
 # (see .python-version), which is what CI runs.
 requires-python = ">=3.11,<3.14"
 
-# Pins are exact.
+# modelguard-datahub is a library on PyPI now, not only an application: an
+# environment that already holds pydantic or rich for something else (FastAPI,
+# LangChain, dbt adapters, most ML tooling) must be able to install this next
+# to it. Exact pins fought the resolver instead. Only the SDK keeps an exact
+# floor: its behaviour was verified symbol by symbol (D-012), a minor bump can
+# move an aspect class or a mutation shape, and the ceiling is raised
+# deliberately, after a run of `pytest -m integration` against the new
+# version, never by a resolver's own choice (F2, docs/plan/07).
 dependencies = [
-    "acryl-datahub[datahub-rest]==1.6.0.13",
-    "pydantic==2.13.4",
-    "python-dotenv==1.2.2",
-    "PyYAML==6.0.3",
-    "rich==15.0.0",
-    "typer==0.26.8",
+    "acryl-datahub[datahub-rest]>=1.6.0.13,<2",
+    # Used through a stable, small surface (BaseModel/SecretStr, a dotenv
+    # loader, safe_load, a Console, a Typer app): no reason to force a
+    # resolver's hand on any of these.
+    "pydantic>=2.7,<3",
+    "python-dotenv>=1.0,<2",
+    "PyYAML>=6.0,<7",
+    "rich>=13.0,<16",
+    "typer>=0.12,<1",
 ]
 
 [project.optional-dependencies]

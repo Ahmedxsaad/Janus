@@ -88,6 +88,31 @@ jobs:
       - name: Audit dependencies for known vulnerabilities
         run: pip-audit --progress-spinner off --ignore-vuln PYSEC-2026-3447
 
+  install-alongside:
+    name: installs alongside a different pydantic (F2, docs/plan/07)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # The regression test for the whole class of problem F2 fixed: an exact
+      # `==` pin here would refuse to coexist with a pydantic version another
+      # already-installed package brought into the environment. Installing a
+      # deliberately different, but still-supported, pydantic first is what an
+      # environment that already has FastAPI or LangChain in it looks like.
+      - name: Install a different pydantic first, then this project alongside it
+        run: |
+          python -m pip install --upgrade pip
+          pip install "pydantic==2.9.0"
+          pip install -e .
+          python -c "import modelguard; from modelguard.cli import app"
+          modelguard --help >/dev/null
+
   docker:
     name: docker image builds
     runs-on: ubuntu-latest
