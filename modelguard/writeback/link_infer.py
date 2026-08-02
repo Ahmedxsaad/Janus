@@ -402,10 +402,10 @@ def _declared_upstream(
     """
     for field in schema.fields:
         column_urn = str(SchemaFieldUrn(dataset_urn, field.fieldPath))
-        hit = marked_ancestor(conn, column_urn, labels, config)
-        if hit is None:
+        walk = marked_ancestor(conn, column_urn, labels, config)
+        if walk.hit is None:
             continue
-        label_urn, marker_urn, path = hit
+        label_urn, marker_urn, path = walk.hit
         label = SchemaFieldUrn.from_string(label_urn)
         label_table = DatasetUrn.from_string(label.parent).name
         return label_urn, (
