@@ -24,16 +24,18 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    name: lint, types, offline tests
+  lint:
+    name: lint, types, hygiene
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v6
         with:
-          # Pinned, not a range: acryl-datahub's CLI warns above 3.11 and
-          # pyproject caps requires-python there. CI must run what developers run.
+          # Pinned, not a range: this is the one version pre-commit's hooks
+          # (ruff, mypy) run under. mypy's own python_version is pinned in its
+          # config regardless, and running the same lint three times across
+          # the test matrix below would report the same findings three times.
           python-version-file: .python-version
           cache: pip
           cache-dependency-path: pyproject.toml
@@ -48,6 +50,34 @@ jobs:
       # require and nothing else enforces.
       - name: Lint, format, types, hygiene
         run: pre-commit run --all-files --show-diff-on-failure
+
+  test:
+    name: offline tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      # A 3.13-only failure must not hide a 3.12-only one, and the point of
+      # this matrix is to see every version's answer, not stop at the first
+      # red one.
+      fail-fast: false
+      matrix:
+        # pyproject's classifiers and requires-python (>=3.11,<3.14) advertise
+        # all three; until this matrix landed only 3.11 (.python-version) ever
+        # actually ran (F9, docs/plan/07). 3.12 and 3.13 are what current
+        # distributions ship (Ubuntu 24.04 and 25.04 respectively, D-074), so
+        # they are the versions most real users are on, not the one almost
+        # nobody has by default.
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the project and its dev tools
+        run: python -m pip install --upgrade pip && pip install -e ".[dev]"
 
       - name: Offline tests
         # -m 'not integration' is already the default in pyproject's addopts;
