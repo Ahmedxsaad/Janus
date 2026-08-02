@@ -77,26 +77,24 @@ def test_the_proposed_feature_table_is_the_one_the_seeder_linked(
     assert "dataProcessInstanceInput" in proposal.reasons[0]
 
 
-def test_a_label_in_its_own_table_is_reported_not_found_rather_than_guessed(
+def test_the_label_declared_in_its_own_table_is_found_through_lineage(
     conn: DataHubConnection, seeded: SeedResult, config: ScanConfig
 ) -> None:
-    """A limitation of ``--infer``, pinned here because it is easy to misread.
+    """The shape every real warehouse has, and the seeded graph with it.
 
-    The label search reads the *feature table's* own schema, and on this graph,
-    as on most warehouses, the label lives elsewhere: the seeder declares it on
-    ``loans_raw.default_status`` while the features come from
-    ``customer_features``. So the proposal is incomplete and says which argument
-    completes it, rather than promoting a feature-table column that merely looks
-    like a label. That is the right failure (a wrong label makes every leakage
-    verdict wrong in both directions), and it is the reason the README says
-    ``--infer`` proposes rather than concludes.
+    The label is declared on ``loans_raw.default_status`` while the features come
+    from ``customer_features``, so a search of the feature table's own schema
+    finds nothing and the proposal was permanently incomplete here. The upstream
+    walk finds the declaration where somebody actually made it. Still a
+    declaration, never a name match: pointing the config at a term nothing
+    carries has to take it away again, which the offline suite pins.
     """
     proposal = infer_link(conn, config, seeded.model)
 
-    assert proposal.label_column_urn is None
-    assert not proposal.complete
-    assert "NOT FOUND" in proposal.reasons[1]
-    assert "--label-column" in proposal.reasons[1]
+    assert proposal.label_column_urn == seeded.label_column
+    assert proposal.complete, proposal.reasons
+    assert "carries" in proposal.reasons[1]
+    assert spec.SOURCE_TABLE in proposal.reasons[1]
 
 
 def test_nothing_is_excluded_because_the_seeded_schema_declares_no_keys(
@@ -124,6 +122,7 @@ def test_the_rendered_command_names_the_seeded_entities(
 
     assert f"--model {spec.MODEL_ID}" in command
     assert f"--features {spec.FEATURE_TABLE}" in command
-    # No label was found (see above), so no --label-column is rendered: the
-    # command shows what is known and leaves the one blank the user fills.
-    assert "--label-column" not in command
+    assert f"--label-column {spec.LABEL_SOURCE_COLUMN}" in command
+    # The label lives in the source table, not the feature table, so its own flag
+    # has to be rendered: a command without it would link against the wrong one.
+    assert f"--label-table {spec.SOURCE_TABLE}" in command

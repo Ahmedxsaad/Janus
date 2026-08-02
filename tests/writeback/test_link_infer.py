@@ -33,11 +33,14 @@ from modelguard.writeback.link import LinkError
 from modelguard.writeback.link_infer import InferenceError, infer_link
 from tests.conftest import (
     FEATURE_TABLE_URN,
+    LABEL_COLUMN_URN,
+    LEAK_COLUMN_URN,
     MODEL_URN,
     TABLE_URN,
     TRAINING_RUN_URN,
     FakeClient,
     FakeGraph,
+    column_path,
     lineage_result,
     make_connection,
 )
@@ -262,6 +265,71 @@ class TestLabelColumn:
 
         assert proposal.label_column_urn is not None
         assert proposal.label_column_urn.endswith("actual_outcome)")
+
+    def test_a_label_declared_upstream_is_found_and_named_with_its_own_table(self):
+        """The shape a real warehouse has: the label sits in its own mart.
+
+        The feature table holds no label and never will; the declaration is on
+        the raw column its feature descends from. Reading only this table's
+        schema left the proposal permanently incomplete on the graph this
+        project's own demo seeds, which is a refusal dressed as caution.
+        """
+        graph = _graph(schema=_schema(_field("applicant_income"), _field("prior_default_flag")))
+        graph.set_aspect(
+            LABEL_COLUMN_URN,
+            GlossaryTermsClass(
+                terms=[GlossaryTermAssociationClass(urn=LABEL_TERM_URN)], auditStamp=None
+            ),
+        )
+        client = FakeClient(
+            lineage_by_column={
+                "prior_default_flag": [
+                    lineage_result(
+                        TABLE_URN,
+                        hops=1,
+                        direction="upstream",
+                        paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                    )
+                ]
+            }
+        )
+
+        proposal = infer_link(make_connection(graph, client), CONFIG, MODEL_URN)
+
+        assert proposal.label_column_urn == LABEL_COLUMN_URN
+        assert proposal.complete
+        assert "in ecommerce.public.loans_raw carries" in proposal.reasons[1]
+        assert "reached from prior_default_flag" in proposal.reasons[1]
+        # The label is in another table, so the command has to say which.
+        assert "--label-table ecommerce.public.loans_raw" in proposal.command()
+
+    def test_a_declaration_in_this_table_beats_one_found_upstream(self):
+        """The nearer declaration is the one somebody made about this data."""
+        graph = _graph(schema=_schema(_field("prior_default_flag"), _field("outcome")))
+        for urn in (LABEL_COLUMN_URN, str(SchemaFieldUrn(FEATURE_TABLE_URN, "outcome"))):
+            graph.set_aspect(
+                urn,
+                GlossaryTermsClass(
+                    terms=[GlossaryTermAssociationClass(urn=LABEL_TERM_URN)], auditStamp=None
+                ),
+            )
+        client = FakeClient(
+            lineage_by_column={
+                "prior_default_flag": [
+                    lineage_result(
+                        TABLE_URN,
+                        hops=1,
+                        direction="upstream",
+                        paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                    )
+                ]
+            }
+        )
+
+        proposal = infer_link(make_connection(graph, client), CONFIG, MODEL_URN)
+
+        assert proposal.label_column_urn is not None
+        assert proposal.label_column_urn.endswith("outcome)")
 
     def test_no_label_leaves_the_proposal_incomplete_rather_than_guessing_one(self):
         """A wrong label makes every leakage verdict wrong in both directions."""

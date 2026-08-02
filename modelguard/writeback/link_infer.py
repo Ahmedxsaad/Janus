@@ -37,7 +37,12 @@ What is inferred, and how confident each step is
   an answer: they become the shortlist instead of one of them being picked.
 * **The label column.** First from a column that already carries the configured
   label term, which is not an inference at all: somebody declared it, in the UI
-  or in an earlier link. Failing that, from the column names in
+  or in an earlier link. Failing that, from the same declaration found *upstream*
+  of one of the feature table's columns, which is where it usually sits: a
+  warehouse almost never keeps the label beside the features, so the label lands
+  in its own mart and the feature columns descend from it. That is still a
+  declaration, and the reason line names the column it was reached from and the
+  chain walked to get there. Failing that, from the column names in
   :attr:`~modelguard.config.ScanConfig.label_column_names`, matched
   case-insensitively. Failing that, nothing: the proposal says so and the human
   supplies it, because a wrongly guessed label makes every leakage verdict wrong
@@ -71,7 +76,7 @@ from datahub.sdk.search_filters import FilterDsl as F
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
-from modelguard.detect.column_marks import ColumnMarkIndex
+from modelguard.detect.column_marks import ColumnMarkIndex, marked_ancestor
 from modelguard.writeback.link import LinkError
 
 #: Run-parameter keys that conventionally name the training dataset, lowercase,
@@ -370,17 +375,63 @@ def _schema(conn: DataHubConnection, dataset_urn: str) -> SchemaMetadataClass:
     return schema
 
 
+def _declared_upstream(
+    conn: DataHubConnection,
+    config: ScanConfig,
+    dataset_urn: str,
+    schema: SchemaMetadataClass,
+    labels: ColumnMarkIndex,
+) -> tuple[str, str] | None:
+    """Return a labelled column reached by walking upstream of this table's columns.
+
+    The same walk the leakage detector runs, asked a different question: not
+    "does a feature descend from the label" but "which column is the label". A
+    hit is still a declaration somebody made, so it is reported as one, and it
+    names the column and the feature it was reached from, because a label found
+    two joins away is exactly the kind of answer that deserves checking.
+
+    Columns are walked in schema order and the first hit wins. Several columns of
+    one feature table descending from one label is the normal case (that is what
+    leakage looks like), and they all reach the same column, so there is nothing
+    to choose between them.
+
+    Returns:
+        The label column's URN and the reason line, or None when no column's cone
+        reaches anything carrying the label term.
+    """
+    for field in schema.fields:
+        column_urn = str(SchemaFieldUrn(dataset_urn, field.fieldPath))
+        hit = marked_ancestor(conn, column_urn, labels, config)
+        if hit is None:
+            continue
+        label_urn, marker_urn, path = hit
+        label = SchemaFieldUrn.from_string(label_urn)
+        label_table = DatasetUrn.from_string(label.parent).name
+        return label_urn, (
+            f"label column: {label.field_path} in {label_table} carries {marker_urn}, "
+            f"reached from {field.fieldPath} by column lineage ({' -> '.join(path)}). "
+            "Declared rather than guessed, but in another table: check it is the "
+            "label this model predicts"
+        )
+    return None
+
+
 def _label_column(
     conn: DataHubConnection,
     config: ScanConfig,
     dataset_urn: str,
     schema: SchemaMetadataClass,
 ) -> tuple[str | None, str]:
-    """Return the label column of a dataset, and how it was determined.
+    """Return the label column of a model's training data, and how it was determined.
 
-    Two routes, in order of how much they are worth trusting. A column already
+    Three routes, in order of how much they are worth trusting. A column already
     carrying the label term was *declared* by a person or by an earlier link, and
-    is not an inference at all. A name match is a genuine guess, reported as one.
+    is not an inference at all. Failing that, the same declaration found upstream
+    of one of these columns, which is where it usually is: a warehouse almost
+    never puts the label and the features in one table, the label lands in its own
+    mart, and the feature table's columns descend from it (link.py says the same
+    thing about why the term is propagated up the label's own lineage). A name
+    match is a genuine guess, reported as one.
     """
     labels = ColumnMarkIndex(conn, terms=frozenset({config.label_term_urn}))
     for field in schema.fields:
@@ -390,6 +441,10 @@ def _label_column(
                 f"label column: {field.fieldPath} already carries "
                 f"{config.label_term_urn}, so it was declared rather than guessed"
             )
+
+    upstream = _declared_upstream(conn, config, dataset_urn, schema, labels)
+    if upstream is not None:
+        return upstream
 
     wanted = {name.lower() for name in config.label_column_names}
     for field in schema.fields:

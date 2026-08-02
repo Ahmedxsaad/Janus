@@ -195,7 +195,8 @@ Declare this? [Y/n]
 
 There is no LLM in that, and nothing is written until you answer. A column that
 already carries the label term was *declared* rather than guessed, and the
-proposal says so; where nothing in the graph names a label at all, it refuses to
+proposal says so, including when the declaration is on a column the feature
+table descends from, which is where a warehouse usually keeps its labels; where nothing in the graph names a label at all, it refuses to
 invent one and asks for `--label-column`, because a wrong label makes every
 leakage verdict wrong in both directions. Exclusions come only from the
 warehouse's own key declarations, never from column names that look like

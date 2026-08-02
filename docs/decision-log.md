@@ -16,6 +16,40 @@ Entry template:
 
 ---
 
+## D-095: --infer finds a label declared upstream, not only one in the feature table (2026-08-02)
+- Decided by: Ghassen Naouar (shown the gap, chose to fix it on this branch),
+  applied by Claude
+- Decision: `_label_column` searched the feature table's own schema and nothing
+  else, so it could not find a label declared in the label's own mart. That is
+  not an edge case: `link.py`'s docstring already says a warehouse almost never
+  keeps the label beside the features, and the project's own seeded graph is
+  exactly that shape (the term is on `loans_raw.default_status`, the features
+  come from `customer_features`). `--infer` was therefore permanently incomplete
+  on the label for the demo graph and for most real ones, which is a refusal
+  dressed as caution. A second route now walks upstream from each feature-table
+  column and returns the declared label it reaches, with its table.
+- Options considered: (a) leave it recorded as a new finding, (b) infer the
+  label from the *name* of an upstream column, (c) reuse
+  `column_marks.marked_ancestor`, the leakage detector's own walk, with the
+  label term as the mark.
+- Why: (c). It is the same question the leakage detector already asks of the
+  same graph ("which declared column does this one descend from"), so there is
+  one traversal to be right about rather than two, including the
+  paths-not-urn trap D-031 records. Not (b): a name is a guess, and a wrong
+  label makes every leakage verdict wrong in both directions, so the guess stays
+  confined to the feature table's own columns where the user can see it.
+- Result: The reason line names the label, its table, the feature column it was
+  reached from, and the chain walked, because a label found two joins away is
+  precisely the answer that deserves checking. A declaration in the feature
+  table still wins over one found upstream (the nearer declaration is the one
+  somebody made about this data), pinned by a test. Two new unit tests,
+  mutation-checked per tests/CLAUDE.md rule 6; the integration test that pinned
+  the old failure now asserts the proposal is complete and renders
+  `--label-table`. Costs one lineage walk per feature-table column, at
+  inference time only, on a command a human runs once per model.
+
+---
+
 ## D-094: F6 partly closed, the benchmark now says which rows could have failed (2026-08-02)
 - Decided by: Ghassen Naouar (asked for F6 with F3, F8, F10, F11), applied by Claude
 - Decision: two of F6's three steps. (1) The Detection table in RESULTS.md gains
@@ -77,14 +111,9 @@ Entry template:
   benchmarks/RESULTS.md` against a seeded Quickstart; until they have been run,
   F8 is written but not measured, and RESULTS.md still misrepresents the
   project's coverage exactly as the finding says.
-- One thing the writing of `test_link_infer.py` found, worth its own finding:
-  `--infer` cannot resolve a label that lives in its own table, because
-  `_label_column` reads only the feature table's schema. On the seeded graph
-  the label is declared on `loans_raw.default_status` while the features come
-  from `customer_features`, so the proposal is always incomplete there, and
-  link.py's own docstring says a warehouse almost never puts the two in one
-  table. Pinned by a test that asserts the honest failure rather than papered
-  over, and left for a decision: it is outside F10's scope.
+- One thing the writing of `test_link_infer.py` found, outside F10's scope and
+  fixed on the same branch once raised: `--infer` could not resolve a label that
+  lives in its own table. See D-095.
 
 ---
 
