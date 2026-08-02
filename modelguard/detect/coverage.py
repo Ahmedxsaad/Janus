@@ -38,6 +38,7 @@ from modelguard.models import (
     SchemaDriftFinding,
     SensitiveSourceFinding,
 )
+from modelguard.writeback.properties import FEATURE_TABLE, read_properties
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,30 @@ class Unevaluated:
     def describe(self) -> str:
         """One line for a console or a CI log."""
         return f"{self.check} not evaluated: {self.reason}. {self.remedy}"
+
+
+#: Reason and remedy for a model whose link an ingestion run has since dropped.
+#: Separate from "never linked", because the two look identical on the model
+#: (mlFeatures is empty either way) and have nothing else in common: one is a
+#: model nobody has set up, the other is a model that *was* set up and whose
+#: checks stopped silently the night an ingest ran (D-074, F11). Only the second
+#: one is fixed by replaying a command the graph already holds the arguments for.
+_DELINKED = (
+    "this model carries a recorded modelguard link but declares no features, "
+    "which is what an ingestion run does to it: DataHub's mlflow source upserts "
+    "the whole mlModelProperties aspect and drops the features `link` attached",
+    "Replay it: `modelguard link --all`, and schedule that after every ingest "
+    "(the modelguard-watch chart ships a CronJob for it).",
+)
+
+
+def was_linked(conn: DataHubConnection, model_urn: str) -> bool:
+    """Whether a previous ``modelguard link`` described this model.
+
+    Read off the structured properties ``link`` records, which ingestion does not
+    touch, so this stays true across the ingest that wiped the features.
+    """
+    return bool(read_properties(conn, model_urn).get(FEATURE_TABLE))
 
 
 def _freshness_gap(
@@ -103,6 +128,8 @@ def _leakage_gap(
         )
 
     if properties is None or not properties.mlFeatures:
+        if was_linked(conn, model_urn):
+            return gap(*_DELINKED)
         return gap(
             "the model declares no features (mlModelProperties.mlFeatures is empty), "
             "so there is no feature whose lineage could be traced back to a label",
@@ -194,6 +221,8 @@ def _sensitive_gap(
         )
 
     if properties is None or not properties.mlFeatures:
+        if was_linked(conn, model_urn):
+            return gap(*_DELINKED)
         return gap(
             "the model declares no features (mlModelProperties.mlFeatures is empty), "
             "so there is no feature whose lineage could be traced back to a "

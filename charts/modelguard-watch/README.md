@@ -47,6 +47,31 @@ misconfiguration: `modelguard scan`/`watch` fall back to deterministic
 template prose. `--no-llm` (`watch.noLlm: true`) makes that explicit; leaving
 `watch.llmProvider` unset makes it implicit.
 
+## Keeping the link alive
+
+```yaml
+link:
+  enabled: true            # off by default: it writes
+  schedule: "0 3 * * *"    # after the nightly ingest
+```
+
+That adds a CronJob running `modelguard link --all` beside the watcher, and on
+any cluster with an ingestion pipeline it is the difference between a watcher
+that keeps working and one that quietly has nothing left to check.
+
+The reason it is needed at all: DataHub's mlflow source upserts the whole
+`mlModelProperties` aspect and drops the features `modelguard link` attached
+(D-074). Every ingest therefore un-links every model, `scan` starts reporting
+"not evaluated: this model carries a recorded modelguard link but declares no
+features", and somebody has to notice. `link --all` replays only what each
+model already records, and skips any model nobody has linked, so it writes
+nothing a human did not previously confirm.
+
+Schedule it away from the watcher's busy window if you can. The two are
+separate writers on the same models, and the same read-merge-write limit below
+applies to them; the properties they each write are different, and a scan
+recomputes anything lost, so the worst case converges rather than corrupts.
+
 ## What this chart deliberately does not do
 
 - **No autoscaling, and exactly one replica.** `replicaCount` above 1 is

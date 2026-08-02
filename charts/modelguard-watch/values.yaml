@@ -38,6 +38,20 @@ watch:
   llmProvider: ""
   llmModel: ""
 
+# Replay `modelguard link --all` on a schedule, as a CronJob beside the watcher.
+# Off by default: it writes, so turning it on should be a deliberate choice, and
+# a graph where nobody has run `link` yet has nothing to replay.
+#
+# Turn it on wherever an ingestion pipeline runs. DataHub's mlflow source drops
+# the features `link` attached every time it ingests the model (D-074), and
+# without a replay every model quietly goes back to "not checked" some night
+# nobody was watching.
+link:
+  enabled: false
+  # After a typical nightly ingest, and deliberately not at the same minute as
+  # one: the replay reads what the ingest wrote.
+  schedule: "0 3 * * *"
+
 datahub:
   # Required. No default: a missing value must fail loudly at install
   # (`helm install` errors via the required() check in the Deployment

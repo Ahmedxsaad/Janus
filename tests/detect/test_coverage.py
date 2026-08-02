@@ -14,12 +14,17 @@ from datahub.metadata.schema_classes import (
     MLFeaturePropertiesClass,
     MLModelPropertiesClass,
     OperationClass,
+    StructuredPropertiesClass,
+    StructuredPropertyValueAssignmentClass,
 )
+from datahub.metadata.urns import StructuredPropertyUrn
 
 from modelguard.config import ScanConfig
 from modelguard.detect.coverage import coverage_gaps
 from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
+from modelguard.writeback.properties import FEATURE_TABLE
 from tests.conftest import (
+    FEATURE_TABLE_URN,
     LEAK_COLUMN_URN,
     LEAK_FEATURE_URN,
     MODEL_URN,
@@ -67,6 +72,34 @@ def test_a_model_with_no_declared_features_cannot_be_checked_for_leakage():
     assert any(
         "target leakage not evaluated" in line and "mlFeatures" in line for line in described
     )
+
+
+def test_a_model_an_ingest_de_linked_is_told_apart_from_one_nobody_linked():
+    """F11: the link decays on the ingest's schedule, so the scan has to name that.
+
+    Both models declare no features, so both look identical on mlModelProperties.
+    Only one of them has a command sitting in the graph that puts it back, and a
+    user who is told to go and set up a link they already set up last month
+    learns to ignore the line.
+    """
+    graph = FakeGraph()
+    graph.set_aspect(
+        MODEL_URN,
+        StructuredPropertiesClass(
+            properties=[
+                StructuredPropertyValueAssignmentClass(
+                    propertyUrn=str(StructuredPropertyUrn(FEATURE_TABLE)),
+                    values=[FEATURE_TABLE_URN],
+                )
+            ]
+        ),
+    )
+
+    described = _gaps(graph, model_urn=MODEL_URN)
+
+    leakage = next(line for line in described if line.startswith("target leakage"))
+    assert "recorded modelguard link but declares no features" in leakage
+    assert "modelguard link --all" in leakage
 
 
 def test_a_model_with_no_training_run_cannot_be_checked_for_drift():

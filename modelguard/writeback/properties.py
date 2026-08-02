@@ -51,6 +51,15 @@ OPEN_LEAK_COLUMNS = "modelguard.open_leak_columns"
 #: week, and the direction is what tells somebody that a change shipped.
 TRUST_HISTORY = "modelguard.trust_history"
 
+#: What ``modelguard link`` was told, kept on the model so the link can be
+#: replayed after an ingest overwrites ``mlModelProperties`` (D-074). Declared
+#: here rather than beside ``link`` because more than one layer reads them:
+#: ``link`` to replay itself, and ``detect.coverage`` to tell a model that was
+#: never linked apart from one whose link an ingest has since dropped (F11).
+FEATURE_TABLE = "modelguard.feature_table"
+LABEL_COLUMN = "modelguard.label_column"
+EXCLUDED_COLUMNS = "modelguard.excluded_columns"
+
 _VALID_CARDINALITIES = frozenset(
     {PropertyCardinalityClass.SINGLE, PropertyCardinalityClass.MULTIPLE}
 )

@@ -1,0 +1,95 @@
+{{- if .Values.link.enabled }}
+# Replays `modelguard link --all` on a schedule.
+#
+# Why a chart that is named after `watch` also ships this: the join `link`
+# writes is not durable. DataHub's mlflow source upserts the whole
+# `mlModelProperties` aspect on every ingest and drops the features `link`
+# attached (D-074), so on any real ingestion schedule every model silently
+# reverts to "not checked" and the watcher next door keeps running against a
+# graph that no longer says anything about them. A scan reports that honestly
+# rather than calling the model healthy, but somebody still has to notice and
+# re-run a command, and this is that somebody.
+#
+# It replays only what the graph already records (`link --all` reads each
+# model's own recorded arguments and skips any model nobody linked), so it
+# writes nothing that a human did not previously confirm.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "modelguard-watch.fullname" . }}-link
+  labels:
+    {{- include "modelguard-watch.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.link.schedule | quote }}
+  # Forbid, not Allow: two replays overlapping is the two-writers case the
+  # replica guard in the Deployment refuses for the same reason (F3).
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # One attempt then one retry. A replay that fails twice is a
+      # configuration problem (a dropped feature table, an expired token) that
+      # retrying all night will not fix, and the next schedule tries again.
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            {{- include "modelguard-watch.selectorLabels" . | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "modelguard-watch.serviceAccountName" . }}
+          automountServiceAccountToken: false
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            fsGroup: 999
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: link
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              args:
+                - link
+                - --all
+              env:
+                - name: DATAHUB_GMS_URL
+                  value: {{ .Values.datahub.gmsUrl | quote }}
+                - name: DATAHUB_GMS_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "modelguard-watch.secretName" . }}
+                      key: {{ .Values.existingSecretGmsTokenKey }}
+                      optional: true
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

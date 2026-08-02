@@ -370,11 +370,20 @@ and shelling out to a CLI from inside it is a worse interface than a function
 call.
 
 ```python
+import mlflow
+
 from modelguard import link_model, scan_model
+
+FEATURE_TABLE = "analytics.customer_features"
+
+# Logged as a run parameter as well as declared: the parameter survives into
+# DataHub through the ordinary mlflow ingest, which is what lets `link --infer`
+# read the table next time instead of guessing at it.
+mlflow.log_param("modelguard_features", FEATURE_TABLE)
 
 link_model(
     model="churn_model",
-    features="analytics.customer_features",
+    features=FEATURE_TABLE,
     label_column="churned",
     exclude=["customer_id"],
 )
@@ -383,6 +392,16 @@ report = scan_model(model="churn_model", dry_run=True)
 if not report.clean:
     raise SystemExit(f"{len(report.writes)} finding(s) before this model ships")
 ```
+
+This is the durable place for the link, and the reason is worth stating plainly:
+an ingest drops it (see above), so a link declared once decays on a schedule you
+do not control. Declared here, it is re-declared by the same run that produces
+the model, so the next training run repairs it whether or not anybody noticed.
+For the models that are not retrained nightly, schedule `modelguard link --all`
+after your ingest: the [`modelguard-watch` chart](charts/modelguard-watch)
+ships that as a CronJob (`link.enabled=true`). And when neither has happened,
+a scan says so specifically ("carries a recorded modelguard link but declares
+no features") rather than reporting a model it cannot see as healthy.
 
 Two functions and their result types, and deliberately no more: those names are
 the supported surface a script may pin to. They are thin wrappers over exactly
