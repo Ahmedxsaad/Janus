@@ -127,8 +127,8 @@ def _downstream_traversal(
     conn: DataHubConnection,
     table_urn: str,
     config: ScanConfig,
-) -> tuple[tuple[str, ...], tuple[str, ...], tuple[ModelAtRisk, ...]]:
-    """Walk a table's downstream lineage: datasets, features, and at-risk models.
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[ModelAtRisk, ...], bool]:
+    """Walk a table's downstream lineage: datasets, features, at-risk models.
 
     Unconditional on staleness. ``blast_radius`` below gates this on the table
     actually being stale, since that is the deterministic predicate the LLM is
@@ -137,6 +137,12 @@ def _downstream_traversal(
     which models this table's incident could have flagged, so their risk state
     can be cleared once the table is fresh again and there is no stale table
     left to traverse a fresh ``blast_radius`` from.
+
+    Returns:
+        The datasets, the features, the at-risk models, and whether the walk
+        was truncated (F1, docs/plan/07): equality against the cap, not `>=`,
+        since exactly-the-cap is the only observable signature that a result
+        beyond it may exist.
     """
     results = conn.client.lineage.get_lineage(
         source_urn=table_urn,
@@ -144,6 +150,7 @@ def _downstream_traversal(
         max_hops=config.max_hops,
         count=config.lineage_result_cap,
     )
+    truncated = len(results) == config.lineage_result_cap
     # DataHub returns beyond the cap once max_hops exceeds 2. Honor the cap.
     within_cap = [r for r in results if r.hops <= config.max_hops]
 
@@ -173,7 +180,7 @@ def _downstream_traversal(
             key=ModelAtRisk.sort_key,
         )
     )
-    return tuple(datasets), tuple(features), models
+    return tuple(datasets), tuple(features), models, truncated
 
 
 def downstream_models(
@@ -187,7 +194,7 @@ def downstream_models(
     resolves, this is how a caller learns which models' risk flags and tags to
     re-check, without a stale table to traverse a fresh ``blast_radius`` from.
     """
-    _, _, models = _downstream_traversal(conn, table_urn, config)
+    _, _, models, _truncated = _downstream_traversal(conn, table_urn, config)
     return models
 
 
@@ -217,7 +224,7 @@ def blast_radius(
     if signal is None or not signal.is_stale:
         return None
 
-    datasets, features, models = _downstream_traversal(conn, failing_table_urn, config)
+    datasets, features, models, truncated = _downstream_traversal(conn, failing_table_urn, config)
 
     return BlastRadius(
         signal=signal,
@@ -225,6 +232,7 @@ def blast_radius(
         failing_table_name=DatasetUrn.from_string(failing_table_urn).name,
         downstream_datasets=datasets,
         downstream_features=features,
+        truncated=truncated,
         models=models,
     )
 

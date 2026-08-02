@@ -119,11 +119,11 @@ def sensitive_source_findings(
         if source_column is None:
             continue
 
-        hit = marked_ancestor(conn, source_column, index, config)
-        if hit is None:
+        walk = marked_ancestor(conn, source_column, index, config)
+        if walk.hit is None:
             continue
 
-        sensitive_urn, marker_urn, column_path = hit
+        sensitive_urn, marker_urn, column_path = walk.hit
         findings.append(
             _sensitive_finding(
                 model, feature_urn, source_column, sensitive_urn, marker_urn, column_path

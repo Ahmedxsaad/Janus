@@ -16,6 +16,53 @@ Entry template:
 
 ---
 
+## D-097: F1 fixed, a truncated lineage walk is never read as clean (2026-08-02)
+- Decided by: Ahmed Saad (working through docs/plan/07's important findings one
+  by one), applied by Claude. Numbered D-097 rather than continuing after
+  D-089: PR #42 (Ghassen's F3/F6/F8/F10/F11 pass, reviewed and merged
+  separately) already claims D-090 through D-096, and this branched from
+  before it merged.
+- Decision: all three call sites named in F1 (`column_marks.py`'s leakage and
+  sensitive-source walk, `blast_radius.py`'s downstream traversal) now know
+  when they saw exactly `config.lineage_result_cap` results rather than the
+  whole cone, and stop treating that as a confident "found nothing."
+  `marked_ancestor` returns a `WalkResult` (`hit`, `truncated`) instead of a
+  bare tuple; a truncated, empty leakage or sensitive-source walk is reported
+  by `coverage.py` as `Unevaluated`, not left silent (a finding, when there is
+  one, is still reported: the evidence is real regardless of what lies past
+  the cap). `blast_radius.py`'s downstream walk gets the same `truncated`
+  flag on `BlastRadius`; since a stale table's finding fires unconditionally
+  (staleness itself is certain), this surfaces as a warning on the finding
+  instead: "does not mean no model consumes it" when the walk was both
+  truncated and empty, or "may exist and is not among the ones tagged" when
+  it was truncated but still found some.
+- Options considered: (a) leave truncation undetectable (rejected: F1's own
+  evidence names this "the one failure mode the whole project exists to
+  prevent, arriving through the back door"), (b) refuse to report at all on a
+  truncated walk (rejected: throws away a real finding, or a real "no
+  model within N hops" answer that happens to also be short of the catalog's
+  full graph beyond what matters), (c) surface truncation as uncertainty
+  alongside whatever *was* found, chosen.
+- Why: `coverage.py` exists specifically so silence is never read as health.
+  A capped lineage walk that finds nothing is silence with an asterisk this
+  project's own honesty machinery did not yet check, and it gets worse on the
+  exact catalogs (wide, mature warehouses) most likely to hold an unnoticed
+  leak.
+- Result: `WalkResult`/`truncated` in `column_marks.py`; `_leakage_gap` and
+  `_sensitive_gap` in `coverage.py` re-walk a model's already-resolved source
+  columns (bounded by that one model's feature count, not the catalog) only
+  on the already-uncommon path where nothing was found, and only report a
+  gap when the cap was actually hit; `blast_radius.py` and `pipeline.py`
+  gain the analogous warning path for the downstream-traversal case. 12 new
+  tests across `tests/detect/test_column_marks.py` (new file),
+  `tests/detect/test_coverage.py`, and `tests/agent/test_pipeline.py`, each
+  mutation-checked per tests/CLAUDE.md rule 6 (reverted the `truncated`
+  computation in both `column_marks.py` and `blast_radius.py`, confirmed
+  every one goes red, restored both). 510 offline and 42 integration tests
+  pass, ruff, ruff format, and mypy all clean.
+
+---
+
 ## D-089: F13 fixed, the narrator's LLM call now has a timeout (2026-08-02)
 - Decided by: Ahmed Saad (working through docs/plan/07's important findings one
   by one), applied by Claude

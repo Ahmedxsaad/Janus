@@ -170,6 +170,13 @@ class BlastRadius:
     downstream_features: tuple[str, ...]
     models: tuple[ModelAtRisk, ...]
     """At-risk models, most severe first."""
+    truncated: bool = False
+    """True when the downstream traversal saw exactly the lineage result cap,
+    so a model beyond it may exist and was never checked (F1, docs/plan/07).
+    The staleness finding is certain either way; what is uncertain is whether
+    ``models`` names every model this table endangers, which matters most when
+    it is empty: a truncated, empty result cannot claim no model consumes this
+    table, only that none was found within what the walk could see."""
 
     @property
     def severity(self) -> Severity:

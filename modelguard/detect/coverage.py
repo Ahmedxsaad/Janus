@@ -27,8 +27,9 @@ from datahub.metadata.schema_classes import MLModelPropertiesClass
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import freshness_signal
+from modelguard.detect.column_marks import marked_ancestor
 from modelguard.detect.governance import model_input_datasets, sensitive_index
-from modelguard.detect.leakage import feature_source_column
+from modelguard.detect.leakage import feature_source_column, label_index
 from modelguard.detect.schema_drift import schema_drift_candidate_resources
 from modelguard.models import (
     DeprecatedInputFinding,
@@ -118,12 +119,36 @@ def _leakage_gap(
             "MODELGUARD_LABEL_TERM_URN at the term your organization already uses.",
         )
 
-    if not any(feature_source_column(conn, urn) is not None for urn in properties.mlFeatures):
+    source_columns = [
+        column
+        for urn in properties.mlFeatures
+        if (column := feature_source_column(conn, urn)) is not None
+    ]
+    if not source_columns:
         return gap(
             "no feature of this model has column-level lineage to a source column, so "
             "there is no path to walk upstream",
             "Ingest column-level lineage for the feature tables (dbt and Spark sources "
             "emit it; the SDK's add_lineage accepts explicit column mappings).",
+        )
+
+    # leakage_findings() already walked every one of these and found no leak,
+    # which is why this function is being asked at all (module docstring): a
+    # finding is proof the check ran. What it cannot tell on its own is whether
+    # that "no leak" was a real answer or the lineage cap cutting a walk short
+    # before it reached a label (F1, docs/plan/07). Re-walking here is bounded
+    # by this one model's own feature count, not the catalog, and only happens
+    # on the already-uncommon path where a scan found nothing to report.
+    labels = label_index(conn, config)
+    truncated = sum(
+        1 for column in source_columns if marked_ancestor(conn, column, labels, config).truncated
+    )
+    if truncated:
+        return gap(
+            f"{truncated} of {len(source_columns)} feature(s)' upstream lineage returned "
+            f"the full {config.lineage_result_cap}-result cap, so the traversal may not "
+            "have reached every ancestor and a leak beyond the cap would be missed",
+            "Raise MODELGUARD_LINEAGE_RESULT_CAP, or narrow the scan to this model.",
         )
 
     return None
@@ -202,12 +227,34 @@ def _sensitive_gap(
             "--label-column <column>`, from the script that trains the model.",
         )
 
-    if not any(feature_source_column(conn, urn) is not None for urn in properties.mlFeatures):
+    source_columns = [
+        column
+        for urn in properties.mlFeatures
+        if (column := feature_source_column(conn, urn)) is not None
+    ]
+    if not source_columns:
         return gap(
             "no feature of this model has column-level lineage to a source column, so "
             "there is no path to walk upstream",
             "Ingest column-level lineage for the feature tables (dbt and Spark sources "
             "emit it; the SDK's add_lineage accepts explicit column mappings).",
+        )
+
+    # Same reasoning as _leakage_gap above: sensitive_source_findings() already
+    # walked every one of these, and "no exposure found" cannot be told apart
+    # from "the exposed ancestor was past the cap" without re-checking
+    # WalkResult.truncated (F1, docs/plan/07).
+    index = sensitive_index(conn, config)
+    truncated = sum(
+        1 for column in source_columns if marked_ancestor(conn, column, index, config).truncated
+    )
+    if truncated:
+        return gap(
+            f"{truncated} of {len(source_columns)} feature(s)' upstream lineage returned "
+            f"the full {config.lineage_result_cap}-result cap, so the traversal may not "
+            "have reached every classified ancestor and an exposure beyond the cap "
+            "would be missed",
+            "Raise MODELGUARD_LINEAGE_RESULT_CAP, or narrow the scan to this model.",
         )
 
     return None
