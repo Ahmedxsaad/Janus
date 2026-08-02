@@ -1,12 +1,14 @@
 # Default values for modelguard-watch.
 
 replicaCount: 1
-# One, deliberately. `watch` holds no state a second replica could shard
-# (findings ride an in-process holder, not a checkpoint store, D-039), so N
-# replicas watching the same target does not corrupt anything, idempotent
-# writes see to that, it just polls DataHub N times for one answer. Raise
-# this only if watching genuinely distinct targets, and use --set-string
-# watch.table=... per install, not this chart's replica count, to do it.
+# One, and the Deployment template refuses anything higher. Not only because a
+# second replica polls DataHub twice for one answer: two watchers that reach the
+# same model corrupt each other. Every model-level write is read-merge-write of
+# the whole `structuredProperties` aspect, DataHub offers no conditional write,
+# and so the second writer rewrites the aspect from a read taken before the
+# first one landed. The trust score or risk flag it overwrites is gone with no
+# error anywhere (F3). Watch a second target with a second release of this
+# chart, each with its own watch.table/watch.model.
 
 image:
   # No default registry: baking one in would be a machine-specific fallback of

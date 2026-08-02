@@ -181,6 +181,22 @@ def assign_properties(
     properties named in ``values``, and writes the merged result back. Assigning
     the same values twice is a no-op.
 
+    Merging in Python is only safe while one writer is active. DataHub exposes no
+    conditional write, so a second writer whose read predates this one's emit
+    rewrites the whole aspect from stale data and drops whatever landed in
+    between, silently and whichever property each of them touched (F3). Every
+    caller therefore batches a model's properties into one call, and the
+    supported deployment is one writer per graph (charts/modelguard-watch).
+
+    ponytail: read-merge-write, one writer per graph. The installed SDK carries
+    `datahub.specific.aspect_helpers.structured_properties.HasStructuredPropertiesPatch`,
+    which emits a server-side JSON patch per property and would remove the merge
+    window entirely. Not adopted here because whether this project's GMS accepts
+    a PATCH on `structuredProperties` has not been verified against a live server,
+    and an unverified change to every write path is a worse trade than a
+    documented single-writer rule. Upgrade path: run the integration suite
+    against a Quickstart with the patch builder in place, then delete the read.
+
     Args:
         conn: A connection with write credentials.
         entity_urn: The entity receiving the values.

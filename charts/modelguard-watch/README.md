@@ -49,11 +49,17 @@ template prose. `--no-llm` (`watch.noLlm: true`) makes that explicit; leaving
 
 ## What this chart deliberately does not do
 
-- **No autoscaling, no more than one replica by default.** `watch` holds no
-  state a second replica could shard (findings ride an in-process holder, not
-  a checkpoint store); N replicas watching the same target just poll DataHub N
-  times for one answer. Writes are idempotent, so it is wasteful, not unsafe,
-  but there is no reason to default to it.
+- **No autoscaling, and exactly one replica.** `replicaCount` above 1 is
+  refused by the template, and the update strategy is `Recreate` so a rollout
+  never runs two pods either. This is a correctness limit, not a cost one: one
+  `watch` per graph is the supported topology. Every model-level write is a
+  read-merge-write of the whole `structuredProperties` aspect and DataHub has
+  no conditional write, so two writers reaching one model overwrite each
+  other's trust score or risk flag with no error on either side. The same
+  applies to a `watch` daemon running next to somebody typing `modelguard
+  scan` by hand: the writes are idempotent per property, but a concurrent
+  reader-writer pair on the same model can still drop the other's value. To
+  watch two targets, install this chart twice.
 - **No liveness/readiness probe.** `watch` is a foreground CLI loop with no
   HTTP or TCP port to ask, and the container's PID 1 is that process directly
   (the image's own `ENTRYPOINT`). Kubernetes' default exit-triggers-restart

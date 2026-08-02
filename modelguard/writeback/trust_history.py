@@ -166,6 +166,16 @@ def project_history(
     return tuple(kept[-HISTORY_LIMIT:])
 
 
+def rendered(history: Sequence[TrustEntry]) -> list[str]:
+    """Render a history to the stored form, without writing it.
+
+    Separated from the write so a caller that is already assigning other
+    properties to the same model can carry the history in that one call instead
+    of opening a second read-merge-write window on the same aspect (F3).
+    """
+    return [item.render() for item in history]
+
+
 def write_history(conn: DataHubConnection, model_urn: str, history: Sequence[TrustEntry]) -> None:
     """Persist a history exactly as given.
 
@@ -173,7 +183,7 @@ def write_history(conn: DataHubConnection, model_urn: str, history: Sequence[Tru
     the caller already rendered into the report. Deriving it twice would let a
     report and the graph disagree about the same run.
     """
-    assign_properties(conn, model_urn, {TRUST_HISTORY: [item.render() for item in history]})
+    assign_properties(conn, model_urn, {TRUST_HISTORY: rendered(history)})
 
 
 def append_entry(

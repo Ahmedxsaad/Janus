@@ -237,6 +237,28 @@ def test_the_at_risk_model_gets_a_trust_score_and_band():
     assert final["modelguard.risk_flags"] == ["upstream-freshness"]
 
 
+def test_the_score_band_and_history_land_in_one_write_not_three():
+    """F3: every extra read-merge-write is another window a concurrent writer can lose.
+
+    Nothing here can make the merge safe (DataHub has no conditional write), so
+    what is under this code's control is how many windows it opens per model per
+    scan. Score, band and history are one property assignment; splitting them
+    again would triple the exposure for no gain.
+    """
+    graph, client = _graph(30.0), _client()
+    graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
+
+    _scan(graph, client, run_id="scan-fixed")
+
+    # Two per model: the per-finding flags-and-run-id write, then the trust write.
+    written = _aspects_of(graph, StructuredPropertiesClass)
+    assert len(written) == 2
+    final = {a.propertyUrn.rsplit(":", 1)[-1]: a.values for a in written[-1].properties}
+    assert final["modelguard.trust_score"] == [35.0]
+    assert final["modelguard.trust_band"] == ["at-risk"]
+    assert [entry.split("|")[1] for entry in final["modelguard.trust_history"]] == ["scan-fixed"]
+
+
 def test_the_guarding_assertion_and_its_measured_result_are_both_written():
     graph, client = _graph(30.0), _client()
     graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
