@@ -95,8 +95,9 @@ _DATASET_PARAM_KEYS: tuple[str, ...] = (
     "table",
 )
 
-#: Word boundaries in an entity name: dots, underscores, dashes, digits-as-suffix.
-#: Used only to shortlist by shared word, never to decide anything.
+#: Word boundaries in a lowercased entity name: anything that is not a letter or
+#: a digit (dots, underscores, dashes, slashes). Used only to shortlist by shared
+#: word, never to decide anything.
 _NAME_TOKENS = re.compile(r"[^a-z0-9]+")
 
 #: How many candidates a shortlist offers. Long enough to contain the answer on a
