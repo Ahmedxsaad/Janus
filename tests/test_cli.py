@@ -19,8 +19,10 @@ from datahub.metadata.schema_classes import (
 )
 
 from modelguard.cli import (
+    WATCH_FAILURE_ESCALATION_THRESHOLD,
     TableResolutionError,
     WatchState,
+    _watch_failure_message,
     _watch_once,
     app,
     resolve_table,
@@ -293,6 +295,44 @@ def test_an_exception_printed_to_the_console_carries_no_token(monkeypatch, capsy
     assert secret not in rendered
     # Still readable: the operator has to be able to act on it.
     assert "401 Unauthorized" in rendered
+
+
+def test_a_watch_failure_message_names_the_real_error_not_just_its_class(monkeypatch):
+    """F12: the class name alone threw away the one detail an operator needed."""
+    monkeypatch.delenv(ENV_GMS_TOKEN, raising=False)
+    exc = RuntimeError("GMS returned 503: search index unavailable")
+
+    message = _watch_failure_message(exc, consecutive_failures=1)
+
+    assert "503" in message
+    assert "search index unavailable" in message
+
+
+def test_a_watch_failure_message_carries_no_token(monkeypatch):
+    secret = "dh-token-super-secret-value"
+    monkeypatch.setenv(ENV_GMS_TOKEN, secret)
+    exc = RuntimeError(f"401 Unauthorized: Authorization=Bearer {secret}")
+
+    message = _watch_failure_message(exc, consecutive_failures=1)
+
+    assert secret not in message
+
+
+def test_a_single_watch_failure_stays_routine():
+    message = _watch_failure_message(RuntimeError("boom"), consecutive_failures=1)
+
+    assert "not working" not in message
+    assert "yellow" in message
+
+
+def test_repeated_watch_failures_escalate_to_a_daemon_not_working_message():
+    """A run of failures is not the expected shape GMS-still-starting-up is."""
+    message = _watch_failure_message(
+        RuntimeError("boom"), consecutive_failures=WATCH_FAILURE_ESCALATION_THRESHOLD
+    )
+
+    assert "not working" in message
+    assert "red" in message
 
 
 def test_a_first_poll_of_a_healthy_target_does_not_claim_a_recovery(capsys):

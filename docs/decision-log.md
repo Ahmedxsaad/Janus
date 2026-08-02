@@ -16,6 +16,38 @@ Entry template:
 
 ---
 
+## D-088: F12 fixed, watch's poll-failure line names the real error (2026-08-02)
+- Decided by: Ahmed Saad (working through docs/plan/07's important findings one
+  by one), applied by Claude
+- Decision: `watch`'s poll loop caught every exception and printed only
+  `type(exc).__name__`, discarding the message. `safe_error()` (scrubs the
+  DataHub token) already existed a few hundred lines up in the same file and
+  was simply not called here. The console line now uses it; a structured log
+  line (`logger.warning`, the same `logfmt`/`LOG_FIELDS` pattern
+  `_log_scan` already established) carries the full traceback via
+  `exc_info=True`. Also added: after `WATCH_FAILURE_ESCALATION_THRESHOLD`
+  (3) consecutive failures, the console line escalates from routine yellow to
+  a plain red statement that the daemon is not working, since a wall of
+  identical yellow lines is exactly what an operator stops reading.
+- Options considered: (a) leave the class name only (rejected: that is F12's
+  whole finding), (b) print `str(exc)` directly (rejected: an SDK failure can
+  quote the request the token was handed to, and this line lands in a
+  terminal the whole team may be watching), (c) `safe_error(exc)`, matching
+  what `gate` already does for the same reason, chosen.
+- Why: an operator watching a daemon fail every five minutes with only an
+  exception's class name has no way to tell an expired token from a network
+  partition from a GMS out of disk. The information was in the exception and
+  was being thrown away.
+- Result: the rendering logic moved into `_watch_failure_message`, a small
+  pure function, so it is directly unit-tested without needing a live
+  connection or a CLI runner: 4 new tests in `tests/test_cli.py` (names the
+  real error, scrubs the token, stays routine below the threshold, escalates
+  at it), each mutation-checked per tests/CLAUDE.md rule 6 by reverting to the
+  class-name-only behavior and confirming all four go red. 502 offline tests,
+  ruff, ruff format, and mypy all pass.
+
+---
+
 ## D-087: F9 fixed, CI now runs offline tests on 3.11, 3.12 and 3.13 (2026-08-02)
 - Decided by: Ahmed Saad (working through docs/plan/07's important findings one
   by one), applied by Claude
