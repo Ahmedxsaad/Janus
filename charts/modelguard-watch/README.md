@@ -47,13 +47,44 @@ misconfiguration: `modelguard scan`/`watch` fall back to deterministic
 template prose. `--no-llm` (`watch.noLlm: true`) makes that explicit; leaving
 `watch.llmProvider` unset makes it implicit.
 
+## Keeping the link alive
+
+```yaml
+link:
+  enabled: true            # off by default: it writes
+  schedule: "0 3 * * *"    # after the nightly ingest
+```
+
+That adds a CronJob running `modelguard link --all` beside the watcher, and on
+any cluster with an ingestion pipeline it is the difference between a watcher
+that keeps working and one that quietly has nothing left to check.
+
+The reason it is needed at all: DataHub's mlflow source upserts the whole
+`mlModelProperties` aspect and drops the features `modelguard link` attached
+(D-074). Every ingest therefore un-links every model, `scan` starts reporting
+"not evaluated: this model carries a recorded modelguard link but declares no
+features", and somebody has to notice. `link --all` replays only what each
+model already records, and skips any model nobody has linked, so it writes
+nothing a human did not previously confirm.
+
+Schedule it away from the watcher's busy window if you can. The two are
+separate writers on the same models, and the same read-merge-write limit below
+applies to them; the properties they each write are different, and a scan
+recomputes anything lost, so the worst case converges rather than corrupts.
+
 ## What this chart deliberately does not do
 
-- **No autoscaling, no more than one replica by default.** `watch` holds no
-  state a second replica could shard (findings ride an in-process holder, not
-  a checkpoint store); N replicas watching the same target just poll DataHub N
-  times for one answer. Writes are idempotent, so it is wasteful, not unsafe,
-  but there is no reason to default to it.
+- **No autoscaling, and exactly one replica.** `replicaCount` above 1 is
+  refused by the template, and the update strategy is `Recreate` so a rollout
+  never runs two pods either. This is a correctness limit, not a cost one: one
+  `watch` per graph is the supported topology. Every model-level write is a
+  read-merge-write of the whole `structuredProperties` aspect and DataHub has
+  no conditional write, so two writers reaching one model overwrite each
+  other's trust score or risk flag with no error on either side. The same
+  applies to a `watch` daemon running next to somebody typing `modelguard
+  scan` by hand: the writes are idempotent per property, but a concurrent
+  reader-writer pair on the same model can still drop the other's value. To
+  watch two targets, install this chart twice.
 - **No liveness/readiness probe.** `watch` is a foreground CLI loop with no
   HTTP or TCP port to ask, and the container's PID 1 is that process directly
   (the image's own `ENTRYPOINT`). Kubernetes' default exit-triggers-restart

@@ -13,9 +13,11 @@ from modelguard.writeback.documents import (
 from modelguard.writeback.trust_history import TrustEntry
 from tests.conftest import MODEL_URN as MODEL
 from tests.conftest import TABLE_URN, FakeClient, FakeGraph, make_connection
+from tests.conftest import make_deprecated_input_finding as _deprecated_finding
 from tests.conftest import make_finding as _finding
 from tests.conftest import make_leakage_finding as _leakage_finding
 from tests.conftest import make_schema_drift_finding as _drift_finding
+from tests.conftest import make_sensitive_source_finding as _sensitive_finding
 
 
 def test_the_document_id_is_derived_from_the_model_and_the_resource_so_reruns_converge():
@@ -88,6 +90,52 @@ def test_the_drift_report_lists_the_changed_columns_and_cites_breck():
     assert "scan-xyz" in markdown
     # The narrative is quoted, not treated as fact.
     assert "assessment prose" in markdown
+
+
+def test_every_finding_type_can_be_reported_on():
+    """The gap a live scan fell into: two detectors shipped with no report at all.
+
+    `report_subject` and `_report_body` are singledispatch tables, and D-079
+    registered the two governance findings in narrate.py's four tables and not in
+    these two. Nothing offline noticed, because no unit test rendered a report
+    for them; the first sensitive-source scan against a real graph raised
+    NotImplementedError after the incident was already written. One test over
+    every concrete finding type, so the next detector cannot land half-wired.
+    """
+    for finding in (
+        _finding(),
+        _leakage_finding(),
+        _drift_finding(),
+        _sensitive_finding(),
+        _deprecated_finding(),
+    ):
+        markdown = render_impact_report(finding, "assessment prose", "scan-abc")
+        assert "Model Impact Report" in markdown
+        assert "assessment prose" in markdown
+
+
+def test_the_sensitive_source_report_names_the_classification_and_the_path():
+    markdown = render_impact_report(_sensitive_finding(), "prose", "scan-abc")
+
+    assert "modelguard.sensitive" in markdown
+    assert "ecommerce.public.loans_raw.income" in markdown
+    assert "applicant_income <- income" in markdown
+    # It is an exposure, not an outage, and the report has to say so.
+    assert "Nothing is broken" in markdown
+
+
+def test_the_deprecated_input_report_quotes_the_owners_note_and_the_deadline():
+    markdown = render_impact_report(_deprecated_finding(), "prose", "scan-abc")
+
+    assert "Replaced by loans_v2 on 2026-09-01." in markdown
+    assert "1800000000000" in markdown
+    assert "ecommerce.public.customer_features" in markdown
+
+
+def test_a_deprecation_with_no_note_renders_without_an_empty_quote():
+    markdown = render_impact_report(_deprecated_finding(note=""), "prose", "scan-abc")
+
+    assert "The owners left this note" not in markdown
 
 
 def test_the_report_quotes_the_narrative_without_letting_it_supply_facts():

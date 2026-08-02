@@ -51,6 +51,15 @@ OPEN_LEAK_COLUMNS = "modelguard.open_leak_columns"
 #: week, and the direction is what tells somebody that a change shipped.
 TRUST_HISTORY = "modelguard.trust_history"
 
+#: What ``modelguard link`` was told, kept on the model so the link can be
+#: replayed after an ingest overwrites ``mlModelProperties`` (D-074). Declared
+#: here rather than beside ``link`` because more than one layer reads them:
+#: ``link`` to replay itself, and ``detect.coverage`` to tell a model that was
+#: never linked apart from one whose link an ingest has since dropped (F11).
+FEATURE_TABLE = "modelguard.feature_table"
+LABEL_COLUMN = "modelguard.label_column"
+EXCLUDED_COLUMNS = "modelguard.excluded_columns"
+
 _VALID_CARDINALITIES = frozenset(
     {PropertyCardinalityClass.SINGLE, PropertyCardinalityClass.MULTIPLE}
 )
@@ -180,6 +189,22 @@ def assign_properties(
     Reads the entity's current ``structuredProperties`` aspect, replaces only the
     properties named in ``values``, and writes the merged result back. Assigning
     the same values twice is a no-op.
+
+    Merging in Python is only safe while one writer is active. DataHub exposes no
+    conditional write, so a second writer whose read predates this one's emit
+    rewrites the whole aspect from stale data and drops whatever landed in
+    between, silently and whichever property each of them touched (F3). Every
+    caller therefore batches a model's properties into one call, and the
+    supported deployment is one writer per graph (charts/modelguard-watch).
+
+    ponytail: read-merge-write, one writer per graph. The installed SDK carries
+    `datahub.specific.aspect_helpers.structured_properties.HasStructuredPropertiesPatch`,
+    which emits a server-side JSON patch per property and would remove the merge
+    window entirely. Not adopted here because whether this project's GMS accepts
+    a PATCH on `structuredProperties` has not been verified against a live server,
+    and an unverified change to every write path is a worse trade than a
+    documented single-writer rule. Upgrade path: run the integration suite
+    against a Quickstart with the patch builder in place, then delete the read.
 
     Args:
         conn: A connection with write credentials.

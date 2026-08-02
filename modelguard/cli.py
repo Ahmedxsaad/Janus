@@ -1306,6 +1306,12 @@ def _print_proposal(proposal: LinkProposal) -> None:
     for reason in proposal.reasons:
         colour = "yellow" if "guess" in reason or "NOT FOUND" in reason else "dim"
         console.print(f"  [{colour}]{reason}[/{colour}]")
+    if proposal.candidates:
+        # Numbered and named, not URNs alone: this list exists to be read and
+        # answered in one line, and a bare URN column is not read.
+        console.print("\n[bold]Nearest tables, for you to choose:[/bold]")
+        for index, urn in enumerate(proposal.candidates, start=1):
+            console.print(f"  {index}. {DatasetUrn.from_string(urn).name}")
     console.print("\n[bold]Proposed:[/bold]")
     console.print(proposal.command())
 
@@ -1504,6 +1510,14 @@ def link(
         feature_urn = feature_urn or proposal.feature_dataset_urn
         if not exclude and proposal.exclude:
             exclude = sorted(proposal.exclude)
+
+        if feature_urn is None and previous is None:
+            console.print(
+                "[red]Nothing in the graph says which table this model trains on, "
+                "so the proposal is incomplete. Rerun with --features <table>"
+                f"{', picking one of the above' if proposal.candidates else ''}.[/red]"
+            )
+            raise typer.Exit(code=2)
 
         if label_column is None and proposal.label_column_urn is None:
             console.print(

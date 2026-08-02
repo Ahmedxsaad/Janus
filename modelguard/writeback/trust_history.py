@@ -40,7 +40,12 @@ from datetime import UTC, datetime
 
 from modelguard.client import DataHubConnection
 from modelguard.models import TrustScore
-from modelguard.writeback.properties import TRUST_HISTORY, assign_properties, read_properties
+from modelguard.writeback.properties import (
+    TRUST_HISTORY,
+    StructuredPropertyValue,
+    assign_properties,
+    read_properties,
+)
 
 #: How many entries a model's history keeps. Twenty is a few weeks of a daily
 #: `watch`, which is the span somebody actually reasons about, and it bounds a
@@ -166,6 +171,17 @@ def project_history(
     return tuple(kept[-HISTORY_LIMIT:])
 
 
+def rendered(history: Sequence[TrustEntry]) -> list[StructuredPropertyValue]:
+    """Render a history to the stored form, without writing it.
+
+    Separated from the write so a caller that is already assigning other
+    properties to the same model can carry the history in that one call instead
+    of opening a second read-merge-write window on the same aspect (F3).
+    """
+    values: list[StructuredPropertyValue] = [item.render() for item in history]
+    return values
+
+
 def write_history(conn: DataHubConnection, model_urn: str, history: Sequence[TrustEntry]) -> None:
     """Persist a history exactly as given.
 
@@ -173,7 +189,7 @@ def write_history(conn: DataHubConnection, model_urn: str, history: Sequence[Tru
     the caller already rendered into the report. Deriving it twice would let a
     report and the graph disagree about the same run.
     """
-    assign_properties(conn, model_urn, {TRUST_HISTORY: [item.render() for item in history]})
+    assign_properties(conn, model_urn, {TRUST_HISTORY: rendered(history)})
 
 
 def append_entry(

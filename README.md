@@ -167,10 +167,15 @@ out for you:
 modelguard link --model churn_model --infer
 ```
 
-It reads the model's training run, the datasets that run recorded as inputs, and
-the schema of the one it found, and proposes the exact command a person would
-have typed, with one line per decision saying which aspect it came from and
-whether it is a fact or a guess:
+It works the training table out from whatever the graph does hold, trying four
+routes in descending order of confidence and telling you which one answered:
+the inputs the training run recorded (`dataProcessInstanceInput`), a run
+parameter naming a table (where DataHub's mlflow source puts MLflow params), a
+dataset the catalog already declares upstream of the model, and failing all of
+those, a shortlist of nearby tables for you to pick from. Then it reads that
+table's schema and proposes the exact command a person would have typed, with
+one line per decision saying which aspect it came from and whether it is a fact
+or a guess:
 
 ```
 Inferred from the graph:
@@ -190,12 +195,38 @@ Declare this? [Y/n]
 
 There is no LLM in that, and nothing is written until you answer. A column that
 already carries the label term was *declared* rather than guessed, and the
-proposal says so; where nothing in the graph names a label at all, it refuses to
+proposal says so, including when the declaration is on a column the feature
+table descends from, which is where a warehouse usually keeps its labels; where nothing in the graph names a label at all, it refuses to
 invent one and asks for `--label-column`, because a wrong label makes every
 leakage verdict wrong in both directions. Exclusions come only from the
 warehouse's own key declarations, never from column names that look like
 identifiers: `customer_id` is usually a join key and `score_id` is usually a
 feature, and no rule over names tells them apart.
+
+A plain mlflow ingest often carries none of the first three: it produces a model
+whose training run records no inputs at all (verified live, D-074). `--infer`
+then says so, names what would fix it, and lists the nearest tables by name
+instead of refusing:
+
+```
+Inferred from the graph:
+  feature table: NOT FOUND. churn_model's training run records no inputs and no dataset
+    parameter, which is the usual state after an mlflow ingest, and nothing in the catalog
+    declares a dataset upstream of it. Pass --features <table>, or log the training table as
+    an MLflow run parameter (modelguard_features=...) and re-ingest so this can be read
+    rather than guessed
+
+Nearest tables, for you to choose:
+  1. analytics.churn_features
+  2. analytics.churn_labels
+```
+
+One line in the training script makes the next ingest self-describing, and it is
+the same line that keeps the link alive (see below):
+
+```python
+mlflow.log_param("modelguard_features", "analytics.customer_features")
+```
 
 Prefer to type it, or the graph is too quiet to infer from? It is one call from
 the script that trains the model:
@@ -340,11 +371,20 @@ and shelling out to a CLI from inside it is a worse interface than a function
 call.
 
 ```python
+import mlflow
+
 from modelguard import link_model, scan_model
+
+FEATURE_TABLE = "analytics.customer_features"
+
+# Logged as a run parameter as well as declared: the parameter survives into
+# DataHub through the ordinary mlflow ingest, which is what lets `link --infer`
+# read the table next time instead of guessing at it.
+mlflow.log_param("modelguard_features", FEATURE_TABLE)
 
 link_model(
     model="churn_model",
-    features="analytics.customer_features",
+    features=FEATURE_TABLE,
     label_column="churned",
     exclude=["customer_id"],
 )
@@ -353,6 +393,16 @@ report = scan_model(model="churn_model", dry_run=True)
 if not report.clean:
     raise SystemExit(f"{len(report.writes)} finding(s) before this model ships")
 ```
+
+This is the durable place for the link, and the reason is worth stating plainly:
+an ingest drops it (see above), so a link declared once decays on a schedule you
+do not control. Declared here, it is re-declared by the same run that produces
+the model, so the next training run repairs it whether or not anybody noticed.
+For the models that are not retrained nightly, schedule `modelguard link --all`
+after your ingest: the [`modelguard-watch` chart](charts/modelguard-watch)
+ships that as a CronJob (`link.enabled=true`). And when neither has happened,
+a scan says so specifically ("carries a recorded modelguard link but declares
+no features") rather than reporting a model it cannot see as healthy.
 
 Two functions and their result types, and deliberately no more: those names are
 the supported surface a script may pin to. They are thin wrappers over exactly

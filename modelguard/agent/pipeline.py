@@ -96,6 +96,7 @@ from modelguard.writeback.properties import (
     RISK_FLAGS,
     RUN_ID,
     TRUST_BAND,
+    TRUST_HISTORY,
     TRUST_SCORE,
     assign_properties,
     define_properties,
@@ -103,7 +104,7 @@ from modelguard.writeback.properties import (
     remove_properties,
 )
 from modelguard.writeback.terms import add_term, ensure_term, remove_term
-from modelguard.writeback.trust_history import TrustEntry, project_history, write_history
+from modelguard.writeback.trust_history import TrustEntry, project_history, rendered
 
 #: Description attached to the tag entity the first time it is created.
 AT_RISK_TAG_DESCRIPTION = (
@@ -396,6 +397,13 @@ def _persist_trust(
     The history entry is keyed on ``run_id`` and replaces its own row rather than
     appending a second, so the same convergence holds for it: a rerun of one scan
     leaves one row, and a genuinely later scan leaves a new one.
+
+    Score, band and history go in one call rather than three. DataHub has no
+    conditional write, so every read-merge-write of ``structuredProperties`` is a
+    window in which another writer's change to a *different* property on the same
+    model is read stale and written back over (F3). Batching does not close that
+    window, and nothing here can; it makes it one window per model per scan
+    instead of three, which is the part this code controls.
     """
     for trust_write in trust_writes:
         assign_properties(
@@ -404,9 +412,9 @@ def _persist_trust(
             {
                 TRUST_SCORE: [float(trust_write.score.value)],
                 TRUST_BAND: [str(trust_write.score.band)],
+                TRUST_HISTORY: rendered(history.get(trust_write.model_urn, ())),
             },
         )
-        write_history(conn, trust_write.model_urn, history.get(trust_write.model_urn, ()))
 
 
 def written_assertion_yaml(writes: tuple[FindingWrites, ...]) -> str:

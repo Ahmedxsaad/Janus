@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from datahub.metadata.schema_classes import DeprecationClass, SchemaMetadataClass
@@ -97,6 +97,50 @@ class Trial:
     """Puts the graph into this trial's state."""
     lag_hours: float | None = None
     """For freshness trials: how stale the table is planted to be."""
+    overrides: tuple[tuple[str, object], ...] = ()
+    """Config fields this trial changes, as (field, value) pairs.
+
+    A boundary is not always a graph shape. A hop cap and the label term are
+    configuration, and moving them is how the *same* graph asks the detector a
+    question whose answer could go either way, without seeding a second warehouse
+    to ask it with (F6). Applied with ``dataclasses.replace``, so a typo in a
+    field name fails the run rather than being silently ignored."""
+    boundary: bool = False
+    """Whether this trial sits somewhere the detector could plausibly go wrong.
+
+    A 30-hour lag against a 6-hour SLA cannot fail: the answer is never in doubt,
+    and a trial like that documents the detector rather than testing it. A lag at
+    exactly the SLA, a leak exactly at the hop cap, or a column named like a label
+    without carrying the term can each go the wrong way, and a mutation of one
+    line flips them. RESULTS.md counts these per detector and says plainly, per
+    row, whether that row could have failed."""
+    planted: bool | None = None
+    """What is planted in the graph, when that differs from what should be found.
+
+    Defaults to ``expected``, which is the usual case. It differs whenever the
+    trial changes the *question* rather than the graph: the leak is planted and
+    present, and the detector must still stay quiet because the configured label
+    term is one nothing carries. The precondition waits on this, never on
+    ``expected``, because waiting for the expected answer would manufacture it
+    (rule 7)."""
+
+    @property
+    def graph_state(self) -> bool:
+        """Whether this trial's anomaly is planted in the graph."""
+        return self.expected if self.planted is None else self.planted
+
+    def config(self, base: ScanConfig) -> ScanConfig:
+        """Return the config this trial's detector runs under."""
+        if not self.overrides:
+            return base
+        # dataclasses.replace's stub checks each keyword against ScanConfig's
+        # exact field type, which a dict[str, object] built from an arbitrary
+        # (name, value) tuple can never satisfy statically: mypy has no way to
+        # know overrides.append(("leakage_max_hops", 1)) is an int and not,
+        # say, a str. A field name that does not exist on ScanConfig still
+        # fails at runtime, loudly, the moment this trial runs, which is the
+        # actual safety net rule 7's "a typo fails the run" describes.
+        return replace(base, **dict(self.overrides))  # type: ignore[arg-type]
 
 
 def _plant_freshness(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
@@ -107,7 +151,7 @@ def _plant_freshness(conn: DataHubConnection, trial: Trial, now_ms: int) -> None
 
 def _plant_leakage(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
     """Restore or cut the leaking column-lineage edge."""
-    plant_leakage(conn) if trial.expected else revert_leakage(conn)
+    plant_leakage(conn) if trial.graph_state else revert_leakage(conn)
 
 
 def _plant_drift(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
@@ -151,17 +195,37 @@ def _freshness_trials(sla_hours: float) -> tuple[Trial, ...]:
                 detail=f"{lag:g}h lag against a {sla_hours:g}h SLA",
                 lag_hours=lag,
                 plant=_plant_freshness,
+                # Within an hour of the SLA either way is where an off-by-one
+                # lives. Further out, the answer is never in doubt.
+                boundary=abs(lag - sla_hours) <= 1.0,
             )
         )
     return tuple(trials)
 
 
+#: A glossary term no column in the seeded graph carries. Used to ask the leakage
+#: detector the same question about the same graph with the declaration removed
+#: from under it: the label column is still *named* ``default_status`` and the
+#: feature still derives from it, and the only thing that changed is which term
+#: counts as a label. A detector that matched on the name rather than on the
+#: declaration passes every other trial in this file and fails this one.
+UNUSED_LABEL_TERM = "urn:li:glossaryTerm:modelguard.bench_unused_label"
+
+
 def _leakage_trials() -> tuple[Trial, ...]:
-    """The flagship detector, both directions.
+    """The flagship detector: both directions, plus the boundaries it can fail at.
 
     The negative is the narrow one: the feature and the label declaration both
     survive, only the derivation path is cut, so a clean result isolates the
     lineage signal instead of proving that a feature nobody derives is safe.
+
+    The two after it exist because presence-and-absence of one edge is a
+    construction proof, not a measurement: neither of those trials can go the
+    wrong way without the detector being broken outright (F6). The boundary
+    trials can. Both hold the graph fixed and move the *question*, which is what
+    makes them cheap enough to be honest: the seeded leak sits exactly one column
+    hop from the label, so a cap of one must find it and a cap of zero must not,
+    and an off-by-one in the hop filter flips one of them.
     """
     return (
         Trial(
@@ -179,6 +243,41 @@ def _leakage_trials() -> tuple[Trial, ...]:
             expected=False,
             detail="same feature and same declared label, derivation cut",
             plant=_plant_leakage,
+        ),
+        Trial(
+            name="leakage-at-hop-cap",
+            family=FindingType.TARGET_LEAKAGE,
+            target=Target.MODEL,
+            expected=True,
+            detail="the leak is exactly 1 column hop away, with the hop cap at 1",
+            plant=_plant_leakage,
+            overrides=(("leakage_max_hops", 1),),
+            boundary=True,
+        ),
+        Trial(
+            name="leakage-past-hop-cap",
+            family=FindingType.TARGET_LEAKAGE,
+            target=Target.MODEL,
+            expected=False,
+            planted=True,
+            detail="the same 1-hop leak with the hop cap at 0: out of reach, not absent",
+            plant=_plant_leakage,
+            overrides=(("leakage_max_hops", 0),),
+            boundary=True,
+        ),
+        Trial(
+            name="leakage-named-not-declared",
+            family=FindingType.TARGET_LEAKAGE,
+            target=Target.MODEL,
+            expected=False,
+            planted=True,
+            detail=(
+                "the leak is planted and the column is still named default_status, "
+                "but the configured label term is one nothing carries"
+            ),
+            plant=_plant_leakage,
+            overrides=(("label_term_urn", UNUSED_LABEL_TERM),),
+            boundary=True,
         ),
     )
 
@@ -313,7 +412,7 @@ def _leakage_visible(
         for result in results
         for step in (result.paths or [])
     )
-    return reaches_label == trial.expected
+    return reaches_label == trial.graph_state
 
 
 def _drift_visible(conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int) -> bool:

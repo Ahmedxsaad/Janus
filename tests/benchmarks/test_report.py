@@ -25,7 +25,7 @@ CONFIG = ScanConfig(freshness_sla_hours=6.0)
 WHEN = datetime(2026, 7, 22, 12, 0, tzinfo=UTC)
 
 
-def _trial(name: str, family: FindingType, *, expected: bool) -> Trial:
+def _trial(name: str, family: FindingType, *, expected: bool, boundary: bool = False) -> Trial:
     return Trial(
         name=name,
         family=family,
@@ -33,6 +33,7 @@ def _trial(name: str, family: FindingType, *, expected: bool) -> Trial:
         expected=expected,
         detail=f"{name} detail",
         plant=lambda conn, trial, now_ms: None,
+        boundary=boundary,
     )
 
 
@@ -98,7 +99,7 @@ def test_a_detector_with_no_scoreable_trials_reports_dashes_not_zeroes():
     report = _report([_outcome(broken, False, settled=None)])
 
     row = next(line for line in report.splitlines() if line.startswith("| Target leakage"))
-    assert row == "| Target leakage (P1) | 0 | - | - | - | - |"
+    assert row == "| Target leakage (P1) | 0 | - | - | - | - | 0 | Not run |"
 
 
 def test_an_errored_trial_does_not_contribute_a_latency_sample():
@@ -231,3 +232,27 @@ def test_a_missing_comparison_is_omitted_rather_than_half_rendered():
     # The rest of the report still renders.
     assert "## Detection" in report
     assert "## Write-back and idempotency" in report
+
+
+def test_a_row_with_no_boundary_trial_says_it_could_not_have_failed():
+    """F6: a perfect score over trials that cannot fail is a construction proof.
+
+    The reader should not have to open the injector to find that out, so the row
+    itself says which of the two it is.
+    """
+    obvious = _trial("obvious", FindingType.INPUT_SCHEMA_DRIFT, expected=True)
+
+    report = _report([_outcome(obvious, True)])
+
+    row = next(line for line in report.splitlines() if line.startswith("| Input schema drift"))
+    assert "| 0 | No: presence or absence of one planted fact |" in row
+
+
+def test_a_row_with_a_boundary_trial_counts_it_and_names_the_mutation():
+    at_the_line = _trial("at-the-line", FindingType.TARGET_LEAKAGE, expected=True, boundary=True)
+    obvious = _trial("obvious", FindingType.TARGET_LEAKAGE, expected=False)
+
+    report = _report([_outcome(at_the_line, True), _outcome(obvious, False)])
+
+    row = next(line for line in report.splitlines() if line.startswith("| Target leakage"))
+    assert "| 1 | Yes: an off-by-one in the hop cap" in row

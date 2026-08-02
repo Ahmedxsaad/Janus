@@ -52,7 +52,14 @@ from datahub.sdk.search_filters import FilterDsl as F
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
-from modelguard.writeback.properties import assign_properties, define_properties, read_properties
+from modelguard.writeback.properties import (
+    EXCLUDED_COLUMNS,
+    FEATURE_TABLE,
+    LABEL_COLUMN,
+    assign_properties,
+    define_properties,
+    read_properties,
+)
 from modelguard.writeback.terms import add_term, ensure_term
 
 #: Name and definition written when the configured label term does not exist yet.
@@ -67,10 +74,12 @@ LABEL_TERM_DEFINITION = (
 
 
 #: Structured properties recording what `link` was told, so it can be replayed.
-#: See props/modelguard_props.yaml for why they do not live on mlModelProperties.
-PROP_FEATURE_TABLE = "modelguard.feature_table"
-PROP_LABEL_COLUMN = "modelguard.label_column"
-PROP_EXCLUDED = "modelguard.excluded_columns"
+#: Declared in properties.py with the rest of the registry, and aliased here
+#: under the names this module has always used. See props/modelguard_props.yaml
+#: for why they do not live on mlModelProperties.
+PROP_FEATURE_TABLE = FEATURE_TABLE
+PROP_LABEL_COLUMN = LABEL_COLUMN
+PROP_EXCLUDED = EXCLUDED_COLUMNS
 
 
 @dataclass(frozen=True)

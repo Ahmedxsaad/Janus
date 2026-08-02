@@ -107,6 +107,31 @@ def test_assign_preserves_properties_this_run_did_not_touch():
     assert written["urn:li:structuredProperty:modelguard.trust_score"] == [62.0]
 
 
+def test_a_writer_whose_read_predates_another_write_erases_it():
+    """The boundary F3 documents: the merge is safe in sequence, lossy in parallel.
+
+    ``assign_properties`` merges against whatever it read, and DataHub offers no
+    conditional write to notice that the read went stale. So two writers on one
+    model are only safe while their read-merge-write windows do not overlap, and
+    when they do the loser's value disappears with no error on either side, even
+    though the two touched different properties. Deployments therefore keep one
+    writer per graph (charts/modelguard-watch), which is a constraint this test
+    exists to keep honest rather than a property of the code.
+    """
+    graph = FakeGraph()
+    conn = make_connection(graph)
+    assign_properties(conn, MODEL, {TRUST_SCORE: [62]})
+
+    # The second writer read the model before that write landed. Restoring the
+    # aspect it saw is what "concurrent" means here: no clock, just an older read.
+    graph.set_aspect(MODEL, StructuredPropertiesClass(properties=[]))
+    assign_properties(conn, MODEL, {RISK_FLAGS: ["target_leakage"]})
+
+    stored = read_properties(conn, MODEL)
+    assert stored[RISK_FLAGS] == ["target_leakage"]
+    assert TRUST_SCORE not in stored
+
+
 def test_assign_replaces_rather_than_appends_an_existing_value():
     stale = StructuredPropertyValueAssignmentClass(
         propertyUrn="urn:li:structuredProperty:modelguard.trust_score", values=[10.0]
