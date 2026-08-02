@@ -61,6 +61,25 @@ TEMPERATURE = 0.0
 #: Enough for a short paragraph, and a hard ceiling on a runaway generation.
 MAX_TOKENS = 400
 
+#: Seconds to wait for the narrator before giving up and writing the template.
+#: The prose is a nice-to-have and the finding is not: no incident should wait
+#: on somebody else's API. In `scan` an unbounded call means a hung terminal;
+#: in `watch` it means a daemon that stops polling and stops reporting while
+#: still looking alive, the specific irony a reliability tool exists to avoid
+#: (F13, docs/plan/07). Deliberately short, since this sits between a detected
+#: failure and the incident that reports it. Every provider names its own
+#: field differently (ChatAnthropic's is `default_request_timeout`, ChatOpenAI's
+#: is `request_timeout`, ChatGoogleGenerativeAI's is `timeout`), but all three
+#: accept `timeout` as a constructor keyword, verified against the installed
+#: langchain-anthropic 1.4.8, langchain-openai 1.3.4, langchain-google-genai
+#: 4.2.7 (root CLAUDE.md rule 7), so the call site below stays uniform.
+LLM_TIMEOUT_SECONDS = 30.0
+
+#: One attempt, not LangChain's own default retry behaviour, which would
+#: multiply the timeout by the retry count: a narrator that takes two minutes
+#: to fail has already lost to the template it falls back to.
+LLM_MAX_RETRIES = 0
+
 
 class LLMUnavailableError(RuntimeError):
     """The configured provider's package is not installed."""
@@ -153,4 +172,6 @@ def build_chat_model(config: LLMConfig) -> Any:
         api_key=config.api_key,
         temperature=TEMPERATURE,
         max_tokens=MAX_TOKENS,
+        timeout=LLM_TIMEOUT_SECONDS,
+        max_retries=LLM_MAX_RETRIES,
     )

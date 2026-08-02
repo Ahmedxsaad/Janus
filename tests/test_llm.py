@@ -10,6 +10,8 @@ from modelguard.llm import (
     ENV_LLM_API_KEY,
     ENV_LLM_MODEL,
     ENV_LLM_PROVIDER,
+    LLM_MAX_RETRIES,
+    LLM_TIMEOUT_SECONDS,
     SUPPORTED_PROVIDERS,
     LLMConfig,
     LLMUnavailableError,
@@ -132,6 +134,17 @@ def test_every_provider_builds_its_own_chat_model(provider: str, model: str, exp
     # The model id reaches the client whichever kwarg name the vendor uses.
     resolved = getattr(chat_model, "model", None) or getattr(chat_model, "model_name", None)
     assert resolved == model
+    # F13: no incident should wait on somebody else's API. Each binding names
+    # its own field differently (default_request_timeout, request_timeout,
+    # timeout), so this checks whichever one the constructed instance carries
+    # rather than assuming a single name across all three.
+    timeout = next(
+        getattr(chat_model, name)
+        for name in ("default_request_timeout", "request_timeout", "timeout")
+        if getattr(chat_model, name, None) is not None
+    )
+    assert timeout == LLM_TIMEOUT_SECONDS
+    assert chat_model.max_retries == LLM_MAX_RETRIES
 
 
 def test_a_missing_provider_package_names_the_extra_to_install(monkeypatch):

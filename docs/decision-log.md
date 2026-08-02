@@ -16,6 +16,47 @@ Entry template:
 
 ---
 
+## D-089: F13 fixed, the narrator's LLM call now has a timeout (2026-08-02)
+- Decided by: Ahmed Saad (working through docs/plan/07's important findings one
+  by one), applied by Claude
+- Decision: `build_chat_model` constructed every provider's chat model with no
+  timeout and no retry cap. `narrate()` already catches any exception the call
+  raises and falls back to the deterministic template, but a provider that
+  accepts the connection and never responds raises nothing at all, it just
+  blocks: a hung terminal in `scan`, a daemon that stops polling while still
+  looking alive in `watch`. `LLM_TIMEOUT_SECONDS = 30.0` and `LLM_MAX_RETRIES
+  = 0` are now passed at construction, so a hang becomes exactly the kind of
+  exception the existing fallback already handles.
+- Each provider names the underlying field differently (`ChatAnthropic`'s is
+  `default_request_timeout`, `ChatOpenAI`'s is `request_timeout`,
+  `ChatGoogleGenerativeAI`'s is plain `timeout`), so the constructor keyword
+  was verified against the installed packages before writing this (root
+  CLAUDE.md rule 7: `langchain-anthropic` 1.4.8, `langchain-openai` 1.3.4,
+  `langchain-google-genai` 4.2.7), not assumed from the doc's suggestion. All
+  three accept `timeout=` as an alias or as the field name itself, and
+  `max_retries=` is a plain field name on all three, so the call site stays
+  uniform. `max_retries=0`, not LangChain's own default retry behaviour,
+  which would multiply the timeout by the retry count: a narrator that takes
+  two minutes to fail has already lost to the template.
+- Why: a reliability tool that silently stops working because a third-party
+  API is slow is the specific irony worth avoiding, and the finding a hung
+  narrator was about to write (a freshness incident, a leak) never appears
+  either, since nothing downstream of a blocked call runs.
+- Result: `tests/test_llm.py`'s existing parametrized
+  `test_every_provider_builds_its_own_chat_model` extended to assert the
+  constructed instance actually carries `LLM_TIMEOUT_SECONDS` (read back
+  under whichever of the three field names the provider exposes) and
+  `LLM_MAX_RETRIES`, for all three providers. Mutation-checked per
+  tests/CLAUDE.md rule 6: reverted the two new kwargs and confirmed all three
+  parametrized cases go red (`StopIteration`, since LangChain's own defaults
+  leave every one of those fields `None`), restored. `narrate()`'s existing
+  generic fallback-on-any-exception test
+  (`test_a_failing_llm_call_degrades_to_the_template`) already covers what
+  happens once a timeout fires, so nothing new was needed there. 502 offline
+  tests, ruff, ruff format, and mypy all pass.
+
+---
+
 ## D-088: F12 fixed, watch's poll-failure line names the real error (2026-08-02)
 - Decided by: Ahmed Saad (working through docs/plan/07's important findings one
   by one), applied by Claude
