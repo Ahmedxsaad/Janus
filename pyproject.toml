@@ -63,13 +63,19 @@ requires-python = ">=3.11,<3.14"
 # modelguard-datahub is a library on PyPI now, not only an application: an
 # environment that already holds pydantic or rich for something else (FastAPI,
 # LangChain, dbt adapters, most ML tooling) must be able to install this next
-# to it. Exact pins fought the resolver instead. Only the SDK keeps an exact
-# floor: its behaviour was verified symbol by symbol (D-012), a minor bump can
-# move an aspect class or a mutation shape, and the ceiling is raised
-# deliberately, after a run of `pytest -m integration` against the new
-# version, never by a resolver's own choice (F2, docs/plan/07).
+# to it. Exact pins fought the resolver instead (F2, docs/plan/07). The SDK is
+# the one exception, and stays exact rather than a floor-and-ceiling range: a
+# range here does not solve F2 at all (nobody else in a user's environment also
+# needs this exact SDK, unlike pydantic or rich, which are near-universal), and
+# widening it to `<2` was tried and reverted after it let CI resolve 1.6.0.17,
+# four patches past the one version (1.6.0.13) verified symbol by symbol
+# (D-012), and that patch changed the incident-entity-types schema enough to
+# fail tests written against 1.6.0.13's behaviour (INCIDENT_ENTITY_TYPES is
+# read from the installed package, so this is not hypothetical). A bump here
+# is a decision made by running `pytest -m integration` against the new
+# version and editing this line, never something a resolver picks on its own.
 dependencies = [
-    "acryl-datahub[datahub-rest]>=1.6.0.13,<2",
+    "acryl-datahub[datahub-rest]==1.6.0.13",
     # Used through a stable, small surface (BaseModel/SecretStr, a dotenv
     # loader, safe_load, a Console, a Typer app): no reason to force a
     # resolver's hand on any of these.
