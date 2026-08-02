@@ -44,7 +44,7 @@ from modelguard.gate import (
     summary,
 )
 from modelguard.llm import LLMConfig, llm_config_from_env
-from modelguard.logs import configure_logging
+from modelguard.logs import LOG_FIELDS, configure_logging, logfmt
 from modelguard.models import (
     Finding,
     FreshnessFinding,
@@ -99,7 +99,16 @@ err_console = Console(stderr=True, soft_wrap=True)
 # ScanConfig.max_hops), so the one thing the message warns about is handled.
 logging.getLogger("datahub.sdk.lineage_client").setLevel(logging.ERROR)
 
+logger = logging.getLogger(__name__)
+
 WATCH_MAX_BACKOFF_SECONDS = 300.0
+#: Consecutive poll failures before the console line escalates from a routine
+#: yellow retry notice to a red "the daemon is not working" one. A single
+#: failure is the expected shape of GMS still starting up (the docstring on
+#: modelguard-watch.service says so); a run of them in a row is not routine
+#: and a wall of identical yellow lines is exactly the kind of thing an
+#: operator stops reading (F12, docs/plan/07).
+WATCH_FAILURE_ESCALATION_THRESHOLD = 3
 
 
 def safe_error(exc: BaseException) -> str:
@@ -554,6 +563,29 @@ def _announce_watch_change(
     _print_findings_and_trust(preview)
 
 
+def _watch_failure_message(exc: Exception, *, consecutive_failures: int) -> str:
+    """Render one console line for a failed poll, with no token in it.
+
+    safe_error(exc), not str(exc) or the exception's class name alone: an SDK
+    failure can quote the request we handed the token to, and the class name
+    alone (the previous behaviour) threw away the one detail an operator
+    needed to tell an expired token from a network partition from a GMS out
+    of disk (F12, docs/plan/07).
+
+    Escalates to a plain statement that the daemon is not working once
+    failures repeat past WATCH_FAILURE_ESCALATION_THRESHOLD: a single failure
+    is the expected shape of GMS still starting up, a run of them is not, and
+    an operator stops reading a wall of identical yellow lines.
+    """
+    message = safe_error(exc) or type(exc).__name__
+    if consecutive_failures >= WATCH_FAILURE_ESCALATION_THRESHOLD:
+        return (
+            f"[bold red]watch has failed {consecutive_failures} polls in a "
+            f"row and is not working: {message}[/bold red]"
+        )
+    return f"[yellow]watch poll failed: {message}[/yellow]"
+
+
 def _watch_once(
     conn: DataHubConnection,
     config: ScanConfig,
@@ -996,6 +1028,7 @@ def watch(
 
     state = WatchState()
     backoff = interval
+    consecutive_failures = 0
     try:
         while True:
             try:
@@ -1009,11 +1042,29 @@ def watch(
                     state=state,
                 )
                 backoff = interval
+                consecutive_failures = 0
             except Exception as exc:  # a daemon must survive SDK failures
-                console.print(
-                    f"[yellow]watch poll failed ({type(exc).__name__}); "
-                    f"retrying in {backoff:.0f}s.[/yellow]"
+                consecutive_failures += 1
+                fields = {
+                    "error_type": type(exc).__name__,
+                    "backoff_s": round(backoff),
+                    "consecutive_failures": consecutive_failures,
+                }
+                # exc_info carries the full traceback into the log, where an
+                # operator can find it; safe_error(exc), not str(exc), on the
+                # console, since an SDK failure can quote the request we
+                # handed the token to and this line lands in a terminal the
+                # whole team may be watching (root CLAUDE.md rule 6d).
+                logger.warning(
+                    "watch poll failed %s",
+                    logfmt(fields),
+                    extra={LOG_FIELDS: fields},
+                    exc_info=True,
                 )
+                console.print(
+                    _watch_failure_message(exc, consecutive_failures=consecutive_failures)
+                )
+                console.print(f"[dim]retrying in {backoff:.0f}s[/dim]")
                 if once:
                     raise typer.Exit(code=1) from exc
                 time.sleep(backoff)
