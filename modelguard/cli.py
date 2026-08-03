@@ -553,6 +553,12 @@ class WatchState:
     to sleep. Counted here rather than in the pet, because a producer without a
     window still wants the state and the count is a property of the watch."""
 
+    deferred_write: bool = field(default=False)
+    """A change was seen while the window's mute was on, so its write is owed.
+    Without it a mute would swallow the finding outright: the poll after the
+    mute expires compares equal to the remembered signature and would stay
+    quiet forever."""
+
 
 def _announce_watch_change(
     previous: frozenset[FindingSignature] | None,
@@ -636,7 +642,15 @@ def _watch_once(
     )
     signature = _finding_signature(preview)
 
-    if signature == previous:
+    muted = argos is not None and argos.muted
+    # A mute defers a write, it does not cancel one. Without this, a change that
+    # arrived during the hour would be remembered as the new steady state and
+    # never written at all: the poll after the mute expires would compare equal
+    # and stay quiet, and the incident nobody muted would simply never be
+    # raised.
+    deferred = state is not None and state.deferred_write
+
+    if signature == previous and not (deferred and not muted):
         console.print(
             f"[dim]{time.strftime('%H:%M:%S')} no change ({len(signature)} open finding(s))[/dim]"
         )
@@ -651,16 +665,18 @@ def _watch_once(
             )
         return signature
 
-    _announce_watch_change(previous, signature, preview)
-    if argos is not None and argos.muted:
-        # Muted from the window's menu: keep looking, stop writing. The finding
-        # is still reported on screen, so a mute hides the noise and never the
-        # problem.
+    if signature != previous:
+        _announce_watch_change(previous, signature, preview)
+    if muted:
+        # Keep looking, stop writing. The finding is still on screen and in the
+        # terminal, so a mute hides the noise and never the problem.
         console.print("[dim]argos: muted, not writing this change[/dim]")
-        argos.send(argos_events.from_report(preview))
+        if argos is not None:
+            argos.send(argos_events.from_report(preview))
         if state is not None:
             state.signature = signature
             state.unchanged_polls = 0
+            state.deferred_write = True
         return signature
 
     written = run_scan(conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm)
@@ -672,6 +688,7 @@ def _watch_once(
     if state is not None:
         state.signature = signature
         state.unchanged_polls = 0
+        state.deferred_write = False
     return signature
 
 
