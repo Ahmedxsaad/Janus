@@ -38,6 +38,7 @@ from modelguard.client import (
     is_local_gms,
 )
 from modelguard.config import ScanConfig
+from modelguard.discovery import search_model_urns
 from modelguard.env import ConfigError, scrub
 from modelguard.gate import (
     EXIT_ERROR,
@@ -162,9 +163,11 @@ def _model_urns(conn: DataHubConnection, *, limit: int | None = None) -> tuple[s
     """Return every mlModel in the graph, sorted, optionally capped.
 
     Sorted so a bulk run reads the same way twice and a caller can tell which
-    models a cap left out.
+    models a cap left out. Older versions of a versioned model are included:
+    GMS hides them from search, and a model this sweep cannot see is one that
+    silently stops being checked (modelguard/discovery.py).
     """
-    urns = sorted(str(urn) for urn in conn.client.search.get_urns(filter=F.entity_type("mlModel")))
+    urns = list(search_model_urns(conn))
     return tuple(urns[:limit] if limit is not None else urns)
 
 
@@ -231,7 +234,7 @@ def resolve_model(conn: DataHubConnection, model: str) -> str:
         return str(MlModelUrn.from_string(model))
 
     matches: list[str] = []
-    for urn in conn.client.search.get_urns(query=model, filter=F.entity_type("mlModel")):
+    for urn in search_model_urns(conn, query=model):
         parsed = Urn.from_string(str(urn))
         if not isinstance(parsed, MlModelUrn):
             continue

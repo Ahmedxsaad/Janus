@@ -47,11 +47,11 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
 )
 from datahub.metadata.urns import DatasetUrn, MlFeatureUrn, SchemaFieldUrn
-from datahub.sdk.search_filters import FilterDsl as F
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
+from modelguard.discovery import search_model_urns
 from modelguard.writeback.properties import (
     EXCLUDED_COLUMNS,
     FEATURE_TABLE,
@@ -118,9 +118,15 @@ def models_with_recorded_link(conn: DataHubConnection) -> tuple[tuple[str, Recor
     This is what makes "replay the links after tonight's ingestion" one command
     rather than one per model. A model nobody has linked is skipped rather than
     guessed at: there is no honest default for which table a model trained on.
+
+    Discovery goes through :mod:`modelguard.discovery` rather than plain search
+    because the ingestion run that drops the link is frequently the same one
+    that registers a new version and makes this model non-latest. Plain search
+    hides it from that moment on, so the replay this command promises would skip
+    exactly the models that most needed it (D-100).
     """
     found: list[tuple[str, RecordedLink]] = []
-    for urn in conn.client.search.get_urns(filter=F.entity_type("mlModel")):
+    for urn in search_model_urns(conn):
         model_urn = str(urn)
         previous = recorded_link(conn, model_urn)
         if previous is not None:

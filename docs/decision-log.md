@@ -16,6 +16,45 @@ Entry template:
 
 ---
 
+## D-100: Model discovery stops losing older versions to DataHub's search (2026-08-03)
+- Decided by: Ahmed Saad (asked for the product to be run end to end as an
+  ordinary user would, which is what surfaced this), fixed by Claude.
+- Decision: every model-discovery path goes through the new
+  `modelguard/discovery.py`, which issues its own `scrollAcrossEntities` with
+  `SearchFlags.filterNonLatestVersions: false` rather than calling
+  `DataHubClient.search`. Older versions of a versioned model are in scope for
+  `inventory`, `scan --all-models`, `link --all`, and `--model <name>`.
+- Options considered: (a) leave it, and document that only the latest version is
+  checked; (b) include every version, through the search flag that turns the
+  hiding off; (c) keep search for discovering new work and add a second path for
+  reconciliation only.
+- Why: found by running the real-project example end to end. Registering a second
+  MLflow model version makes DataHub stamp the first entity `isLatest: false`,
+  and GMS then drops it from every search result while the entity itself stays
+  perfectly alive: not soft-deleted, all aspects intact, ModelGuard's own
+  structured properties and open incident still on it. The consequences are not
+  cosmetic. `link --all` reported "No model carries a recorded link" for a model
+  whose recorded link was sitting right there, which defeats the exact command
+  D-074 added to survive ingestion churn; and an incident raised on that version
+  could never be resolved, because nothing reaches the model to notice the
+  finding stopped reproducing. That is the D-067 and D-069 failure mode arriving
+  through a new door, and this project's rule is that a finding must always be
+  closable. (a) leaves an un-closable incident. (c) is more precise about noise
+  but needs two discovery paths that must not drift, for a noise problem that is
+  bounded anyway: an unlinked old version reports itself unchecked and writes
+  nothing, so writes still only happen for a model a human linked on purpose.
+- Result: `modelguard/discovery.py` with `search_model_urns`, called from
+  `cli._model_urns`, `cli.resolve_model` and `writeback.link.models_with_recorded_link`.
+  Verified against the live stack the bug was found on: `inventory` went from 2
+  models to 3, `link --all` from "no model carries a recorded link" to replaying
+  the 6 features it had recorded, and `scan --model telco_churn_1` resolves by
+  name again instead of answering "no model named". Falls back to plain search
+  when GMS is too old to know the flag. tests/test_discovery.py covers it,
+  mutation-checked per tests/CLAUDE.md rule 6 by flipping the flag back to true.
+  One existing test changed with it: a dry run asserted that *no* GraphQL was
+  sent, using it as a proxy for "no mutation" that only held while the incident
+  mutation was the sole GraphQL ModelGuard issued; it now asserts no mutation.
+
 ## D-099: Argos redrawn, three more states, and a live run that found a lie (2026-08-03)
 - Decided by: Ghassen Naouar (asked for the design to be improved a lot and for
   the whole thing to be tested against a live DataHub), built by Claude.

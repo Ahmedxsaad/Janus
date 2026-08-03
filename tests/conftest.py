@@ -71,6 +71,11 @@ class FakeGraph:
         self.emitted: list[Any] = []
         self.graphql_calls: list[tuple[str, dict[str, Any] | None]] = []
         self.filter_calls: list[tuple[tuple[str, ...], tuple[Any, ...]]] = []
+        #: What modelguard.discovery's model scroll answers with. Populated by
+        #: make_connection from the same list FakeSearch replays, so a test that
+        #: seeds search results gets them through both discovery paths without
+        #: having to know which one the code under test happens to take.
+        self.model_urns: list[str] = []
 
     def get_aspect(self, entity_urn: str, aspect_type: type, version: int = 0) -> Any:
         return self._aspects.get((entity_urn, aspect_type))
@@ -109,6 +114,17 @@ class FakeGraph:
 
     def execute_graphql(self, query: str, variables: dict[str, Any] | None = None, **_: Any) -> Any:
         self.graphql_calls.append((query, variables))
+        if "modelguardScrollModels" in query:
+            # modelguard.discovery hand-writes this one because the SDK's search
+            # cannot turn off DataHub's hiding of non-latest versions. Answered
+            # here rather than through graphql_response so a test setting that
+            # for an incident mutation does not also have to describe a scroll.
+            return {
+                "scrollAcrossEntities": {
+                    "nextScrollId": None,
+                    "searchResults": [{"entity": {"urn": urn}} for urn in self.model_urns],
+                }
+            }
         return self.graphql_response
 
     def get_related_entities(
@@ -285,7 +301,15 @@ def column_path(*column_urns: str) -> list[LineagePath]:
 
 
 def make_connection(graph: FakeGraph, client: FakeClient | None = None) -> DataHubConnection:
-    """Wrap the fakes in the connection object the package expects."""
+    """Wrap the fakes in the connection object the package expects.
+
+    Model discovery reads through the graph's GraphQL scroll rather than the
+    search client (modelguard/discovery.py), so the search fixture is copied
+    across here. Without it a test would seed models one way and the code would
+    look for them the other, and pass by finding nothing.
+    """
+    if client is not None and not graph.model_urns:
+        graph.model_urns = list(client.search.urns)
     return DataHubConnection(
         graph=graph,  # type: ignore[arg-type]
         client=client,  # type: ignore[arg-type]
