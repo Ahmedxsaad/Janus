@@ -13,8 +13,11 @@
 
 const HOP_MS = 900;
 const PAUSE_MS = 700;
-const SCALE = 6;
-const SPRITE_PX = 16 * SCALE;
+const SCALE = 5;
+const SPRITE_PX = window.ArgosSprites.PIXELS * SCALE;
+
+/** Four frames, so a hop looks like running rather than like sliding. */
+const WALK_CYCLE = ["walk_a", "walk_b", "walk_c", "walk_d"];
 
 /** Shorten a URN to the part a human reads: the entity name. */
 function entityLabel(urn) {
@@ -33,6 +36,7 @@ class Walk {
     this.ctx = canvas.getContext("2d");
     this.frames = frames;
     this.path = [];
+    this.title = "";
     this.startedAt = 0;
     this.resize();
     window.addEventListener("resize", () => this.resize());
@@ -51,6 +55,7 @@ class Walk {
       return;
     }
     this.path = path;
+    this.title = event.title || "";
     this.startedAt = performance.now();
   }
 
@@ -62,6 +67,44 @@ class Walk {
     const x = 120 + (span * index) / Math.max(1, this.path.length - 1);
     const wave = Math.sin((index / Math.max(1, this.path.length - 1)) * Math.PI);
     return { x, y: height * 0.55 - wave * height * 0.12 };
+  }
+
+  /** The dashed line the walk follows, drawn behind everything else. */
+  drawTrail(upTo) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.setLineDash([6, 8]);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(24, 87, 210, 0.55)";
+    ctx.beginPath();
+    for (let index = 0; index <= upTo; index += 1) {
+      const { x, y } = this.nodeAt(index);
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** The finding this walk belongs to, once, along the top. */
+  drawBanner() {
+    if (!this.title) {
+      return;
+    }
+    const ctx = this.ctx;
+    ctx.font = "15px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    const width = ctx.measureText(this.title).width + 34;
+    const x = this.canvas.width / 2;
+    ctx.fillStyle = "#12233f";
+    ctx.fillRect(x - width / 2, 34, width, 30);
+    ctx.fillStyle = "#e90101";
+    ctx.fillRect(x - width / 2, 34, 5, 30);
+    ctx.fillStyle = "#f7f7f7";
+    ctx.fillText(this.title, x + 2, 54);
   }
 
   drawNode(index) {
@@ -77,13 +120,20 @@ class Walk {
     // Sized from the text rather than a guessed width: a clipped entity name is
     // the one thing on this screen a person needs to read.
     const width = Math.max(ctx.measureText(name).width, ctx.measureText(column).width) + 20;
+    const height = column ? 36 : 24;
+    // A dot on the line, then the card under it: the dot is what ties the label
+    // to the path when the cards sit at different heights.
+    ctx.fillStyle = "#1857d2";
+    ctx.fillRect(x - 4, y - 4, 8, 8);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+    ctx.fillRect(x - width / 2 + 3, top + 3, width, height);
     ctx.fillStyle = "#12233f";
-    ctx.fillRect(x - width / 2, top, width, column ? 34 : 22);
+    ctx.fillRect(x - width / 2, top, width, height);
     ctx.fillStyle = "#f7f7f7";
-    ctx.fillText(name, x, top + 15);
+    ctx.fillText(name, x, top + 16);
     if (column) {
       ctx.fillStyle = "#f39f19";
-      ctx.fillText(column, x, top + 29);
+      ctx.fillText(column, x, top + 30);
     }
   }
 
@@ -100,7 +150,10 @@ class Walk {
     const hop = Math.min(hops, Math.floor(elapsed / cycle));
     const within = Math.min(1, (elapsed % cycle) / HOP_MS);
 
-    for (let index = 0; index <= Math.min(hop + 1, hops); index += 1) {
+    const reached = Math.min(hop + 1, hops);
+    this.drawTrail(reached);
+    this.drawBanner();
+    for (let index = 0; index <= reached; index += 1) {
       this.drawNode(index);
     }
 
@@ -113,7 +166,7 @@ class Walk {
 
     window.ArgosSprites.drawFrame(
       this.ctx,
-      this.frames[moving ? (Math.floor(now / 120) % 2 ? "walk_a" : "walk_b") : "idle_a"],
+      this.frames[moving ? WALK_CYCLE[Math.floor(now / 110) % WALK_CYCLE.length] : "alert_b"],
       SCALE,
       { x: x - SPRITE_PX / 2, y: y - SPRITE_PX / 2, collar: "r" },
     );

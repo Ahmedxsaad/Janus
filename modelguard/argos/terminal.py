@@ -28,6 +28,9 @@ _STYLES = {
     "scribbling": "blue",
     "tugging": "bold yellow",
     "asleep": "dim",
+    "recovered": "bold green",
+    "unchecked": "yellow",
+    "muted": "dim",
     "sick": "yellow",
     "ghost": "dim red",
 }

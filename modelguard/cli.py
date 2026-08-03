@@ -683,7 +683,12 @@ def _watch_once(
     if signature:
         _print_writes_section(written)
     if argos is not None:
-        argos.send(argos_events.from_report(written))
+        # A recovery is a transition, not a property of the report: this is the
+        # only place that knows the target was failing a moment ago and is not
+        # now, which is the one moment the dog gets to wag.
+        argos.send(
+            argos_events.from_report(written, recovered=bool(previous) and not signature)
+        )
 
     if state is not None:
         state.signature = signature

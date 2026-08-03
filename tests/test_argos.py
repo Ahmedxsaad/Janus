@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import stat
 import sys
 import time
@@ -37,7 +38,8 @@ from modelguard.models import Finding, TrustBand, TrustScore
 from .conftest import make_finding
 
 UI = Path(__file__).resolve().parent.parent / "argos" / "ui"
-PALETTE_CHARS = set(".kwabdr")
+PALETTE_CHARS = set(".kwgaobdr")
+SPRITE = 24
 
 
 def _frames() -> dict[str, list[str]]:
@@ -57,20 +59,21 @@ def _frames() -> dict[str, list[str]]:
 # --- the art -----------------------------------------------------------------
 
 
-def test_every_frame_is_sixteen_rows_of_sixteen_palette_characters():
+def test_every_frame_is_a_square_of_palette_characters():
     frames = _frames()
     assert frames, "no frames parsed out of the sprite file"
     for name, rows in frames.items():
-        assert len(rows) == 16, f"{name} has {len(rows)} rows"
-        assert {len(row) for row in rows} == {16}, f"{name} has a row of the wrong width"
+        assert len(rows) == SPRITE, f"{name} has {len(rows)} rows"
+        assert {len(row) for row in rows} == {SPRITE}, f"{name} has a row of the wrong width"
         assert set("".join(rows)) <= PALETTE_CHARS, f"{name} uses a colour outside the palette"
 
 
-def test_no_frame_paints_red_because_red_is_state_not_decoration():
-    # The renderer repaints the collar red when a finding is live. Art that was
-    # already red would make a healthy graph look like a failing one.
-    for name, rows in _frames().items():
-        assert "r" not in "".join(rows), f"{name} paints red into the art"
+def test_only_the_bark_paints_red_because_red_is_state_not_decoration():
+    # The renderer repaints the collar red when a finding is live, and the bark
+    # frames carry an open mouth that is red by nature. Anything else already
+    # red would make a healthy graph look like a failing one.
+    reddened = {name for name, rows in _frames().items() if "r" in "".join(rows)}
+    assert reddened == {"alert_a", "alert_b"}, f"red leaked into {reddened}"
 
 
 def test_the_state_machine_names_a_frame_that_exists():
@@ -78,8 +81,15 @@ def test_the_state_machine_names_a_frame_that_exists():
     script = (UI / "argos.js").read_text()
     for state in STATES:
         assert f"{state}:" in script, f"argos.js has no rule for the {state} state"
-    for quoted in ("idle_a", "idle_b", "walk_a", "walk_b", "sniff", "alert_a", "sleep"):
-        assert quoted in frames, f"argos.js draws {quoted}, which the sprite file does not define"
+    # Every frame the state machine names must exist in the art, and every frame
+    # in the art must be reachable: an orphan on either side is a bug nobody
+    # sees until the state it belongs to fires.
+    named = set(re.findall(r'"([a-z]+_?[a-z]*)", \d+', script)) | set(
+        re.findall(r'"(walk_[a-d])"', (UI / "walk.js").read_text())
+    )
+    named.discard("v")
+    assert named <= set(frames), f"the window draws frames that do not exist: {named - set(frames)}"
+    assert set(frames) <= named, f"frames nothing draws: {set(frames) - named}"
 
 
 # --- the protocol ------------------------------------------------------------
@@ -404,3 +414,49 @@ def test_the_environment_is_only_read_through_env_py():
         code = module.read_text()
         assert "os.environ" not in code and "os.getenv" not in code, module.name
     assert os.environ is not None  # the import is used, and nothing here mutates it
+
+
+def test_a_recovery_wags_rather_than_going_quiet():
+    """The transition the caller owns: failing a moment ago, clean now."""
+    clean = _report_with()
+    assert events.from_report(clean).state == "patrolling"
+    assert events.from_report(clean, recovered=True).state == "recovered"
+
+
+def test_a_check_that_could_not_run_is_not_rendered_as_health():
+    """detect/coverage.py's whole point, applied to pixels."""
+    from modelguard.agent.pipeline import ScanReport
+    from modelguard.detect.coverage import Unevaluated
+
+    report = ScanReport(
+        run_id="r",
+        dry_run=True,
+        not_evaluated=(
+            Unevaluated(
+                check="target leakage",
+                target_urn="urn:li:mlModel:(x,m,PROD)",
+                reason="no label term on any column",
+                remedy="apply the label term",
+            ),
+        ),
+    )
+    event = events.from_report(report)
+    assert event.state == "unchecked"
+    assert "target leakage" in (event.title or "")
+
+
+def test_the_trust_score_rides_along_so_the_meter_has_something_to_draw():
+    from modelguard.agent.pipeline import ScanReport, TrustWrite
+
+    report = ScanReport(
+        run_id="r",
+        dry_run=True,
+        trust=(
+            TrustWrite(
+                model_urn="urn:li:mlModel:(x,m,PROD)",
+                model_name="m",
+                score=TrustScore(value=64, band=TrustBand.WATCH, deductions={}),
+            ),
+        ),
+    )
+    assert events.from_report(report).trust == 64

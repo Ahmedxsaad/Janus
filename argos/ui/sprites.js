@@ -10,13 +10,18 @@ window.ArgosSprites = (() => {
   const PALETTE = {
     k: "#12233f",
     w: "#f7f7f7",
+    g: "#d3d9e4",
     a: "#f39f19",
+    o: "#c97c0c",
     b: "#1857d2",
     d: "#1b49a0",
     r: "#e90101",
   };
 
-  const PIXELS = 16;
+  // Frames are square and every frame in a file is the same size, so the art
+  // decides this rather than the code: a contributor's 32x32 character needs no
+  // edit here.
+  const PIXELS = 24;
 
   /**
    * Parse a character file into named 16x16 frames.
@@ -71,6 +76,9 @@ window.ArgosSprites = (() => {
     const originX = style.x || 0;
     const originY = (style.y || 0) + (style.bob || 0) * scale;
     ctx.globalAlpha = style.alpha === undefined ? 1 : style.alpha;
+    if (style.rim !== false) {
+      drawRim(ctx, rows, scale, originX, originY);
+    }
     for (let y = 0; y < rows.length; y += 1) {
       const row = rows[y];
       for (let x = 0; x < row.length; x += 1) {
@@ -90,6 +98,33 @@ window.ArgosSprites = (() => {
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  /**
+   * A one-pixel light rim just outside the sprite's own dark outline.
+   *
+   * The outline is DataHub's near-black, which disappears against a dark
+   * wallpaper and takes the silhouette with it: the tail stops looking attached
+   * and the dog stops looking like one shape. A desktop pet cannot choose its
+   * background, so it carries its own separation. Against a light background
+   * the rim is nearly invisible and the dark outline does the work instead.
+   */
+  function drawRim(ctx, rows, scale, originX, originY) {
+    const filled = (x, y) => rows[y] !== undefined && rows[y][x] !== undefined && rows[y][x] !== ".";
+    ctx.save();
+    ctx.globalAlpha *= 0.55;
+    ctx.fillStyle = "#e8edf5";
+    for (let y = 0; y < rows.length; y += 1) {
+      for (let x = 0; x < rows[y].length; x += 1) {
+        if (filled(x, y)) {
+          continue;
+        }
+        if (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) {
+          ctx.fillRect(originX + x * scale, originY + y * scale, scale, scale);
+        }
+      }
+    }
+    ctx.restore();
   }
 
   /** Fetch and parse the character file that ships next to these scripts. */

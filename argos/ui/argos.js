@@ -4,7 +4,8 @@
  * Everything drawn here depicts an event some producer sent. There is no timer
  * that invents activity to look busy, which is docs/plan/08 section 3 and root
  * CLAUDE.md rule 4 applied to pixels. The only motion without an event is the
- * frame cycle *within* the state the producer already put us in.
+ * frame cycle *within* the state the producer already put us in: a dog that
+ * breathes and blinks while patrolling is not claiming anything about the graph.
  *
  * Two transports, one renderer: inside Tauri the events arrive from the
  * producer over stdin; in a plain browser they are replayed from fixture.jsonl,
@@ -14,23 +15,45 @@
 /**
  * States, and how each one is drawn.
  *
- * `frames` names sprites from sprites/argos.txt, `fps` is how fast they cycle,
- * `alpha` and `dim` are the two health modifiers, and `collar` repaints the
- * blue collar. Red is state, never decoration: only a live finding sets it.
+ * A timeline of `[frame, milliseconds]` rather than a frame rate, because the
+ * life is in the uneven timing: a two-second hold and a 130ms blink is a dog,
+ * four frames at 3fps is a flipbook.
+ *
+ * `dim` and `alpha` are the two health modifiers, `collar` repaints the collar,
+ * and `shadow` is how firmly the dog is planted. Red is state, never
+ * decoration: only a live finding sets it.
  */
 const STATES = {
-  patrolling: { frames: ["idle_a", "idle_b"], fps: 1.2 },
-  sniffing: { frames: ["sniff", "idle_a"], fps: 3 },
-  narrating: { frames: ["tilt", "idle_a"], fps: 1 },
-  barking: { frames: ["alert_a", "alert_b"], fps: 6, collar: "r" },
-  scribbling: { frames: ["scribble"], fps: 2, bob: true },
-  tugging: { frames: ["tug", "idle_a"], fps: 4 },
-  asleep: { frames: ["sleep"], fps: 0.5, bob: true },
-  sick: { frames: ["idle_a", "idle_b"], fps: 0.6, dim: true },
-  ghost: { frames: ["idle_a"], fps: 0.5, alpha: 0.35 },
+  patrolling: {
+    timeline: [
+      ["idle_a", 2600],
+      ["blink", 130],
+      ["idle_a", 1500],
+      ["idle_b", 1900],
+      ["blink", 120],
+    ],
+  },
+  sniffing: { timeline: [["sniff_a", 320], ["sniff_b", 300]] },
+  narrating: { timeline: [["tilt_a", 900], ["tilt_b", 950]] },
+  barking: {
+    timeline: [["alert_a", 150], ["alert_b", 170]],
+    collar: "r",
+    shake: true,
+  },
+  scribbling: { timeline: [["scribble_a", 260], ["scribble_b", 280]] },
+  tugging: { timeline: [["tug_a", 220], ["tug_b", 240]] },
+  asleep: { timeline: [["sleep_a", 1500], ["sleep_b", 1600]] },
+  recovered: { timeline: [["wag_a", 150], ["wag_b", 160]] },
+  unchecked: { timeline: [["search_a", 750], ["search_b", 800]] },
+  muted: { timeline: [["sit", 2400], ["blink", 140]], dim: true },
+  sick: { timeline: [["idle_a", 1800], ["blink", 220]], dim: true },
+  ghost: { timeline: [["idle_a", 1200], ["idle_b", 1200]], alpha: 0.35 },
 };
 
 const DEFAULT_STATE = "patrolling";
+
+/** How long a bubble stays up before it gets out of the way. */
+const BUBBLE_MS = 9000;
 
 /** Send one command line to the producer, if there is one listening. */
 function sendCommand(cmd, args = {}) {
@@ -72,7 +95,7 @@ async function connect(onEvent) {
     index += 1;
   };
   step();
-  window.setInterval(step, 3200);
+  window.setInterval(step, 4200);
 }
 
 function escapeHtml(text) {
@@ -83,16 +106,24 @@ function escapeHtml(text) {
 
 class Argos {
   constructor(canvas, frames) {
+    this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.frames = frames;
-    this.scale = canvas.width / window.ArgosSprites.PIXELS;
     this.size = canvas.width;
+    this.scale = this.size / window.ArgosSprites.PIXELS;
     this.state = DEFAULT_STATE;
     this.event = { v: 1, state: DEFAULT_STATE };
-    this.frame = 0;
-    this.last = 0;
+    this.step = 0;
+    this.stepAt = 0;
+    this.enteredAt = 0;
     this.bubble = document.getElementById("bubble");
+    this.bubbleText = this.bubble.querySelector(".text");
+    this.trust = document.getElementById("trust");
     this.menu = document.getElementById("menu");
+    this.hideAt = 0;
+    for (let index = 0; index < 10; index += 1) {
+      this.trust.appendChild(document.createElement("i"));
+    }
   }
 
   /** Apply an event: the state it names is the only thing that moves us. */
@@ -103,11 +134,13 @@ class Argos {
     const next = STATES[event.state] ? event.state : DEFAULT_STATE;
     if (next !== this.state) {
       this.state = next;
-      this.frame = 0;
+      this.step = 0;
+      this.stepAt = 0;
+      // The squash-and-stretch on entry is what makes a state change feel like
+      // the dog reacted rather than the sprite being swapped.
+      this.enteredAt = performance.now();
     }
-    if (event.title) {
-      this.showBubble();
-    }
+    this.showBubble();
   }
 
   showBubble() {
@@ -116,37 +149,86 @@ class Argos {
       return;
     }
     const severity = (event.severity || "").toLowerCase();
-    const tag = severity ? `<span class="sev ${severity}">${severity}</span> ` : "";
-    this.bubble.innerHTML = `${tag}${escapeHtml(event.title)}`;
-    this.bubble.style.display = "block";
+    const chip = severity ? `<span class="chip ${severity}">${severity}</span>` : "";
+    this.bubbleText.innerHTML = `${chip}${escapeHtml(event.title)}`;
+
+    const score = typeof event.trust === "number" ? event.trust : null;
+    this.trust.className = score === null ? "" : score >= 70 ? "shown" : score >= 40 ? "shown watch" : "shown risk";
+    if (score !== null) {
+      const lit = Math.round(score / 10);
+      [...this.trust.children].forEach((segment, index) => {
+        segment.className = index < lit ? "on" : "";
+      });
+    }
+
+    this.bubble.classList.add("shown");
+    // A bubble that never leaves is a sticker. It comes back on the next event,
+    // and on a click.
+    this.hideAt = performance.now() + BUBBLE_MS;
   }
 
   toggleBubble() {
-    const shown = this.bubble.style.display === "block";
-    this.bubble.style.display = "none";
-    if (!shown) {
+    if (this.bubble.classList.contains("shown")) {
+      this.bubble.classList.remove("shown");
+      this.hideAt = 0;
+    } else {
       this.showBubble();
     }
   }
 
+  /** Advance the timeline and draw one frame. */
   tick(now) {
     const spec = STATES[this.state];
-    if (now - this.last >= 1000 / spec.fps) {
-      this.last = now;
-      this.frame = (this.frame + 1) % spec.frames.length;
+    const [, hold] = spec.timeline[this.step];
+    if (now - this.stepAt >= hold) {
+      this.stepAt = now;
+      this.step = (this.step + 1) % spec.timeline.length;
     }
-    this.ctx.clearRect(0, 0, this.size, this.size);
-    window.ArgosSprites.drawFrame(
-      this.ctx,
-      this.frames[spec.frames[this.frame]] || this.frames.idle_a,
-      this.scale,
-      {
-        alpha: spec.alpha,
-        dim: spec.dim,
-        collar: spec.collar,
-        bob: spec.bob ? (Math.floor(now / 700) % 2) * 0.5 : 0,
-      },
+    if (this.hideAt && now > this.hideAt) {
+      this.bubble.classList.remove("shown");
+      this.hideAt = 0;
+    }
+
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.size, this.size);
+    this.drawShadow(spec, now);
+
+    // Entry squash: 120ms of a flattened, wider sprite settling back to square.
+    const since = now - this.enteredAt;
+    const squash = since < 180 ? Math.sin((since / 180) * Math.PI) * 0.09 : 0;
+    const shake = spec.shake ? Math.round(Math.sin(now / 45) * 1.2) : 0;
+
+    ctx.save();
+    ctx.translate(this.size / 2 + shake, this.size);
+    ctx.scale(1 + squash, 1 - squash);
+    ctx.translate(-this.size / 2, -this.size);
+    window.ArgosSprites.drawFrame(ctx, this.frames[spec.timeline[this.step][0]], this.scale, {
+      alpha: spec.alpha,
+      dim: spec.dim,
+      collar: spec.collar,
+    });
+    ctx.restore();
+  }
+
+  /** The ellipse that puts the dog on the desktop instead of above it. */
+  drawShadow(spec, now) {
+    const ctx = this.ctx;
+    const breathe = 1 + Math.sin(now / 900) * 0.03;
+    ctx.save();
+    ctx.globalAlpha = (spec.alpha === undefined ? 1 : spec.alpha) * 0.22;
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.ellipse(
+      this.size / 2,
+      this.size - this.scale * 1.6,
+      this.size * 0.3 * breathe,
+      this.scale * 0.9,
+      0,
+      0,
+      Math.PI * 2,
     );
+    ctx.fill();
+    ctx.restore();
   }
 
   /** Walk the blast radius across the desktop, if this event carries one. */
@@ -161,9 +243,7 @@ class Argos {
         .then(() => window.__TAURI__.event.emit("argos://walk", this.event))
         .catch(() => {});
     } else {
-      window.location.href = `walk.html#${encodeURIComponent(
-        JSON.stringify(this.event),
-      )}`;
+      window.location.href = `walk.html#${encodeURIComponent(JSON.stringify(this.event))}`;
     }
   }
 }
@@ -177,7 +257,7 @@ function bindInteractions(app) {
 
   document.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    app.menu.style.display = "block";
+    app.menu.classList.add("shown");
   });
 
   app.menu.addEventListener("click", (event) => {
@@ -185,13 +265,13 @@ function bindInteractions(app) {
     if (!button) {
       return;
     }
-    app.menu.style.display = "none";
+    app.menu.classList.remove("shown");
     sendCommand(button.dataset.cmd, { entity: app.event.entity || null });
   });
 
   document.addEventListener("click", (event) => {
     if (!app.menu.contains(event.target)) {
-      app.menu.style.display = "none";
+      app.menu.classList.remove("shown");
     }
   });
 

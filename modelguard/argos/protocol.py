@@ -42,6 +42,9 @@ STATES: frozenset[str] = frozenset(
         "scribbling",
         "tugging",
         "asleep",
+        "recovered",
+        "unchecked",
+        "muted",
         "sick",
         "ghost",
     }
@@ -96,6 +99,10 @@ class Event:
     entity: str | None = None
     severity: str | None = None
     link: str | None = None
+    trust: int | None = None
+    """A model's trust score, 0 to 100, when this event is about one. Drawn as a
+    ten-segment meter under the bubble: a number nobody can read at a glance is
+    not ambient."""
     path: tuple[Hop, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
@@ -119,8 +126,9 @@ class Event:
             ("entity", self.entity),
             ("severity", self.severity),
             ("link", self.link),
+            ("trust", self.trust),
         ):
-            if value:
+            if value is not None and value != "":
                 payload[key] = value
         if self.path:
             payload["path"] = [hop.to_dict() for hop in self.path]
@@ -154,6 +162,7 @@ class Event:
             entity=payload.get("entity"),
             severity=payload.get("severity"),
             link=payload.get("link"),
+            trust=payload.get("trust"),
             path=tuple(Hop(urn=hop["urn"], column=hop.get("column")) for hop in raw_path),
         )
 

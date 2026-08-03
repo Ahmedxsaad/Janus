@@ -3,13 +3,16 @@
 // the state machine reviewable with no DataHub, no Rust and no waiting for a
 // real incident. tests/test_argos.py replays the same file through the Python
 // protocol, so a typo here fails the suite rather than the demo.
-{"v": 1, "state": "patrolling", "title": "loans_raw: no findings"}
+{"v": 1, "state": "patrolling", "title": "loans_raw: no findings", "trust": 92}
 {"v": 1, "state": "sniffing", "entity": "urn:li:dataset:(urn:li:dataPlatform:postgres,analytics.loans_raw,PROD)", "title": "walking lineage downstream of loans_raw"}
 {"v": 1, "state": "narrating", "title": "drafting the incident description"}
-{"v": 1, "state": "barking", "severity": "HIGH", "entity": "urn:li:dataset:(urn:li:dataPlatform:postgres,analytics.loans_raw,PROD)", "title": "loans_raw is 14h stale, SLA is 6h", "link": "http://localhost:9002/dataset/urn:li:dataset:(urn:li:dataPlatform:postgres,analytics.loans_raw,PROD)", "path": [{"urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,analytics.loans_raw,PROD)", "column": "income"}, {"urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,analytics.customer_features,PROD)", "column": "income_avg_90d"}, {"urn": "urn:li:mlFeature:(customer_features,income_avg_90d)", "column": null}, {"urn": "urn:li:mlModel:(urn:li:dataPlatform:mlflow,credit_risk_v3,PROD)", "column": null}]}
+{"v": 1, "state": "barking", "severity": "HIGH", "entity": "urn:li:dataset:(urn:li:dataPlatform:postgres,analytics.loans_raw,PROD)", "title": "loans_raw is 14h stale, SLA is 6h", "trust": 34, "link": "http://localhost:9002/dataset/urn:li:dataset:(urn:li:dataPlatform:postgres,analytics.loans_raw,PROD)", "path": [{"urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,analytics.loans_raw,PROD)", "column": "income"}, {"urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,analytics.customer_features,PROD)", "column": "income_avg_90d"}, {"urn": "urn:li:mlFeature:(customer_features,income_avg_90d)", "column": null}, {"urn": "urn:li:mlModel:(urn:li:dataPlatform:mlflow,credit_risk_v3,PROD)", "column": null}]}
 {"v": 1, "state": "scribbling", "entity": "urn:li:dataset:(urn:li:dataPlatform:postgres,analytics.loans_raw,PROD)", "title": "raising incident, writing trust score"}
 {"v": 1, "state": "tugging", "severity": "MEDIUM", "title": "1 write is waiting for your approval"}
-{"v": 1, "state": "sick", "severity": "LOW", "entity": "urn:li:mlModel:(urn:li:dataPlatform:mlflow,credit_risk_v3,PROD)", "title": "credit_risk_v3 trust dropped to AT_RISK"}
+{"v": 1, "state": "sick", "severity": "LOW", "entity": "urn:li:mlModel:(urn:li:dataPlatform:mlflow,credit_risk_v3,PROD)", "title": "credit_risk_v3 trust dropped to AT_RISK", "trust": 38}
+{"v": 1, "state": "unchecked", "title": "2 check(s) could not run: target leakage"}
+{"v": 1, "state": "recovered", "title": "recovered: nothing is failing", "trust": 88}
+{"v": 1, "state": "muted", "title": "muted for 1h, still watching"}
 {"v": 1, "state": "asleep", "title": "8 polls, nothing changed"}
 {"v": 1, "state": "ghost", "title": "cannot reach DataHub at localhost:8080"}
 {"v": 1, "state": "somersaulting", "title": "an unknown state renders as patrolling, never as a crash"}

@@ -22,7 +22,9 @@ from pathlib import Path
 PALETTE: dict[str, tuple[int, int, int, int]] = {
     "k": (0x12, 0x23, 0x3F, 255),
     "w": (0xF7, 0xF7, 0xF7, 255),
+    "g": (0xD3, 0xD9, 0xE4, 255),
     "a": (0xF3, 0x9F, 0x19, 255),
+    "o": (0xC9, 0x7C, 0x0C, 255),
     "b": (0x18, 0x57, 0xD2, 255),
     "d": (0x1B, 0x49, 0xA0, 255),
     "r": (0xE9, 0x01, 0x01, 255),
@@ -33,9 +35,9 @@ HERE = Path(__file__).resolve().parent
 SPRITES = HERE.parent / "ui" / "sprites" / "argos.txt"
 OUTPUT = HERE / "icon.png"
 
-#: 512 is the largest size the bundlers ask for, and every smaller one is a
-#: clean integer downscale of it because the art is 16x16.
-SIZE = 512
+#: A multiple of the sprite's own size, so every pixel scales to an exact
+#: square and nothing is resampled. 768 is 24 x 32.
+SIZE = 768
 
 
 def read_frame(name: str) -> list[str]:

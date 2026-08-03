@@ -73,12 +73,27 @@ def walk_path(finding: Finding) -> tuple[Hop, ...]:
     return tuple(hops) if len(hops) > 1 else ()
 
 
-def from_report(report: ScanReport) -> Event:
+def _trust_of(report: ScanReport, model_urn: str | None) -> int | None:
+    """Return the trust score this scan measured for a model, when it did."""
+    for write in report.trust:
+        if model_urn is None or write.model_urn == model_urn:
+            return write.score.value
+    return None
+
+
+def from_report(report: ScanReport, *, recovered: bool = False) -> Event:
     """Return the one event that describes a completed scan.
 
-    Ranked by what a person needs to know first: a finding outranks a dropped
-    trust band, which outranks silence. One event rather than one per finding,
-    because the dog has one body and the worst finding is the one to bark about.
+    Ranked by what a person needs to know first: a finding outranks a recovery,
+    which outranks a dropped trust band, which outranks a check that could not
+    run, which outranks silence. One event rather than one per finding, because
+    the dog has one body and the worst finding is the one to bark about.
+
+    Args:
+        report: What the scan found.
+        recovered: True when this scan is the poll on which a finding that was
+            open a moment ago stopped reproducing. It is a transition, not a
+            property of the report, so the caller is the only thing that knows.
     """
     findings = report.findings
     if findings:
@@ -89,7 +104,15 @@ def from_report(report: ScanReport) -> Event:
             entity=worst.resource_urn,
             severity=str(worst.severity),
             link=entity_link(worst.resource_urn),
+            trust=_trust_of(report, None),
             path=walk_path(worst),
+        )
+
+    if recovered:
+        return Event(
+            state="recovered",
+            title="recovered: nothing is failing",
+            trust=_trust_of(report, None),
         )
 
     dropped = [write for write in report.trust if write.score.band is not TrustBand.HEALTHY]
@@ -102,10 +125,22 @@ def from_report(report: ScanReport) -> Event:
                 f" ({worst_model.score.band})"
             ),
             entity=worst_model.model_urn,
+            trust=worst_model.score.value,
             link=entity_link(worst_model.model_urn),
         )
 
-    return Event(state="patrolling", title="no findings")
+    if report.not_evaluated:
+        # The state detect/coverage.py exists for: a check that could not run is
+        # not a check that passed, and rendering the two the same way is how an
+        # ambient display starts lying.
+        gap = report.not_evaluated[0]
+        return Event(
+            state="unchecked",
+            title=f"{len(report.not_evaluated)} check(s) could not run: {gap.check}",
+            trust=_trust_of(report, None),
+        )
+
+    return Event(state="patrolling", title="no findings", trust=_trust_of(report, None))
 
 
 def unreachable(reason: str) -> Event:

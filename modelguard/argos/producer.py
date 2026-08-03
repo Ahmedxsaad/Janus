@@ -103,7 +103,7 @@ class ArgosProducer:
         """Draw one event, and remember whether it left an approval pending."""
         if event.state == "tugging":
             self._pending_approval = True
-        elif event.state in {"patrolling", "barking", "sick"}:
+        elif event.state in {"patrolling", "barking", "sick", "recovered"}:
             self._pending_approval = False
         self._surface.send(event)
 
@@ -118,7 +118,7 @@ class ArgosProducer:
             self.wake.set()
         elif command.name == "mute":
             self._muted_until = time.monotonic() + MUTE_SECONDS
-            self.send(Event(state="asleep", title="muted for 1h"))
+            self.send(Event(state="muted", title="muted for 1h, still watching"))
         elif command.name == "approve":
             self._approve()
         elif command.name == "open_datahub":
