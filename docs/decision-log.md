@@ -16,6 +16,68 @@ Entry template:
 
 ---
 
+## D-101: Argos redrawn as a German Shepherd; roam, mirror, and a fixed bubble (2026-08-03)
+- Decided by: Ahmed Saad (asked for the character to be "a lot more alive",
+  named a specific breed, and separately flagged that the speech bubble
+  rendered detached above the window), built by Claude.
+- Decision:
+  1. The character is a German Shepherd now, not a generic dog: erect ears, a
+     black saddle over a tan coat, a low bushy tail. Redrawn at 32x32 (from
+     24x24) because the breed's features (a longer muzzle, the saddle marking)
+     needed the room D-099's size did not have.
+  2. The sprite file is generated, not hand-typed. `argos/ui/sprites/
+     make_sprites.py` composes each of the 24 frames from a head, a torso, a
+     tail and a pair of leg clusters, and computes the outline from the
+     resulting silhouette. Edit the parts, re-run the script; the committed
+     `argos.txt` is its output, the same relationship `icons/make_icon.py` has
+     to `icon.png`.
+  3. The window gained roaming, mirroring, and a top-down light. While
+     patrolling (and only then; every other state stands still, per the design
+     law in section 3) the dog paces a strip inside the window, turns to face
+     its cursor, and can be picked up and pet. Facing left is the same art
+     mirrored via a canvas transform, not a second set of frames.
+  4. The speech bubble's layout is fixed. It was pinned to the top of the
+     window with a fixed height; in a transparent, undecorated window with
+     nothing to anchor it to, it read as floating in empty space, and a title
+     over two lines was silently clipped. It is now laid out in a bottom-up
+     flex column so it always sits directly above the head and is always
+     exactly as tall as its own text, and its tail tracks the dog horizontally
+     instead of staying fixed at 50%.
+- Options considered:
+  - For the breed: (a) keep the generic dog and only fix the bubble, (b) redraw
+    as a named breed. (b) was the ask, and the earlier generic character was
+    itself already a second attempt (D-099) at "look distinctive"; a breed a
+    viewer can name is a stronger version of the same goal, not a new one.
+  - For authoring: (a) keep hand-typing 24 frames, (b) generate them from
+    parts. Two iterations under (a) during this session put a stray pixel two
+    rows below the tail and read it back as a floating fragment, twice, in two
+    different poses (the sit haunch, then the sleep paw) because nothing
+    checked that a hand-added shape actually touched what it was next to. (b)
+    makes that class of mistake structurally harder: a leg is a rigid block
+    stamped at a column, not a hand-aimed diagonal of individual characters.
+  - For the bubble: (a) patch the existing fixed-position rule with a
+    computed offset, (b) put it back in document flow. (a) would still need to
+    know the dog's current height and position to compute the offset, which is
+    exactly what flex layout already tracks for free; (b) is the same fix with
+    less code and no offset to keep in sync as the roam position changes.
+- Why: the previous character was correctly implemented against its own
+  design (D-098, D-099) but was not, on Ahmed Saad's read, distinctive or alive
+  enough to leave running, and the bubble bug was a real defect: a finding's
+  title is the one piece of information this surface exists to show, and
+  clipping or detaching it defeats the surface. Both are fixed together because
+  the redraw touched the same files (`ui/index.html`, `ui/sprites.js`) the
+  bubble fix needed.
+- Result: `argos/ui/sprites/make_sprites.py` (new), `argos/ui/sprites/argos.txt`
+  regenerated (32x32, 24 frames), `argos/ui/sprites.js` (palette, `PIXELS`,
+  mirroring via `flip`, per-pixel top-down lighting), `argos/ui/argos.js` (the
+  roam/pet/pointer-follow state machine), `argos/ui/index.html` (bubble
+  back in flow, 128px floor), `argos/tauri.conf.json` (window grows to fit),
+  `argos/icons/make_icon.py` (palette). `tests/test_argos.py`'s `SPRITE`
+  constant moves to 32; all 585 tests pass. `cargo build --release` clean.
+  Verified against the live stack this session's D-100 fix was also tested on:
+  `modelguard watch --table loans_raw --pet` renders the new character with no
+  errors in the log across repeated polls.
+
 ## D-100: Model discovery stops losing older versions to DataHub's search (2026-08-03)
 - Decided by: Ahmed Saad (asked for the product to be run end to end as an
   ordinary user would, which is what surfaced this), fixed by Claude.

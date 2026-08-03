@@ -117,32 +117,35 @@ reasoning survives: *Cerb* (Cerberus guards a crossing, and `modelguard gate` is
 literally a gate, but it reads as menacing unless drawn as a puppy) and *Scout*
 (warmest to a non-technical judge, least distinctive).
 
-A side-profile watchdog, 24x24, facing right, with a floppy amber ear, a blue
-collar at the throat, and a tail that lifts when it wags. Draft 1 was 16x16 and
-too small to carry a snout, an eye with a highlight, or a four-frame walk; at
-24 the animal reads without being explained.
+A side-profile watchdog, facing right, with a blue collar at the throat and a
+tail that lifts when it wags. Draft 1 was 16x16 and too small to carry a snout,
+an eye with a highlight, or a four-frame walk; 24x24 (D-099) carried those but
+still read as a generic dog rather than a specific one. D-101 redraws it again,
+at 32x32, as a German Shepherd (erect ears, a black saddle over a tan coat, a
+low bushy tail): the extra size is spent on a breed a viewer can name, not on
+more of the same silhouette.
 
 **Colour rule: red is state, not decoration.** The dog is blue and amber while
 the graph is healthy. Red enters only on a live finding, on the collar tag. That
 is what makes the health readable at a glance without reading anything.
 
-Palette, quantised from the DataHub logo rather than guessed:
+Palette (D-101; the collar keeps the original DataHub blue, everything else is
+the breed's own colouring rather than the logo's):
 
 | Hex | Role |
 |---|---|
-| `#12233F` | outline, blue-biased near-black |
-| `#1857D2` | DataHub blue, collar |
-| `#1B49A0` | deep blue |
-| `#F39F19` | amber, ear and tail |
-| `#E90101` | red, findings only |
-| `#F7F7F7` | coat |
-| `#D3D9E4` | coat shade, the far pair of legs and the belly |
-| `#C97C0C` | amber shade, the underside of the ear and tail |
-| `#1A1F2B` | stage, behind the bubble and the menu |
+| `#160F0A` | outline, near-black |
+| `#2668E8` | DataHub blue, collar |
+| `#16408F` | deep blue, collar shade |
+| `#D99347` | coat |
+| `#A96B2C` | coat shade, the far pair of legs |
+| `#2A2119` | the black saddle and ears |
+| `#15100C` | saddle shade |
+| `#F22525` | red, findings only |
 
 ### Sprite as data
 
-A frame is 24 strings of 24 characters, one character per pixel, indexing a
+A frame is 32 strings of 32 characters, one character per pixel, indexing a
 named palette. All of a character's frames live in one plain text file,
 `argos/ui/sprites/argos.txt`, each opened by a `# name` line and loaded by
 `fetch` at startup, so the same file feeds the desktop window, the browser demo
@@ -150,19 +153,30 @@ and the icon generator. One file per character rather than one per frame: it is
 still a reviewable text diff, and it is one request instead of eleven with no
 index to keep in step.
 
+Since D-101 the file itself is generated, not hand-typed: `argos/ui/sprites/
+make_sprites.py` composes each frame from a head, a torso, a tail and a pair of
+leg clusters, and computes the outline from the resulting silhouette rather
+than having it typed alongside the fill. A change to the muzzle is one edit to
+the head part, not 24 edits to 24 frames that are then one keystroke away from
+drifting apart. The command is `python argos/ui/sprites/make_sprites.py`, run
+from anywhere, and it rewrites argos.txt in place.
+
 ```
 # idle_a
-..............kkkkkk....
-.............kwwwwwwk...
-.............kakwwwwwk..
-............kaaawwwwwk..
-............kaaawkwwwk..
+................................
+.................kk...kk........
+................kaak.kaak.......
+...............kaaaakaaaak......
+...............kaaaakaaaak......
+..............kaaawwwaaawk......
 ```
 
-The far pair of legs is drawn in the shade colour and a pixel behind the near
-pair. That one trick is most of what makes a flat two-colour dog read as
-three-dimensional, and it is what makes the four-frame walk legible at this
-size.
+Each stance is two leg clusters (fore, hind), and each cluster is a near leg
+beside a far leg in the shade colour rather than one leg with a shaded edge.
+That is what makes the animal read as four legs instead of two; an earlier cut
+of this redraw drew one leg per cluster and it stood like a kangaroo. The near
+leg's foot lands a row lower than the far leg's, which is what makes the
+four-frame walk read as a gait instead of a shuffle.
 
 One consequence to keep in mind while developing: `fetch` of a local file is
 blocked under `file://`, so the browser demo is served with

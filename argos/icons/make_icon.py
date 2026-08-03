@@ -20,14 +20,14 @@ from pathlib import Path
 
 #: Matches the palette legend at the top of the sprite file.
 PALETTE: dict[str, tuple[int, int, int, int]] = {
-    "k": (0x12, 0x23, 0x3F, 255),
-    "w": (0xF7, 0xF7, 0xF7, 255),
-    "g": (0xD3, 0xD9, 0xE4, 255),
-    "a": (0xF3, 0x9F, 0x19, 255),
-    "o": (0xC9, 0x7C, 0x0C, 255),
-    "b": (0x18, 0x57, 0xD2, 255),
-    "d": (0x1B, 0x49, 0xA0, 255),
-    "r": (0xE9, 0x01, 0x01, 255),
+    "k": (0x16, 0x0F, 0x0A, 255),
+    "w": (0xD9, 0x93, 0x47, 255),
+    "g": (0xA9, 0x6B, 0x2C, 255),
+    "a": (0x2A, 0x21, 0x19, 255),
+    "o": (0x15, 0x10, 0x0C, 255),
+    "b": (0x26, 0x68, 0xE8, 255),
+    "d": (0x16, 0x40, 0x8F, 255),
+    "r": (0xF2, 0x25, 0x25, 255),
     ".": (0x00, 0x00, 0x00, 0),
 }
 
@@ -36,7 +36,7 @@ SPRITES = HERE.parent / "ui" / "sprites" / "argos.txt"
 OUTPUT = HERE / "icon.png"
 
 #: A multiple of the sprite's own size, so every pixel scales to an exact
-#: square and nothing is resampled. 768 is 24 x 32.
+#: square and nothing is resampled. 768 is 32 x 24.
 SIZE = 768
 
 

@@ -5,12 +5,14 @@
     <title>Argos</title>
     <style>
       :root {
-        --ink: #12233f;
-        --coat: #f7f7f7;
-        --blue: #1857d2;
-        --amber: #f39f19;
-        --red: #e90101;
-        --stage: #1a1f2b;
+        --ink: #101f38;
+        --coat: #fbfcfe;
+        --blue: #2668e8;
+        --amber: #ffab21;
+        --red: #f22525;
+        --stage: #16203a;
+        --stage-edge: #24304f;
+        --muted: #8898b6;
       }
 
       html,
@@ -34,6 +36,17 @@
       #stage {
         position: absolute;
         inset: 0;
+        /* A column that stacks bottom-up is what keeps the bubble sitting on the
+           dog's head. The bubble used to be pinned to the top of the window with
+           a fixed height, so in a transparent, undecorated window it floated in
+           empty space with its tail pointing at nothing, and any title longer
+           than two lines was silently cut off. Laying them out in flow means the
+           bubble is always exactly as tall as its text and always directly above
+           the head, whatever the text turns out to be. */
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        align-items: center;
         animation: enter 420ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
       }
 
@@ -48,36 +61,47 @@
         }
       }
 
-      #dog {
-        position: absolute;
-        left: 50%;
-        bottom: 4px;
-        transform: translateX(-50%);
-        image-rendering: pixelated;
-        transition: transform 140ms ease-out;
+      /* The dog roams inside this strip, so it is the full width of the window
+         and the canvas is moved within it rather than the window being moved
+         around the desktop. */
+      #floor {
+        position: relative;
+        width: 100%;
+        height: 128px;
+        flex: none;
       }
 
-      /* A pet you can point at should notice: the lift is the affordance that
-         says this thing is draggable and clickable. */
-      #dog:hover {
-        transform: translateX(-50%) translateY(-2px);
+      #dog {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        image-rendering: pixelated;
+        /* No CSS transition on the position: the roam loop sets it every frame
+           and a transition would fight it, smearing the walk into a glide. */
       }
 
       #bubble {
-        position: absolute;
-        left: 6px;
-        right: 6px;
-        top: 6px;
-        padding: 7px 8px 8px;
-        background: var(--stage);
+        /* Sized by its content, never by a fixed height: clipping a finding's
+           title is the one thing this element must not do. */
+        width: calc(100% - 12px);
+        margin: 0 6px 9px;
+        padding: 7px 9px 8px;
+        background: linear-gradient(180deg, var(--stage-edge), var(--stage));
         border: 2px solid var(--ink);
+        border-radius: 3px;
         box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
         opacity: 0;
-        transform: translateY(-4px);
+        transform: translateY(4px) scale(0.97);
         transition:
           opacity 180ms ease,
-          transform 180ms ease;
+          transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
         pointer-events: none;
+        /* Out of flow while hidden, so the dog stands on the floor rather than
+           being pushed down by an invisible box. */
+        position: absolute;
+        bottom: 128px;
+        left: 0;
+        box-sizing: border-box;
       }
 
       #bubble.shown {
@@ -86,12 +110,14 @@
       }
 
       /* The pointer, drawn as two stacked triangles so it keeps the 2px ink
-         border the box has. */
+         border the box has. It tracks the dog horizontally, which is the other
+         half of the fix: a tail fixed at 50% pointed into empty space as soon
+         as the dog walked away from the middle. */
       #bubble::after,
       #bubble::before {
         content: "";
         position: absolute;
-        left: 50%;
+        left: var(--tail, 50%);
         border: 7px solid transparent;
       }
 
@@ -111,6 +137,7 @@
         display: inline-block;
         margin-right: 5px;
         padding: 0 4px;
+        border-radius: 2px;
         background: var(--amber);
         color: var(--ink);
         font-weight: 700;
@@ -126,9 +153,18 @@
 
       #bubble .text {
         display: block;
-        max-height: 58px;
-        overflow: hidden;
-        word-break: break-word;
+        /* Wraps and stays readable. The old rule capped this at 58px with
+           overflow hidden, which silently ate the end of every real finding
+           title, and a watchdog that truncates what it found is worse than one
+           that says nothing. */
+        max-height: 92px;
+        overflow-y: auto;
+        overflow-wrap: anywhere;
+        scrollbar-width: none;
+      }
+
+      #bubble .text::-webkit-scrollbar {
+        display: none;
       }
 
       /* Trust, when the event carries it: ten segments, because a number nobody
@@ -146,7 +182,9 @@
       #trust i {
         flex: 1;
         height: 4px;
+        border-radius: 1px;
         background: #2b3446;
+        transition: background 220ms ease;
       }
 
       #trust i.on {
@@ -165,11 +203,13 @@
         position: absolute;
         left: 8px;
         bottom: 8px;
+        z-index: 2;
         display: none;
         min-width: 132px;
         padding: 3px;
         background: var(--stage);
         border: 2px solid var(--ink);
+        border-radius: 3px;
         box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
       }
 
@@ -179,7 +219,7 @@
 
       #menu .head {
         padding: 2px 7px 4px;
-        color: #7f8da8;
+        color: var(--muted);
         letter-spacing: 0.06em;
         text-transform: uppercase;
       }
@@ -191,6 +231,7 @@
         width: 100%;
         padding: 4px 7px;
         border: 0;
+        border-radius: 2px;
         background: transparent;
         color: var(--coat);
         font: inherit;
@@ -206,6 +247,7 @@
         display: inline-block;
         width: 6px;
         height: 6px;
+        border-radius: 1px;
         background: var(--amber);
       }
 
@@ -214,7 +256,7 @@
       }
 
       #menu button:nth-child(4) b {
-        background: #7f8da8;
+        background: var(--muted);
       }
 
       #menu button:nth-child(5) b {
@@ -228,7 +270,9 @@
         <span class="text"></span>
         <div id="trust"></div>
       </div>
-      <canvas id="dog" width="192" height="192"></canvas>
+      <div id="floor">
+        <canvas id="dog" width="128" height="128"></canvas>
+      </div>
       <div id="menu">
         <div class="head">argos</div>
         <button type="button" data-cmd="scan_now"><b></b>Scan now</button>

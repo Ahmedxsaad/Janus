@@ -7,21 +7,45 @@
  * only wants to look at the art. Both pages get `window.ArgosSprites`.
  */
 window.ArgosSprites = (() => {
+  /**
+   * The character's colours.
+   *
+   * Warmer and deeper than the first pass, which read flat and slightly grey on
+   * a dark desktop. The coat keeps a hint of blue so it sits in DataHub's family
+   * rather than looking like unpainted white, the outline is a navy rather than
+   * a black so the silhouette has some colour in it, and the amber is pushed
+   * toward gold because the previous one went muddy the moment `dim` halved it.
+   *
+   * Adding a key here is not enough to use it: the art indexes these letters, so
+   * a new colour means editing frames, and tests/test_argos.py holds the palette
+   * to exactly this key set.
+   */
   const PALETTE = {
-    k: "#12233f",
-    w: "#f7f7f7",
-    g: "#d3d9e4",
-    a: "#f39f19",
-    o: "#c97c0c",
-    b: "#1857d2",
-    d: "#1b49a0",
-    r: "#e90101",
+    k: "#160f0a",
+    w: "#d99347",
+    g: "#a96b2c",
+    a: "#2a2119",
+    o: "#15100c",
+    b: "#2668e8",
+    d: "#16408f",
+    r: "#f22525",
   };
 
+  /**
+   * A soft top-down light, applied per pixel as the sprite is drawn.
+   *
+   * The art has one flat tone per material, so a pet this small reads as a
+   * sticker however good the colours are. Lifting the top rows a little and
+   * dropping the bottom rows gives it a body without asking the art to carry a
+   * second shade of every colour, which at this size it has no room for.
+   */
+  const LIGHT_TOP = 1.03;
+  const LIGHT_BOTTOM = 0.76;
+
   // Frames are square and every frame in a file is the same size, so the art
-  // decides this rather than the code: a contributor's 32x32 character needs no
-  // edit here.
-  const PIXELS = 24;
+  // decides this rather than the code: a contributor's redraw at a different
+  // resolution needs no edit here, only this one number to match it.
+  const PIXELS = 32;
 
   /**
    * Parse a character file into named 16x16 frames.
@@ -62,6 +86,22 @@ window.ArgosSprites = (() => {
   }
 
   /**
+   * Scale a hex colour's brightness, clamped, for the top-down light.
+   *
+   * The outline is exempt at the call site: lightening it turns the silhouette
+   * to mush, and the silhouette is the only reason the character reads at all
+   * against a wallpaper it did not choose.
+   */
+  function shaded(hex, factor) {
+    const value = parseInt(hex.slice(1), 16);
+    const channel = (shift) => {
+      const raw = Math.round(((value >> shift) & 255) * factor);
+      return raw > 255 ? 255 : raw;
+    };
+    return `rgb(${channel(16)},${channel(8)},${channel(0)})`;
+  }
+
+  /**
    * Draw one frame into a 2d context at the given scale.
    *
    * `style` carries the state modifiers: `alpha` for the disconnected ghost,
@@ -76,11 +116,25 @@ window.ArgosSprites = (() => {
     const originX = style.x || 0;
     const originY = (style.y || 0) + (style.bob || 0) * scale;
     ctx.globalAlpha = style.alpha === undefined ? 1 : style.alpha;
+
+    // Facing left is the same art mirrored. Doing it as a canvas transform
+    // rather than by reversing the row strings keeps the rim, which reads the
+    // same rows, in step with the body automatically.
+    const mirrored = Boolean(style.flip);
+    if (mirrored) {
+      ctx.save();
+      ctx.translate(originX * 2 + rows[0].length * scale, 0);
+      ctx.scale(-1, 1);
+    }
+
     if (style.rim !== false) {
       drawRim(ctx, rows, scale, originX, originY);
     }
+    const tall = rows.length - 1;
     for (let y = 0; y < rows.length; y += 1) {
       const row = rows[y];
+      // Top rows catch the light, bottom rows fall into the body's own shadow.
+      const light = LIGHT_TOP + (LIGHT_BOTTOM - LIGHT_TOP) * (y / tall);
       for (let x = 0; x < row.length; x += 1) {
         let key = row[x];
         if (key === ".") {
@@ -93,9 +147,19 @@ window.ArgosSprites = (() => {
         if (!colour) {
           continue;
         }
-        ctx.fillStyle = style.dim ? dimmed(colour) : colour;
+        // The outline is never lit: it is the silhouette, and a lit silhouette
+        // stops separating the dog from the wallpaper behind it.
+        ctx.fillStyle = style.dim
+          ? dimmed(colour)
+          : key === "k"
+            ? colour
+            : shaded(colour, light);
         ctx.fillRect(originX + x * scale, originY + y * scale, scale, scale);
       }
+    }
+
+    if (mirrored) {
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
   }
@@ -112,7 +176,9 @@ window.ArgosSprites = (() => {
   function drawRim(ctx, rows, scale, originX, originY) {
     const filled = (x, y) => rows[y] !== undefined && rows[y][x] !== undefined && rows[y][x] !== ".";
     ctx.save();
-    ctx.globalAlpha *= 0.55;
+    // Faint on purpose. At full strength it haloes a near-white coat into a
+    // blob, which costs more silhouette than the dark wallpaper ever did.
+    ctx.globalAlpha *= 0.3;
     ctx.fillStyle = "#e8edf5";
     for (let y = 0; y < rows.length; y += 1) {
       for (let x = 0; x < rows[y].length; x += 1) {
@@ -133,5 +199,5 @@ window.ArgosSprites = (() => {
     return parseSprites(await response.text());
   }
 
-  return { PALETTE, PIXELS, parseSprites, dimmed, drawFrame, load };
+  return { PALETTE, PIXELS, parseSprites, dimmed, shaded, drawFrame, load };
 })();

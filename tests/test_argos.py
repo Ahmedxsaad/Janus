@@ -39,7 +39,7 @@ from .conftest import make_finding
 
 UI = Path(__file__).resolve().parent.parent / "argos" / "ui"
 PALETTE_CHARS = set(".kwgaobdr")
-SPRITE = 24
+SPRITE = 32
 
 
 def _frames() -> dict[str, list[str]]:
