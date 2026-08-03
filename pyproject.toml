@@ -111,6 +111,18 @@ agent = [
 mcp = [
     "mcp==1.28.1",
 ]
+# Argos, the desktop watchdog (docs/plan/08-watchdog-mascot.md). The window is a
+# Tauri binary, so unlike every other extra this one is a platform wheel rather
+# than pure Python.
+#
+# The marker is not a workaround, it is the honest form of a policy: the binary
+# links the system webkit2gtk, which no manylinux tag permits, so PyPI cannot
+# accept a Linux wheel. Linux installs the .deb or .AppImage from the GitHub
+# release, and `modelguard watch --pet` finds it on PATH exactly the same way.
+# With neither installed, the pet degrades to a terminal line and says so.
+pet = [
+    "modelguard-argos==0.1.0; platform_system != 'Linux'",
+]
 dev = [
     # The strict mypy hook scans every package module, including the optional
     # approval agent and MCP server. Keep the dev environment complete so a

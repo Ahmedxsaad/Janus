@@ -1,0 +1,108 @@
+# Builds the Argos desktop window for every platform it can ship on, and
+# attaches the results to the release.
+#
+# Two artefact kinds come out of one crate, because there are two install
+# routes and neither covers everybody:
+#
+# * platform wheels (maturin), so `pip install "modelguard-datahub[pet]"` puts a
+#   window on macOS and Windows with no Rust toolchain in sight;
+# * OS bundles (`cargo tauri build`), which is the only route on Linux. That is
+#   policy rather than effort: the binary links the system webkit2gtk, which no
+#   manylinux tag permits, so PyPI will not accept a Linux wheel
+#   (docs/plan/08-watchdog-mascot.md section 6b).
+#
+# Windows is the one platform this repository cannot test from a developer
+# machine, and it is where the transport is least certain: a release build sets
+# windows_subsystem="windows" and has no console, so the inherited stdin and
+# stdout pipe handles are what the whole thing rests on. The smoke step below
+# feeds one event in and fails the build if the binary does not take it.
+name: Build Argos
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  # Buildable on demand as well: the compile is the slow part of reviewing a
+  # change to the crate, and nobody should have to cut a tag to find out.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing to build must not hide whether the others did.
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos arm64
+            os: macos-14
+            wheel: true
+          - name: macos x86_64
+            os: macos-13
+            wheel: true
+          - name: windows x86_64
+            os: windows-latest
+            wheel: true
+          - name: linux x86_64
+            os: ubuntu-22.04
+            wheel: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Tauri's Linux webview and its dependencies. Nothing to install on macOS
+      # or Windows: the system webview is part of the OS there.
+      - name: install the Linux webview
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: the stdin parser
+        working-directory: argos
+        run: cargo test --release
+
+      - name: build the binary
+        working-directory: argos
+        run: cargo build --release
+
+      # The transport, checked on the platform rather than assumed. One event
+      # in, and the process must still be alive: a binary that cannot read its
+      # own stdin is a window that will never show anything.
+      - name: smoke the stdio transport
+        run: python .github/scripts/smoke_argos.py
+
+      - name: build the wheel
+        if: matrix.wheel
+        working-directory: argos
+        run: |
+          python -m pip install "maturin>=1.7,<2"
+          maturin build --release --out dist
+
+      # The .dmg, .msi, .deb and .AppImage. Unsigned, which matters only for the
+      # download route: pip does not set the macOS quarantine attribute or the
+      # Windows mark of the web, so a wheel-installed binary starts without a
+      # Gatekeeper or SmartScreen prompt and a downloaded bundle does not.
+      - name: build the OS bundles
+        working-directory: argos
+        run: |
+          cargo install tauri-cli --version "^2" --locked
+          cargo tauri build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: argos-${{ matrix.os }}
+          if-no-files-found: warn
+          path: |
+            argos/dist/*.whl
+            argos/target/release/bundle/**/*
