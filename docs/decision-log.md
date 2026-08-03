@@ -16,6 +16,49 @@ Entry template:
 
 ---
 
+## D-105: Every click on the dog was dying at mousedown, and the fetch never caught anything (2026-08-03)
+- Decided by: Ahmed Saad (reported the toy would not throw, then that the toy
+  was too small and smooth, then that the dog never picked it up), fixed by
+  Claude.
+- Decision: three fixes to the window, no change to the event contract.
+  1. **`startDragging()` waits for an actual drag.** It fired on the bare
+     mousedown, which hands the pointer to the window manager for a native
+     window move; on WebKitGTK that swallows the matching mouseup rather than
+     delivering it. Every click and double-click on the dog therefore died
+     half-finished: mousedown fired and nothing else ever did, so petting, the
+     bubble toggle, the blast-radius walk and the fetch all looked dead. It is
+     now gated on the press lasting 120ms *and* moving 10px.
+  2. **The toy is drawn from the palette** on a canvas at the sprite's own
+     4px-per-pixel scale, instead of a 10px `border-radius` circle.
+  3. **The fetch aims his mouth, not his centre.** Aiming the centre left him
+     stopping half a body short, and the pickup then fired anyway, so the toy
+     blinked out of existence beside him. The toy also stays visible in his
+     mouth for the celebration instead of being removed the instant he
+     arrives, and a throw is clamped to what his mouth can actually reach.
+- Options considered:
+  - For the click: moving the gesture to a double-click (tried first, and
+    reverted: it changed nothing, because the same swallowed mouseup breaks a
+    double-click exactly as it breaks a single one), reading the cause out of
+    tao/wry's source (inconclusive: the relevant handler is ours, not theirs),
+    or instrumenting the running window to see which DOM events actually
+    arrive. The third is what found it, after the first two were guesses.
+  - For the toy: a bigger CSS circle, an emoji, or pixels from the same
+    palette everything else in the window is drawn from.
+- Why: the first two attempts at the click were reasoned from the outside and
+  both were wrong, in the same way: a plausible cause (the window manager
+  eating a lone click against an always-on-top undecorated surface) that
+  nothing had actually measured. A temporary readout of every pointer event
+  reaching the page answered it in one click, and the answer was our own code.
+  The lesson is in the fix's comment so the next person does not re-derive it:
+  when a gesture does not arrive, look at what the page received before
+  theorising about the compositor.
+- Result: `argos/ui/argos.js` and `argos/ui/index.html`. Verified by driving
+  the real page over CDP: the ball canvas paints, he walks to the toy, and the
+  held frame puts it at his mouth (12px across, 44px down inside the sprite,
+  which is the muzzle) rather than beside him. Full suite 590 green,
+  `cargo build --release` clean, and the rebuilt binary run live against the
+  Quickstart.
+
 ## D-104: A documentation site at site/, with Argos walking the reader down it (2026-08-03)
 - Decided by: Ghassen Naouar (asked for a landing page documenting what ships to
   a user, with the pixel character moving and explaining between sections, in a

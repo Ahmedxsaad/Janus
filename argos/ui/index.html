@@ -161,25 +161,33 @@
 
       /* The thrown toy. It lands where the click was and he goes and gets it;
          like the petting, it is a reaction to a hand and says nothing about the
-         catalogue. `left` is set from the click, the animation does the arc. */
+         catalogue. `left` is set from the click, the animation does the arc.
+
+         A canvas, drawn from the same palette at the same 4px-per-pixel scale
+         the dog is: as a 10px border-radius circle it was the only thing in
+         the window that was not made of pixels, and it read as a dot rather
+         than a ball. */
       #ball {
         position: absolute;
-        bottom: 7px;
+        bottom: 6px;
         left: 0;
         display: none;
-        box-sizing: border-box;
-        width: 10px;
-        height: 10px;
-        margin-left: -5px;
-        border: 2px solid var(--ink);
-        border-radius: 50%;
-        background: var(--blue);
+        width: 24px;
+        height: 24px;
+        margin-left: -12px;
+        image-rendering: pixelated;
         pointer-events: none;
       }
 
       #ball.shown {
         display: block;
         animation: toss 700ms cubic-bezier(0.32, 0, 0.7, 1) both;
+      }
+
+      /* In his mouth: no arc, no bounce, and `bottom` comes from the script,
+         because from here it follows his head rather than the floor. */
+      #ball.held {
+        display: block;
       }
 
       @keyframes toss {
@@ -396,7 +404,7 @@
       <div id="floor">
         <canvas id="dog" width="128" height="128"></canvas>
         <i id="shout"></i>
-        <i id="ball"></i>
+        <canvas id="ball" width="24" height="24"></canvas>
       </div>
       <div id="menu">
         <div class="head">argos</div>

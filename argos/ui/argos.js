@@ -168,6 +168,31 @@ const FETCH_MS = 1500;
 /** Desktop pixels per second while roaming. A trot, not a sprint. */
 const ROAM_SPEED = 26;
 
+/**
+ * Where his mouth is inside the 128px canvas, facing each way, and how high
+ * off the floor. Read off the sprite: the muzzle tip is around column 29 of
+ * 32 and the jaw around row 11, which at 4px per sprite pixel puts the mouth
+ * at 116px across and 44px down. Facing left is the mirror of that.
+ *
+ * These are what the fetch aims at. Aiming his centre instead left him
+ * standing half a body short of the toy, which is why the pickup used to look
+ * like the toy blinking out rather than being caught.
+ */
+const MOUTH_X_RIGHT = 116;
+const MOUTH_X_LEFT = 12;
+const MOUTH_Y_BOTTOM = 72;
+
+/**
+ * The toy, as pixels rather than a CSS circle.
+ *
+ * A border-radius circle is the one thing on this window that is not made of
+ * the same pixels the dog is, and at 10px it read as a dot rather than a ball.
+ * Drawn from the shared palette at the sprite's own scale, it belongs to the
+ * same picture: `b`/`d` are the collar's blue and its shade, `w` the coat
+ * white for the highlight, `k` the outline everything else carries.
+ */
+const BALL_ART = ["..kk..", ".kwwk.", "kwbbbk", "kbbbdk", ".kbdk.", "..kk.."];
+
 /** Send one command line to the producer, if there is one listening. */
 function sendCommand(cmd, args = {}) {
   const line = JSON.stringify({ cmd, args });
@@ -257,8 +282,10 @@ class Argos {
     this.pointer = null;
     this.petUntil = 0;
     this.pets = 0;
-    // Where the thrown toy landed, and until when he is busy with it.
+    // Where the thrown toy landed, whether it is in his mouth, and until when
+    // he is busy with it.
     this.ballX = null;
+    this.ballHeld = false;
     this.fetchUntil = 0;
 
     for (let index = 0; index < 10; index += 1) {
@@ -399,24 +426,49 @@ class Argos {
     if (!STATES[this.state].roams || this.petting(performance.now())) {
       return;
     }
-    this.ballX = Math.max(8, Math.min(this.floor.clientWidth - 8, x));
+    // Which way he will have to face to have the toy in front of him, decided
+    // before the target so the reach can be measured from the right side of
+    // his head.
+    const facingRight = x > this.x + this.size / 2;
+    const mouth = facingRight ? MOUTH_X_RIGHT : MOUTH_X_LEFT;
+
+    // Only land the toy somewhere his mouth can actually arrive at. The reach
+    // is not the strip: he stands at x within [0, span] and his mouth is a
+    // fixed offset along that, so the far edges of the floor are past him even
+    // when he is standing as far over as he goes.
+    this.ballX = Math.max(MOUTH_X_LEFT, Math.min(this.span + MOUTH_X_RIGHT, x));
     // Same animation restart as the shout: a second throw must re-arc.
     this.ball.className = "";
     void this.ball.offsetWidth;
     this.ball.style.left = `${Math.round(this.ballX)}px`;
+    // Back on the floor: a previous carry left `bottom` up at his mouth.
+    this.ball.style.bottom = "";
     this.ball.className = "shown";
-    // He goes now, whatever he had planned. Interrupting the rest is the point.
-    this.target = Math.max(0, Math.min(this.span, this.ballX - this.size / 2));
-    this.facing = this.target > this.x ? 1 : -1;
+
+    // Walk his *mouth* onto the toy, not his centre. Aiming the centre was the
+    // bug that made the fetch look broken: he stopped half a body short of the
+    // toy, and then the pickup fired anyway and the toy simply blinked out of
+    // existence next to him rather than being picked up by anything.
+    this.target = Math.max(0, Math.min(this.span, this.ballX - mouth));
+    this.facing = facingRight ? 1 : -1;
     this.restUntil = 0;
     this.fetchUntil = 0;
+    this.ballHeld = false;
   }
 
   /** Take the toy off the floor, whether he reached it or the game was cut. */
   dropToy() {
     this.ballX = null;
     this.fetchUntil = 0;
+    this.ballHeld = false;
     this.ball.className = "";
+  }
+
+  /** Keep a held toy in his mouth, wherever his mouth currently is. */
+  carryToy() {
+    const mouth = this.facing === 1 ? MOUTH_X_RIGHT : MOUTH_X_LEFT;
+    this.ball.style.left = `${Math.round(this.x + mouth)}px`;
+    this.ball.style.bottom = `${MOUTH_Y_BOTTOM}px`;
   }
 
   /**
@@ -452,9 +504,13 @@ class Argos {
       this.x = this.target;
       this.target = null;
       if (this.ballX !== null) {
-        // Got it. The toy comes off the floor and he is pleased for a moment
-        // before the patrol picks up where it left off.
-        this.dropToy();
+        // Got it. He holds the toy in his mouth and is pleased about it for a
+        // moment before the patrol picks up where it left off. The toy stays
+        // on screen for that moment rather than being removed here: taking it
+        // away the instant he arrived was what made the pickup read as the toy
+        // vanishing rather than as a dog catching anything.
+        this.ballHeld = true;
+        this.ball.className = "held";
         this.fetchUntil = now + FETCH_MS;
         this.restUntil = now + FETCH_MS;
         return false;
@@ -497,6 +553,15 @@ class Argos {
     // while the toy is in his mouth, the wag while a hand is on the dog,
     // otherwise the state's own.
     const fetching = now < this.fetchUntil;
+    // The toy rides in his mouth for as long as he is pleased with it, and
+    // goes away when that is over rather than the instant he reached it.
+    if (this.ballHeld) {
+      if (fetching) {
+        this.carryToy();
+      } else {
+        this.dropToy();
+      }
+    }
     const timeline = moving
       ? WALK_CYCLE
       : fetching
@@ -622,10 +687,17 @@ function bindInteractions(app) {
   });
   canvas.addEventListener("dblclick", () => app.walk());
 
-  // A click on the floor beside him throws the toy there. The canvas is left
-  // out because a click on the dog is a pat, and a click while the menu is open
-  // is somebody dismissing the menu rather than starting a game.
-  app.floor.addEventListener("click", (event) => {
+  // A double-click (left button) on the floor beside him throws the toy
+  // there. Single click was tried first and dropped: reported unreliable in
+  // the actual window. A double-click asks for the same click twice in quick
+  // succession, so one click lost to the window manager (raising or focusing
+  // an always-on-top, undecorated, transparent window is exactly the kind of
+  // thing that can eat a lone click before the page ever sees it) still
+  // leaves a real click behind for the page. The canvas is left out because a
+  // click there is a pat and a double-click there already walks the blast
+  // radius; a click while the menu is open is somebody dismissing the menu
+  // rather than starting a game.
+  app.floor.addEventListener("dblclick", (event) => {
     if (event.target === canvas || app.menu.classList.contains("shown")) {
       return;
     }
@@ -668,14 +740,48 @@ function bindInteractions(app) {
   });
 
   // Dragging a frameless window is a window-manager operation, not a CSS one.
+  //
+  // startDragging() must not fire on the bare mousedown: it hands the pointer
+  // to the OS for a native window move, which on at least one real desktop
+  // (WebKitGTK on Linux) swallows the matching mouseup rather than delivering
+  // it to the page. Called unconditionally, that turns every click and
+  // double-click on the dog into a click that never finishes: mousedown
+  // fires, nothing else ever does, and the pet and the fetch look dead.
+  // Verified live: with this handler removed entirely, an ordinary click
+  // fires mousedown and click both; with it back and gated on a 4px-only
+  // threshold, plain clicks still lost their mouseup, so real hardware jitter
+  // during an ordinary click is bigger than a first guess assumed. The gate
+  // below is both a distance *and* a hold-time floor, checked together: a
+  // click's jitter happens right at press-down, so ignoring movement for the
+  // first 120ms and then asking for a real 10px is what tells an intentional
+  // drag apart from a hand that was never quite still.
   canvas.addEventListener("mousedown", (event) => {
     if (event.button !== 0 || !window.__TAURI__) {
       return;
     }
-    window.__TAURI__.window
-      .getCurrentWindow()
-      .startDragging()
-      .catch(() => {});
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startAt = performance.now();
+    const onMove = (moveEvent) => {
+      if (performance.now() - startAt < 120) {
+        return;
+      }
+      const moved = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+      if (moved < 10) {
+        return;
+      }
+      cleanup();
+      window.__TAURI__.window
+        .getCurrentWindow()
+        .startDragging()
+        .catch(() => {});
+    };
+    const cleanup = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", cleanup);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", cleanup, { once: true });
   });
 
   // A dropped file is a path, and only the window API knows it: an HTML5 File
@@ -696,9 +802,17 @@ function bindInteractions(app) {
   }
 }
 
+/** Paint the toy once. It never changes, so it never needs redrawing. */
+function drawBall() {
+  const canvas = document.getElementById("ball");
+  const scale = canvas.width / BALL_ART.length;
+  window.ArgosSprites.drawFrame(canvas.getContext("2d"), BALL_ART, scale);
+}
+
 async function main() {
   const frames = await window.ArgosSprites.load();
   const app = new Argos(document.getElementById("dog"), frames);
+  drawBall();
   bindInteractions(app);
   await connect((event) => app.apply(event));
   const loop = (now) => {
