@@ -16,6 +16,47 @@ Entry template:
 
 ---
 
+## D-099: Argos redrawn, three more states, and a live run that found a lie (2026-08-03)
+- Decided by: Ghassen Naouar (asked for the design to be improved a lot and for
+  the whole thing to be tested against a live DataHub), built by Claude.
+- Decision: the character moves to 24x24 and 24 frames, the window becomes
+  something worth leaving on screen, and three states join the nine.
+  1. **24x24, not 16x16.** Sixteen pixels could not carry a snout, an eye with a
+     highlight, or a four-frame walk. The frames are authored by filling
+     silhouettes and auto-outlining them, so a variant is a small edit rather
+     than 24 retyped rows, and the text file stays the artifact.
+  2. **Three new states, each with a real event behind it**, which is the rule
+     this surface lives by: `recovered` (a finding that was open stopped
+     reproducing, a transition only the watch loop knows), `unchecked`
+     (detect/coverage.py found a check it could not run, and a check that could
+     not run must not be drawn like one that passed), and `muted` (the user
+     muted, and the dog says so rather than going quiet in a way that reads as
+     health).
+  3. **Animation is a timeline of frame-and-hold, not a frame rate.** A
+     two-second hold and a 130ms blink is a dog; four frames at 3fps is a
+     flipbook.
+  4. **The sprite carries a light rim** outside its own dark outline. DataHub's
+     near-black vanishes against a dark wallpaper and takes the silhouette with
+     it. A desktop pet cannot choose its background.
+- Options considered: for the trust meter's colour, re-deriving the band from
+  the score in JavaScript (what the first build did) against sending the band
+  the detector decided. The live run settled it: the seeded model scores 70,
+  which is at the healthy floor, but its band is WATCH because a critical
+  finding caps it (D-067), so the meter painted an at-risk model healthy-blue
+  while the catalogue called it watch. The band now rides on the event and the
+  renderer applies no thresholds of its own.
+- Why: the surface only earns its place if it is worth looking at, and an
+  ambient display that disagrees with the catalogue it reports on is worse than
+  no display.
+- Result: 24 frames, 12 states, a bubble with a pointer, a severity chip, an
+  auto-hide and a trust meter, a contact shadow, an entry squash, a bark shake,
+  and a walk overlay with a dashed trail and a banner. Verified against a
+  running Quickstart: `watch --pet` on the seeded graph raised the leakage
+  finding and barked it; `companion` swept an owned table and reported an open
+  incident, a failing assertion run and a deprecation in one poll, ranked
+  incident first. That run closes both of D-098's live-GMS `[confirm]` items:
+  the `owners` filter field name and the assertion `filter_criteria_map`.
+
 ## D-098: Argos, the desktop companion, and the stdio protocol behind it (2026-08-03)
 - Decided by: Ghassen Naouar (four choices settled through the planning
   session), built by Claude on `feat/argos-companion`.

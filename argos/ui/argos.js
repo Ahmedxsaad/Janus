@@ -152,8 +152,15 @@ class Argos {
     const chip = severity ? `<span class="chip ${severity}">${severity}</span>` : "";
     this.bubbleText.innerHTML = `${chip}${escapeHtml(event.title)}`;
 
+    // The colour comes from the band the detector decided, never from a
+    // threshold applied to the score again here. A model can score 70 and still
+    // be on watch, because a critical finding caps its band, and a meter that
+    // re-derived the band would paint that model healthy while the catalogue
+    // calls it watch.
     const score = typeof event.trust === "number" ? event.trust : null;
-    this.trust.className = score === null ? "" : score >= 70 ? "shown" : score >= 40 ? "shown watch" : "shown risk";
+    const band = (event.band || "").toLowerCase();
+    this.trust.className =
+      score === null ? "" : band === "at-risk" ? "shown risk" : band === "watch" ? "shown watch" : "shown";
     if (score !== null) {
       const lit = Math.round(score / 10);
       [...this.trust.children].forEach((segment, index) => {

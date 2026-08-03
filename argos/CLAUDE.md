@@ -25,9 +25,16 @@ installers. Run the frontend alone with `python -m http.server` inside `ui/`;
    taken on PyPI and is too generic to claim on somebody's PATH.
 5. No detection, no DataHub calls, no credentials, no network. This process
    draws and forwards clicks. Anything else belongs to the producer.
-6. Art is text. Frames live in `ui/sprites/argos.txt`, 16 rows of 16 characters,
-   and `tests/test_argos.py` checks the geometry and the palette. No frame
-   paints red: red is state, applied by the renderer when a finding is live.
+6. Art is text. Frames live in `ui/sprites/argos.txt`, 24 rows of 24 characters,
+   and `tests/test_argos.py` checks the geometry, the palette, and that no frame
+   the window names is missing or unreachable. Only the two bark frames carry
+   red: red is state, applied by the renderer when a finding is live.
+7. The sprite carries a one-pixel light rim outside its own dark outline. That
+   outline is DataHub's near-black and it vanishes against a dark wallpaper,
+   taking the silhouette with it; a desktop pet cannot choose its background.
+8. The renderer applies no thresholds. A trust band arrives on the event because
+   the detector decided it, and re-deriving it here would let the window
+   disagree with the catalogue it is reporting on.
    `icons/icon.png` is generated from that file by `icons/make_icon.py`; a PNG
    is unavoidable there because every OS bundler demands one.
 
@@ -36,3 +43,4 @@ installers. Run the frontend alone with `python -m http.server` inside `ui/`;
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-03 | Claude (for Ghassen Naouar) | Initial version: the Tauri v2 window, the stdio contract, the no-npm rule and the sprite format (D-098) |
+| 2026-08-03 | Claude (for Ghassen Naouar) | 24x24 and 24 frames, authored by filling silhouettes and auto-outlining. Rule 6 gains the rim: the sprite carries one light pixel outside its dark outline, because a desktop pet cannot choose its background (D-099) |

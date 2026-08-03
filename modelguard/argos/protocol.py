@@ -103,6 +103,16 @@ class Event:
     """A model's trust score, 0 to 100, when this event is about one. Drawn as a
     ten-segment meter under the bubble: a number nobody can read at a glance is
     not ambient."""
+
+    band: str | None = None
+    """The trust band that score belongs to, as the detector decided it.
+
+    Sent rather than derived, and that is not redundancy. A band is not a
+    threshold applied to a score: `detect/trust_score.py` caps it at WATCH when
+    the worst finding is CRITICAL or HIGH, so a model can score 70 (healthy by
+    points) and still be on watch. A renderer that re-applied the thresholds
+    would colour that model green while the catalogue calls it watch, which is
+    an ambient display telling a comfortable lie."""
     path: tuple[Hop, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
@@ -127,6 +137,7 @@ class Event:
             ("severity", self.severity),
             ("link", self.link),
             ("trust", self.trust),
+            ("band", self.band),
         ):
             if value is not None and value != "":
                 payload[key] = value
@@ -163,6 +174,7 @@ class Event:
             severity=payload.get("severity"),
             link=payload.get("link"),
             trust=payload.get("trust"),
+            band=payload.get("band"),
             path=tuple(Hop(urn=hop["urn"], column=hop.get("column")) for hop in raw_path),
         )
 

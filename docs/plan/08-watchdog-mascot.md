@@ -7,9 +7,10 @@ configuration reference and the code in this repository. The dog is **Argos**,
 the shell is **Tauri v2**, the transport is **stdio**, the scope is a general
 DataHub companion, and distribution is pip-first.
 
-Built the same day, on `feat/argos-companion` (D-098). Section 10 says what is
-done, section 8 what is not, and the three places the build corrected this
-document say so where they sit.
+Built the same day, on `feat/argos-companion` (D-098), redrawn and run against
+a live DataHub Quickstart the same evening (D-099). Section 10 says what is
+done, section 8 what is not, and the places the build corrected this document
+say so where they sit.
 
 Claims in this document are marked `[verified]` when they were checked on
 2026-08-03 against acryl-datahub 1.6.0.13 in `.venv`, the Tauri v2 config
@@ -56,23 +57,27 @@ Python, and the sprite only depicts what a detector already measured. It never
 animates on a timer to look busy. A state with no event source does not get
 drawn.
 
-The middle column is the honest one. Only two structured log sites exist today,
-`agent/pipeline.py:839` ("scan complete") and `cli.py:1061` ("watch poll
-failed") [verified], so five of these nine states have no source yet and the
-build has to create one. How, and why through logging rather than callbacks, is
-in section 6.
+Twelve states, and every one of them names the code that fires it.
 
-| Sprite state | Fires when | Source | Exists today |
-|---|---|---|---|
-| Patrolling | poll completed, nothing found | `cli._watch_once` | yes |
-| Barking, red collar | a Finding was emitted | `agent/pipeline.py` | yes |
-| Asleep | N polls, no change | `cli._finding_signature` | yes |
-| Sick, dimmed | trust score dropped a band | `detect/trust_score.py` | yes, from the report |
-| Ghost, translucent | cannot reach DataHub | `client.connect` | yes, from a failed poll |
-| Sniffing | lineage traversal in flight | `detect/graph_reads.py` | needs a log line |
-| Head tilt | narrator drafting prose | `agent/narrate.py` | needs a log line |
-| Scribbling | an aspect was actually written | `writeback/*` | needs a log line |
-| Tugging sleeve | an approval is pending | `scan --review` | needs a log line |
+| Sprite state | Fires when | Source |
+|---|---|---|
+| Patrolling | poll completed, nothing found | `cli._watch_once` |
+| Barking, red collar | a Finding was emitted | `agent/pipeline.py` |
+| Recovered, wagging | a finding that was open stopped reproducing | the transition in `cli._watch_once` |
+| Asleep | N polls, no change | `cli._finding_signature` |
+| Sick, dimmed | trust score below its healthy band | `detect/trust_score.py` |
+| Unchecked, looking around | a check could not run | `detect/coverage.py` |
+| Muted, sitting | the user muted from the menu | `argos/producer.py` |
+| Ghost, translucent | cannot reach DataHub | `client.connect` |
+| Sniffing | lineage traversal in flight | `detect/blast_radius.py` log line |
+| Head tilt | narrator drafting prose | `agent/narrate.py` log line |
+| Scribbling | an aspect was actually written | `writeback/incidents.py` log line |
+| Tugging sleeve | an approval is pending | `agent/graph.py` log line |
+
+The last four are phases of a call that has not returned yet, so nothing returns
+them and the log is where a reader learns they started. They arrive through
+`logs.phase()` and `argos/handler.py` rather than through a callback threaded
+into a detector's signature.
 
 The ghost row is the one that earns trust. A cheerful pet that is silently
 disconnected is a lie, and it is how ambient status displays get switched off.
@@ -112,8 +117,10 @@ reasoning survives: *Cerb* (Cerberus guards a crossing, and `modelguard gate` is
 literally a gate, but it reads as menacing unless drawn as a puppy) and *Scout*
 (warmest to a non-technical judge, least distinctive).
 
-A side-profile watchdog, 16x16, facing right, with a floppy amber ear, a blue
-collar, and a tail that lifts when it wags.
+A side-profile watchdog, 24x24, facing right, with a floppy amber ear, a blue
+collar at the throat, and a tail that lifts when it wags. Draft 1 was 16x16 and
+too small to carry a snout, an eye with a highlight, or a four-frame walk; at
+24 the animal reads without being explained.
 
 **Colour rule: red is state, not decoration.** The dog is blue and amber while
 the graph is healthy. Red enters only on a live finding, on the collar tag. That
@@ -129,11 +136,13 @@ Palette, quantised from the DataHub logo rather than guessed:
 | `#F39F19` | amber, ear and tail |
 | `#E90101` | red, findings only |
 | `#F7F7F7` | coat |
-| `#242424` | logo ground, used as the stage |
+| `#D3D9E4` | coat shade, the far pair of legs and the belly |
+| `#C97C0C` | amber shade, the underside of the ear and tail |
+| `#1A1F2B` | stage, behind the bubble and the menu |
 
 ### Sprite as data
 
-A frame is 16 strings of 16 characters, one character per pixel, indexing a
+A frame is 24 strings of 24 characters, one character per pixel, indexing a
 named palette. All of a character's frames live in one plain text file,
 `argos/ui/sprites/argos.txt`, each opened by a `# name` line and loaded by
 `fetch` at startup, so the same file feeds the desktop window, the browser demo
@@ -142,12 +151,18 @@ still a reviewable text diff, and it is one request instead of eleven with no
 index to keep in step.
 
 ```
-".........kkkk...",
-"........kkaaakk.",
-".......kkawwwwk.",
-"..kk...kawwwwwk.",
-".kaak..kawwkwwk.",
+# idle_a
+..............kkkkkk....
+.............kwwwwwwk...
+.............kakwwwwwk..
+............kaaawwwwwk..
+............kaaawkwwwk..
 ```
+
+The far pair of legs is drawn in the shade colour and a pixel behind the near
+pair. That one trick is most of what makes a flat two-colour dog read as
+three-dimensional, and it is what makes the four-frame walk legible at this
+size.
 
 One consequence to keep in mind while developing: `fetch` of a local file is
 blocked under `file://`, so the browser demo is served with
@@ -163,10 +178,14 @@ Why text and not PNG, all of them the reason to do it this way:
 - The art can be authored and verified in-session, with frames rendered and
   inspected, rather than blocking on an asset pipeline.
 
-Eleven frames exist: `idle_a`, `idle_b`, `walk_a`, `walk_b`, `sniff`,
-`alert_a`, `alert_b`, `sleep`, `tilt`, `scribble`, `tug`. The two health
-modifiers need no art of their own: `sick` dims the palette and `ghost` drops
-the alpha, both applied by the renderer.
+Twenty-four frames exist: idle and blink, a four-frame walk, sniff, bark, tilt,
+sleep, sit, scribble, tug, wag and search, most of them in two-frame pairs. The
+two health modifiers need no art of their own: `sick` dims the palette and
+`ghost` drops the alpha, both applied by the renderer.
+
+Animation is a timeline of frame-and-hold rather than a frame rate. The life is
+in the uneven timing: a two-second hold and a 130ms blink is a dog, four frames
+at 3fps is a flipbook.
 
 `argos/icons/icon.png` is generated from this same file by
 `argos/icons/make_icon.py`, standard library only. A PNG is unavoidable there
@@ -357,6 +376,26 @@ Wayland user gets until it changes.
   `set_ignore_cursor_events(true)`, animates inside it, and destroys it when the
   path ends.
 
+### What makes it worth leaving on screen
+
+Four things, and each one exists because its absence was visible:
+
+- **A rim.** One light pixel outside the sprite's own dark outline. DataHub's
+  near-black outline disappears against a dark wallpaper and takes the
+  silhouette with it, so the tail stopped looking attached to the dog. A
+  desktop pet cannot choose its background, so it carries its own separation.
+- **A contact shadow**, so the dog is on the desktop rather than floating above
+  it, and an entry squash on every state change, so a change reads as the dog
+  reacting rather than the sprite being swapped.
+- **A trust meter**, ten segments under the bubble. Its colour comes from the
+  band the detector decided, never from a threshold re-applied in JavaScript: a
+  model can score 70 and still be on watch, because a critical finding caps its
+  band, and a meter that re-derived that would paint it healthy while the
+  catalogue calls it watch. That bug was live for one build and is the reason
+  the band now rides on the event.
+- **A bubble that leaves.** It fades in with a pointer and a severity chip, and
+  hides after nine seconds. A bubble that never leaves is a sticker.
+
 ### The fallback that costs nothing
 
 `rich` is already a dependency. A terminal line inside `modelguard watch` works
@@ -445,18 +484,21 @@ are verified to exist:
 
 | Source | What it calls | Status |
 |---|---|---|
-| Owned assets | `DataHubGraph.get_urns_by_filter(entity_types=..., extraFilters=[{"field": ..., "values": [...]}])` | symbol [verified]; the owners field name needs a live GMS [confirm] |
+| Owned assets | `DataHubGraph.get_urns_by_filter(entity_types=..., extraFilters=[{"field": "owners", "values": [owner]}])` | [verified] against a live GMS on 2026-08-03 |
 | Open incidents | `writeback/incidents.py:142` `attached_incident_urns` and `:165` `find_active_incident`, already written for read-before-write | [verified], reuse as-is |
 | Deprecations | `get_aspect(urn, DeprecationClass)`, the pattern at `detect/governance.py:212` | [verified] |
-| Failing assertions | `DataHubGraph.get_latest_timeseries_value(urn, AssertionRunEventClass, filter_criteria_map)` | symbol [verified]; the filter map contents need a live GMS [confirm] |
+| Failing assertions | `get_latest_timeseries_value(assertion_urn, AssertionRunEventClass, {"asserteeUrn": dataset_urn})` | [verified] against a live GMS on 2026-08-03 |
 
 The companion needs to know whose assets to watch, and an owner identifies an
 account, so per root CLAUDE.md rule 6a it gets no default and no fallback: the
 variable is declared in `modelguard/env.py`, added to `.env` and `.env.example`
 in the same position, and a missing value fails loudly naming the variable.
 
-Done when: a seeded incident and a lifted deprecation both move the dog with no
-ModelGuard scan running anywhere.
+Done, and checked against a running Quickstart on 2026-08-03: an owned table
+carrying an open incident, a failing assertion run and a deprecation produced
+all three issues in one sweep, ranked incident first, with the dog barking
+"Stale upstream data in ecommerce.public.loans_raw (+2 more)" and no ModelGuard
+scan running anywhere.
 
 The rest of the give-back, ranked by payoff per hour:
 
@@ -485,10 +527,10 @@ The rest of the give-back, ranked by payoff per hour:
 ## 8. What is not done
 
 Sections 5, 6, 6b and 7's first item are built and on the branch
-`feat/argos-companion` (D-098). What is still open:
+`feat/argos-companion` (D-098, D-099), and both producers have been run against
+a live DataHub Quickstart. What is still open:
 
 - The bubble uses scaled-down system mono rather than an authored bitmap font.
-- The barking frame's open mouth reads a little like a beak at 16x16.
 - Give-back items 2 to 5 in section 7 (the sprite format as a contribution
   path, the `datahub-actions` plugin, the licensed mascot, MCP visibility).
 - The wheel build itself has not been run: maturin is not installed on the
@@ -496,24 +538,23 @@ Sections 5, 6, 6b and 7's first item are built and on the branch
   and the CI matrix is the first thing that will run it.
 - Windows and macOS are unverified entirely. Both are in the build matrix, and
   the Windows stdio question in section 6 is the one that could still bite.
+- The window's interactions (click, right-click, drag, drop) have been exercised
+  by hand rather than by a test, because a test would need a display and a
+  synthetic pointer.
 
 ## 9. What is still open
 
-Answered: the name (Argos), the shell (Tauri v2), the transport (stdio), the
-producer topology (the companion owns the window), the source of the
-fine-grained states (log lines and a handler), the scope (general companion),
-the distribution (pip, with Linux on Releases). The hackathon deadline is no
-longer treated as a constraint on this work.
+Answered: the name, the shell, the transport, the producer topology, the source
+of the fine-grained states, the scope, and the distribution. Closed by running
+it: both live-GMS reads in section 7.
 
 Genuinely open, and each one blocks only the piece it names:
 
-1. The owners filter field name for `get_urns_by_filter`, and the
-   `filter_criteria_map` for the assertion run read. Both need a live GMS.
-2. Whether stdio pipes reach a Windows GUI-subsystem build. Needs Windows.
-3. The `datahub-actions` plugin API. Needs the installed package.
-4. The maturin flag that skips auditwheel repair for the local Linux build.
-5. Code signing identities for the Releases artefacts, an ownership decision.
-6. Whether the speech bubble gets an authored bitmap font or keeps system mono.
+1. Whether stdio pipes reach a Windows GUI-subsystem build. Needs Windows.
+2. The `datahub-actions` plugin API. Needs the installed package.
+3. The maturin flag that skips auditwheel repair for the local Linux build.
+4. Code signing identities for the Releases artefacts, an ownership decision.
+5. Whether the speech bubble gets an authored bitmap font or keeps system mono.
 
 ## 10. Build order
 
@@ -524,8 +565,8 @@ art is finished before any Rust exists.
 |---|---|---|
 | P0 | protocol, `argos/ui/`, sprite file, a recorded event fixture | done, checked in a browser over `python -m http.server` |
 | P1 | Tauri shell and the stdio bridge | done, window screenshotted rendering a fixture event |
-| P2 | `modelguard watch --pet`, the log lines and `ArgosHandler` | done, unit-tested; a live watch needs a running GMS |
-| P3 | `modelguard companion` producer | done, unit-tested against the fake graph |
+| P2 | `modelguard watch --pet`, the log lines and `ArgosHandler` | done, and run against a live Quickstart: the seeded leaking model produced a barking dog reading "CRITICAL Target leakage: prior_default_flag derives from label default_status" |
+| P3 | `modelguard companion` producer | done, and run live against all three sources |
 | P4 | maturin wheels, bundles, CI | files land; the build itself runs first in CI |
 | P5 | the blast-radius walk, overlay window included | done, checked in a browser |
 | P6 | give-back items 2 to 5 | not started |

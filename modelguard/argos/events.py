@@ -73,12 +73,17 @@ def walk_path(finding: Finding) -> tuple[Hop, ...]:
     return tuple(hops) if len(hops) > 1 else ()
 
 
-def _trust_of(report: ScanReport, model_urn: str | None) -> int | None:
-    """Return the trust score this scan measured for a model, when it did."""
-    for write in report.trust:
-        if model_urn is None or write.model_urn == model_urn:
-            return write.score.value
-    return None
+def _worst_trust(report: ScanReport) -> tuple[int | None, str | None]:
+    """Return the lowest trust score this scan measured, and its band.
+
+    The lowest rather than the first: with several models in one report, the
+    meter must show the one a person needs to act on, and the band comes from
+    the detector rather than from a threshold applied again here.
+    """
+    if not report.trust:
+        return None, None
+    worst = min(report.trust, key=lambda write: write.score.value)
+    return worst.score.value, str(worst.score.band)
 
 
 def from_report(report: ScanReport, *, recovered: bool = False) -> Event:
@@ -95,6 +100,7 @@ def from_report(report: ScanReport, *, recovered: bool = False) -> Event:
             open a moment ago stopped reproducing. It is a transition, not a
             property of the report, so the caller is the only thing that knows.
     """
+    trust_value, trust_band = _worst_trust(report)
     findings = report.findings
     if findings:
         worst = min(findings, key=lambda finding: severity_rank(finding.severity))
@@ -104,7 +110,8 @@ def from_report(report: ScanReport, *, recovered: bool = False) -> Event:
             entity=worst.resource_urn,
             severity=str(worst.severity),
             link=entity_link(worst.resource_urn),
-            trust=_trust_of(report, None),
+            trust=trust_value,
+            band=trust_band,
             path=walk_path(worst),
         )
 
@@ -112,7 +119,8 @@ def from_report(report: ScanReport, *, recovered: bool = False) -> Event:
         return Event(
             state="recovered",
             title="recovered: nothing is failing",
-            trust=_trust_of(report, None),
+            trust=trust_value,
+            band=trust_band,
         )
 
     dropped = [write for write in report.trust if write.score.band is not TrustBand.HEALTHY]
@@ -126,6 +134,7 @@ def from_report(report: ScanReport, *, recovered: bool = False) -> Event:
             ),
             entity=worst_model.model_urn,
             trust=worst_model.score.value,
+            band=str(worst_model.score.band),
             link=entity_link(worst_model.model_urn),
         )
 
@@ -137,10 +146,11 @@ def from_report(report: ScanReport, *, recovered: bool = False) -> Event:
         return Event(
             state="unchecked",
             title=f"{len(report.not_evaluated)} check(s) could not run: {gap.check}",
-            trust=_trust_of(report, None),
+            trust=trust_value,
+            band=trust_band,
         )
 
-    return Event(state="patrolling", title="no findings", trust=_trust_of(report, None))
+    return Event(state="patrolling", title="no findings", trust=trust_value, band=trust_band)
 
 
 def unreachable(reason: str) -> Event:

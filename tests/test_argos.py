@@ -460,3 +460,31 @@ def test_the_trust_score_rides_along_so_the_meter_has_something_to_draw():
         ),
     )
     assert events.from_report(report).trust == 64
+
+
+def test_the_band_is_sent_rather_than_recomputed_from_the_score():
+    """The band is the detector's, not a threshold applied twice.
+
+    A model can score 70 and still be on watch, because a critical finding caps
+    its band (detect/trust_score.py). A meter that re-derived it would paint
+    that model healthy while the catalogue calls it watch. Found by running
+    this against a live graph, where exactly that happened.
+    """
+    from modelguard.agent.pipeline import ScanReport, TrustWrite
+
+    report = ScanReport(
+        run_id="r",
+        dry_run=True,
+        trust=(
+            TrustWrite(
+                model_urn="urn:li:mlModel:(x,m,PROD)",
+                model_name="m",
+                score=TrustScore(value=70, band=TrustBand.WATCH, deductions={}),
+            ),
+        ),
+    )
+    event = events.from_report(report)
+    assert (event.trust, event.band) == (70, "watch")
+    # And nothing in the window re-derives it.
+    script = (UI / "argos.js").read_text()
+    assert "score >= 70" not in script and "score >= 40" not in script
