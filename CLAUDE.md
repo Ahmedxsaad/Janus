@@ -25,6 +25,7 @@ Source of truth for what we build:
 | docs/ | hackathon-specs/ (official rules), plan/, decision-log.md |
 | charts/ | Helm chart for `modelguard watch`, the one long-running entry point |
 | deploy/ | Cloud-init and systemd for the Azure judge-facing demo VM |
+| assets/ | The README's animation, generated from the sprite art by `assets/make_demo.py` |
 
 ## Workflow rules
 
@@ -125,4 +126,5 @@ Source of truth for what we build:
 | 2026-07-10 | Claude (for Ghassen Naouar) | Code rule 6 rewritten: env.py is the sole config entry point, no fallbacks for identity values, all-or-nothing groups, secret hygiene, .env/.env.example parity. Add rule 8: provider-agnostic LLM |
 | 2026-07-23 | Claude (for Ahmed Saad) | Add charts/ to the repository map: the modelguard-watch Helm chart (D-056) |
 | 2026-08-01 | Claude (for Ghassen Naouar) | examples/ now also holds real-project/, the dbt + MLflow + postgres stack ModelGuard was validated against as an ordinary user would (D-074) |
+| 2026-08-03 | Claude (for Ghassen Naouar) | assets/ joins the repository map: the README's animation, generated from the same sprite file the window and the icon read (D-103) |
 | 2026-08-03 | Claude (for Ghassen Naouar) | argos/ joins the repository map: the Tauri v2 desktop window (Argos) and its sprite art, driven by the JSON event stream modelguard/argos/ produces (D-098) |

@@ -1,5 +1,10 @@
 # ModelGuard
 
+<p align="center">
+  <img src="assets/argos.gif" width="200" height="200"
+       alt="Argos, the ModelGuard watchdog: patrolling, walking his beat, sniffing out a lineage traversal, barking with a red collar at a finding, writing it back, wagging when it clears, then asleep." />
+</p>
+
 The missing CI for your ML supply chain. ModelGuard is an agent that sits on
 the warehouse-to-ML boundary that DataHub uniquely spans: it reads end-to-end
 column-level lineage and ML metadata to catch silent data-to-model failures
@@ -93,6 +98,7 @@ examples/      Sample generated artifacts for judges
 benchmarks/    ModelGuard-Bench: injection, metrics, measured RESULTS.md
 tests/         pytest unit and integration tests
 docs/          Plan, decision log, hackathon specs
+assets/        The animation at the top of this file, generated from the sprite art
 ```
 
 ## Prerequisites
@@ -446,7 +452,7 @@ modelguard watch --table loans_raw --pet  # ModelGuard's own findings
 modelguard companion                      # everything wrong with the assets you own
 ```
 
-Argos is a 16x16 pixel watchdog that sits on your desktop and shows what the graph
+Argos is a 32x32 pixel watchdog that sits on your desktop and shows what the graph
 is doing. It patrols while a poll finds nothing, sniffs while a lineage walk is in
 flight, barks with a red collar the moment a finding lands, and turns into a
 translucent ghost when it cannot reach DataHub, because a cheerful pet on a

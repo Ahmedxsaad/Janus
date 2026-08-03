@@ -16,6 +16,36 @@ Entry template:
 
 ---
 
+## D-103: The README opens with the dog, generated not drawn (2026-08-03)
+- Decided by: Ghassen Naouar (asked for an `assets/` directory, a GIF of the dog
+  in several states, and for it to sit at the head of the README).
+- Decision: `assets/argos.gif`, a 38-frame tour (patrol, blink, walk, sniff,
+  bark, scribble, wag, sleep) written by `assets/make_demo.py` from the same
+  `argos/ui/sprites/argos.txt` the window and the icon read. It reuses
+  `argos/icons/make_icon.py` for the palette and the PNG writer and shells out
+  to ImageMagick's `convert` for the GIF itself.
+- Options considered:
+  - Recording the real window in headless Chrome over CDP: truest, but the
+    generator would then need Chrome, a local web server and a CDP client to
+    reproduce one image.
+  - Hand-rolling an animated GIF in the standard library, as `make_icon.py`
+    hand-rolls a PNG: that means writing an LZW encoder, which is a lot of
+    surface for an asset, and `convert` is already installed.
+  - Committing a GIF made by hand with no generator: rejected on the rule the
+    art already follows, that a hand-made copy goes stale on the next redraw.
+- Why: it regenerates in one command after a redraw, so the README cannot drift
+  from the window. Two things the flat art does not get for free are put back
+  because leaving them out would misrepresent the product: the rim (GitHub
+  renders a README on white or on near-black, and on the dark one the saddle,
+  the ears and the outline vanish into the page) and the red collar on the bark
+  frames (the renderer paints it from a live finding, and the bark *is* the
+  finding). The top-down light and the shadow stay out: both need partial alpha,
+  and GIF has one transparent index and nothing in between.
+- Result: `assets/make_demo.py`, `assets/argos.gif` (63KB, 200x200, loops), the
+  README's first block, `assets/` added to the repository map here and in the
+  README's layout, and the README's stale "16x16 pixel watchdog" corrected to
+  32x32 (it has been 32 since D-101).
+
 ## D-102: The two poses a viewer holds longest, and a toy to throw him (2026-08-03)
 - Decided by: Ghassen Naouar (asked for a better sleeping and alert pose, no red
   on the muzzle, an Ace Attorney style intervention, and something to throw).
