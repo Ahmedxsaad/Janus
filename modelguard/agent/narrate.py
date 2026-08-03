@@ -57,6 +57,7 @@ from functools import singledispatch
 
 from modelguard.env import scrub
 from modelguard.llm import LLMConfig, build_chat_model
+from modelguard.logs import logfmt, phase
 from modelguard.models import (
     DeprecatedInputFinding,
     Finding,
@@ -604,6 +605,14 @@ def narrate(finding: Finding, llm: LLMConfig | None) -> Narrative:
     if llm is None:
         return Narrative(template_narrative(finding), NarrativeSource.TEMPLATE)
 
+    # The head tilt: a phase, not a result, so it reaches the desktop companion
+    # the same way it reaches an operator's log (modelguard/argos/handler.py).
+    # No prose in the line, only which finding type is being worded.
+    logger.info(
+        "narrating %s",
+        logfmt({"finding_type": str(finding.finding_type)}),
+        extra=phase("narrating", finding_type=str(finding.finding_type)),
+    )
     try:
         return Narrative(_llm_narrative(finding, llm), NarrativeSource.LLM)
     except Exception as exc:  # noqa: BLE001

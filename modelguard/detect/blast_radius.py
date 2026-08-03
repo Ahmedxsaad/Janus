@@ -36,6 +36,7 @@ signal it. Traversing the lineage graph is how those consumers get declared.
 
 from __future__ import annotations
 
+import logging
 import time
 
 from datahub.metadata.schema_classes import (
@@ -47,12 +48,15 @@ from datahub.metadata.urns import DatasetUrn
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.graph_reads import entity_type, model_ref
+from modelguard.logs import logfmt, phase
 from modelguard.models import (
     BlastRadius,
     FreshnessFinding,
     FreshnessSignal,
     ModelAtRisk,
 )
+
+logger = logging.getLogger(__name__)
 
 _DATASET = "dataset"
 _ML_FEATURE = "mlFeature"
@@ -144,6 +148,14 @@ def _downstream_traversal(
         since exactly-the-cap is the only observable signature that a result
         beyond it may exist.
     """
+    # The sniff: the one phase of a scan that is slow enough for a person to see
+    # it happen, so it is the one the desktop companion most wants to depict.
+    # Identifiers and a hop cap only, never aspect content (modelguard/logs.py).
+    logger.info(
+        "lineage walk %s",
+        logfmt({"urn": table_urn, "max_hops": config.max_hops}),
+        extra=phase("sniffing", urn=table_urn, max_hops=config.max_hops),
+    )
     results = conn.client.lineage.get_lineage(
         source_urn=table_urn,
         direction="downstream",
