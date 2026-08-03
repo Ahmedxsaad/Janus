@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated
 
@@ -26,7 +26,10 @@ from datahub.metadata.urns import DatasetUrn, MlModelUrn, SchemaFieldUrn, Urn
 from datahub.sdk.search_filters import FilterDsl as F
 from rich.console import Console
 
+from modelguard import companion as companion_module
 from modelguard.agent.pipeline import FindingWrites, ScanReport, run_scan
+from modelguard.argos import events as argos_events
+from modelguard.argos.producer import ArgosProducer
 from modelguard.client import (
     DataHubConnection,
     DataHubConnectionError,
@@ -109,6 +112,10 @@ WATCH_MAX_BACKOFF_SECONDS = 300.0
 #: and a wall of identical yellow lines is exactly the kind of thing an
 #: operator stops reading (F12, docs/plan/07).
 WATCH_FAILURE_ESCALATION_THRESHOLD = 3
+#: Consecutive unchanged polls before Argos curls up and sleeps. Low enough that
+#: a quiet catalogue looks quiet within a couple of minutes at the default
+#: interval, high enough that one steady poll does not put the dog out.
+WATCH_ASLEEP_AFTER_POLLS = 4
 
 
 def safe_error(exc: BaseException) -> str:
@@ -541,6 +548,11 @@ class WatchState:
 
     signature: frozenset[FindingSignature] | None = None
 
+    unchanged_polls: int = field(default=0)
+    """Consecutive polls that found the same thing, which is what puts the dog
+    to sleep. Counted here rather than in the pet, because a producer without a
+    window still wants the state and the count is a property of the watch."""
+
 
 def _announce_watch_change(
     previous: frozenset[FindingSignature] | None,
@@ -595,6 +607,7 @@ def _watch_once(
     llm: LLMConfig | None,
     previous: frozenset[FindingSignature] | None,
     state: WatchState | None = None,
+    argos: ArgosProducer | None = None,
 ) -> frozenset[FindingSignature]:
     """Poll once: detect, and write back only when the set of findings has changed.
 
@@ -612,6 +625,11 @@ def _watch_once(
     and the write that follows is what reconciles findings an earlier process
     raised and never got to resolve. Returns the current signature, which the
     caller carries into the next poll.
+
+    ``argos``, when present, is the desktop companion. It is told what this poll
+    found and nothing more: the events are built from the report by
+    argos/events.py, so the pet depicts a measured finding and never a guess
+    (docs/plan/08 section 3).
     """
     preview = run_scan(
         conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm, dry_run=True
@@ -622,16 +640,53 @@ def _watch_once(
         console.print(
             f"[dim]{time.strftime('%H:%M:%S')} no change ({len(signature)} open finding(s))[/dim]"
         )
+        if state is not None:
+            state.unchanged_polls += 1
+        if argos is not None:
+            unchanged = state.unchanged_polls if state is not None else 0
+            argos.send(
+                argos_events.asleep(unchanged)
+                if unchanged >= WATCH_ASLEEP_AFTER_POLLS
+                else argos_events.from_report(preview)
+            )
         return signature
 
     _announce_watch_change(previous, signature, preview)
+    if argos is not None and argos.muted:
+        # Muted from the window's menu: keep looking, stop writing. The finding
+        # is still reported on screen, so a mute hides the noise and never the
+        # problem.
+        console.print("[dim]argos: muted, not writing this change[/dim]")
+        argos.send(argos_events.from_report(preview))
+        if state is not None:
+            state.signature = signature
+            state.unchanged_polls = 0
+        return signature
+
     written = run_scan(conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm)
     if signature:
         _print_writes_section(written)
+    if argos is not None:
+        argos.send(argos_events.from_report(written))
 
     if state is not None:
         state.signature = signature
+        state.unchanged_polls = 0
     return signature
+
+
+def _wait(seconds: float, argos: ArgosProducer | None) -> None:
+    """Sleep between polls, but wake early when the window asks for a scan.
+
+    ``time.sleep`` would make "Scan now" mean "in up to thirty seconds", which
+    reads as a broken button. Waiting on the producer's event costs nothing when
+    nobody clicks and returns immediately when somebody does.
+    """
+    if argos is None:
+        time.sleep(seconds)
+        return
+    if argos.wake.wait(timeout=seconds):
+        argos.wake.clear()
 
 
 def _run_review(
@@ -964,6 +1019,14 @@ def watch(
         bool,
         typer.Option("--once", help="Poll a single time and exit. For scripts and the demo."),
     ] = False,
+    pet: Annotated[
+        bool,
+        typer.Option(
+            "--pet",
+            help="Show Argos, the desktop watchdog, and let it drive this watch. "
+            "Falls back to a terminal line when no window binary is installed.",
+        ),
+    ] = False,
     sla_hours: Annotated[
         float | None,
         typer.Option("--sla-hours", help="Freshness SLA in hours. Overrides the env default."),
@@ -1029,6 +1092,7 @@ def watch(
     state = WatchState()
     backoff = interval
     consecutive_failures = 0
+    argos = ArgosProducer.start(console) if pet else None
     try:
         while True:
             try:
@@ -1040,6 +1104,7 @@ def watch(
                     llm=llm,
                     previous=state.signature,
                     state=state,
+                    argos=argos,
                 )
                 backoff = interval
                 consecutive_failures = 0
@@ -1065,16 +1130,97 @@ def watch(
                     _watch_failure_message(exc, consecutive_failures=consecutive_failures)
                 )
                 console.print(f"[dim]retrying in {backoff:.0f}s[/dim]")
+                if argos is not None:
+                    # The row that earns the pet its trust: a poll that could not
+                    # reach DataHub must not leave a cheerful dog on screen.
+                    argos.send(argos_events.unreachable(safe_error(exc)))
                 if once:
                     raise typer.Exit(code=1) from exc
-                time.sleep(backoff)
+                _wait(backoff, argos)
                 backoff = min(backoff * 2, WATCH_MAX_BACKOFF_SECONDS)
                 continue
             if once:
                 break
-            time.sleep(interval)
+            _wait(interval, argos)
     except KeyboardInterrupt:
         console.print("\n[dim]watch stopped.[/dim]")
+    finally:
+        if argos is not None:
+            argos.close()
+
+
+@app.command()
+def companion(
+    interval: Annotated[
+        float,
+        typer.Option("--interval", help="Seconds between sweeps.", min=5.0),
+    ] = 120.0,
+    once: Annotated[
+        bool,
+        typer.Option("--once", help="Sweep a single time and exit."),
+    ] = False,
+    owner: Annotated[
+        str | None,
+        typer.Option(
+            "--owner",
+            help="Owner URN whose assets to watch. Defaults to MODELGUARD_COMPANION_OWNER.",
+        ),
+    ] = None,
+    no_window: Annotated[
+        bool,
+        typer.Option("--no-window", help="Skip the desktop window and report in the terminal."),
+    ] = False,
+) -> None:
+    """Watch the assets you own, and show them as Argos on your desktop.
+
+    The general DataHub companion, and the reason Argos is not a ModelGuard pet:
+    it runs no detector of its own and asks the catalogue three questions about
+    every entity a given owner owns. Is an incident open on it, did its last
+    assertion run fail, did its owners deprecate it.
+
+    Read-only. Nothing here writes an aspect, so a read-only token is enough,
+    and it is safe to point at a production catalogue.
+
+    ModelGuard's own findings reach the same window through
+    ``modelguard watch --pet``. A window belongs to one process, so running both
+    gives two dogs rather than one dog with two sources.
+    """
+    try:
+        configure_logging(level=logging.INFO, stream=sys.stderr)
+        watched_owner = owner or companion_module.owner_urn()
+    except ConfigError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    conn = connect(require_token=False)
+    config = ScanConfig.from_env()
+    console.print(f"Watching assets owned by [bold]{watched_owner}[/bold]")
+    if not once:
+        console.print(f"[dim]sweeping every {interval:.0f}s; Ctrl-C to stop[/dim]")
+
+    argos = ArgosProducer.start(console, window=not no_window)
+    try:
+        while True:
+            try:
+                sweep = companion_module.poll(conn, watched_owner, config)
+                argos.send(companion_module.event_for(sweep))
+                for issue in sweep.issues[:5]:
+                    console.print(f"[yellow]{issue.source}[/yellow] {issue.title}")
+                if not sweep.issues:
+                    console.print(f"[green]{sweep.owned} owned assets, nothing wrong[/green]")
+            except Exception as exc:  # a daemon must survive SDK failures
+                logger.warning("companion sweep failed", exc_info=True)
+                console.print(f"[yellow]companion sweep failed: {safe_error(exc)}[/yellow]")
+                argos.send(argos_events.unreachable(safe_error(exc)))
+                if once:
+                    raise typer.Exit(code=1) from exc
+            if once:
+                break
+            _wait(interval, argos)
+    except KeyboardInterrupt:
+        console.print("\n[dim]companion stopped.[/dim]")
+    finally:
+        argos.close()
 
 
 @app.command()
