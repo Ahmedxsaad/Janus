@@ -10,41 +10,89 @@
 <body>
 
 <header class="topbar">
-  <strong>ModelGuard</strong>
-  <span style="color:#7a5c40">for DataHub</span>
+  <span class="brand">Model<em>Guard</em></span>
+  <span class="for">for DataHub</span>
   <nav>
-    <a href="#install">Install</a>
+    <a href="#what">How it works</a>
+    <a href="#measured">Benchmark</a>
     <a href="#quickstart">Quickstart</a>
-    <a href="#scan">Detectors</a>
+    <a href="#detectors">Checks</a>
     <a href="#argos">Argos</a>
     <a href="https://github.com/Ahmedxsaad/DataHub">GitHub</a>
   </nav>
 </header>
 
 <div class="hero">
+  <span class="eyebrow">Data-to-model reliability for DataHub</span>
   <h1>The missing CI for your ML supply chain</h1>
   <p class="tagline">
-    ModelGuard sits on the warehouse-to-ML boundary that DataHub uniquely spans.
-    It reads end-to-end column-level lineage and ML metadata to catch silent
-    data-to-model failures, and writes incidents, model trust scores, impact
-    reports and guarding assertions back into the graph.
+    A model breaks because a column three joins upstream changed, and nothing
+    connects the two. ModelGuard writes that connection into DataHub, then reads
+    across it: target leakage, stale upstreams, training-serving drift, and the
+    two governance checks nothing else joins back to a model.
   </p>
-  <div class="badges">
-    <span>Python 3.11</span>
-    <span>Apache 2.0</span>
-    <span>pip install modelguard-datahub</span>
-    <span>Deterministic detection</span>
+  <div class="cta">
+    <a class="go" href="#quickstart">Run the quickstart</a>
+    <a class="quiet" href="https://github.com/Ahmedxsaad/DataHub">Source on GitHub</a>
+    <a class="quiet" href="#measured">Read the benchmark</a>
   </div>
-  <canvas class="beat hero-beat" data-pose="idle" data-scale="6" data-text-scale="4"
-          data-say="I AM ARGOS. I WATCH THE COLUMNS BETWEEN YOUR WAREHOUSE AND YOUR MODELS."></canvas>
 </div>
+
+<div class="figures">
+  <div class="figure">
+    <b>1.00</b>
+    <span>precision naming which feature leaks</span>
+  </div>
+  <div class="figure">
+    <b>Five</b>
+    <span>checks, each with the column chain as proof</span>
+  </div>
+  <div class="figure">
+    <b>Zero</b>
+    <span>duplicate writes after a rerun, measured</span>
+  </div>
+  <div class="figure">
+    <b>Zero</b>
+    <span>language model calls in any verdict</span>
+  </div>
+</div>
+
+<!-- Not a mockup: the shape of a real scan against the seeded graph, which is
+     the run the quickstart below produces. -->
+<div class="term">
+  <div class="term-inner">
+    <div class="term-bar">modelguard scan --table loans_raw</div>
+<pre><code><span class="c-dim">$</span> <span class="c-cmd">modelguard scan --table loans_raw</span>
+
+<span class="c-bad">Stale upstream data in ecommerce.public.loans_raw</span>  <span class="c-dim">(severity: critical)</span>
+  stale for <span class="c-warn">30.0h</span> against a 6.0h SLA
+  blast radius: 1 dataset, 2 features, 1 model
+    <span class="c-dim">-</span> Credit Risk v3 <span class="c-bad">(critical)</span> <span class="c-warn">LIVE</span>, 3 hops
+
+<span class="c-key">Trust scores</span>
+  Credit Risk v3  <span class="c-warn">35/100</span> <span class="c-dim">(at-risk)</span>
+  <span class="c-dim">freshness_lag, missing_owner, upstream_failure</span>
+
+<span class="c-key">Wrote back</span>
+  <span class="c-w">incident</span>          urn:li:incident:f49230b1
+  <span class="c-w">assertion</span>         <span class="c-bad">FAILURE</span>, on the source table
+  <span class="c-w">tagged models</span>     1 of 1 at risk
+  <span class="c-w">impact report</span>     linked from the model
+
+<span class="c-dim">run id: scan-cb2ef85ba9a8</span>
+</code></pre>
+  </div>
+</div>
+
+<canvas class="beat hero-beat" data-pose="idle" data-scale="4" data-text-scale="3"
+        data-say="I AM ARGOS. I WATCH THE COLUMNS BETWEEN YOUR WAREHOUSE AND YOUR MODELS."></canvas>
 
 <div class="page">
 
 <aside class="toc">
   <div class="group">Start</div>
-  <a href="#what">What it does</a>
-  <a href="#measured">Measured, not claimed</a>
+  <a href="#what">How it works</a>
+  <a href="#measured">The benchmark</a>
   <a href="#install">Install</a>
   <a href="#quickstart">Quickstart</a>
   <div class="group">Use it</div>
@@ -83,6 +131,78 @@
     leaking label or a classified column can be walked forward into the live
     model that consumes it, with the column chain as evidence.
   </p>
+
+  <!-- The one picture the prose above cannot replace: two graphs, the gap
+       between them, and the edge ModelGuard adds. Inline SVG rather than an
+       image, so it inherits the palette and stays sharp at any width. -->
+  <div class="joinviz">
+    <svg viewBox="0 0 720 208" role="img"
+         aria-label="Column-level lineage runs from a raw table through a staging column into a feature table. DataHub's ML graph holds the model and its training run. Nothing joins the two until modelguard link writes the edge from feature to source column.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#16181d"></path>
+        </marker>
+        <marker id="ar-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#1b4de4"></path>
+        </marker>
+      </defs>
+
+      <!-- the two worlds -->
+      <rect x="6" y="6" width="392" height="196" rx="12" fill="#f7f7f5" stroke="#e4e4e1"></rect>
+      <text x="22" y="28" fill="#8a9099" font-family="ui-monospace,monospace" font-size="11" letter-spacing="1.4">WAREHOUSE GRAPH</text>
+
+      <rect x="420" y="6" width="294" height="196" rx="12" fill="#f7f7f5" stroke="#e4e4e1"></rect>
+      <text x="436" y="28" fill="#8a9099" font-family="ui-monospace,monospace" font-size="11" letter-spacing="1.4">ML GRAPH</text>
+
+      <!-- warehouse chain -->
+      <rect x="26" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
+      <text x="85" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">loans_raw</text>
+      <text x="85" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">raw table</text>
+
+      <rect x="166" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
+      <text x="225" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">stg_customers</text>
+      <text x="225" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">staging</text>
+
+      <rect x="18" y="130" width="274" height="46" rx="8" fill="#ffffff" stroke="#16181d"></rect>
+      <text x="155" y="150" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="10">customer_features.contract_renewed_flag</text>
+      <text x="155" y="166" text-anchor="middle" fill="#2f5d7c" font-family="ui-monospace,monospace" font-size="10">a column, not a table</text>
+
+      <path d="M144,75 L162,75" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
+      <path d="M225,98 L225,118 L160,118 L160,126" fill="none" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
+
+      <!-- ml side -->
+      <rect x="440" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
+      <text x="499" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">training run</text>
+      <text x="499" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">mlflow</text>
+
+      <rect x="578" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
+      <text x="637" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">credit_risk_v3</text>
+      <text x="637" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">live model</text>
+
+      <rect x="508" y="130" width="118" height="46" rx="8" fill="#ffffff" stroke="#16181d"></rect>
+      <text x="567" y="150" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">mlFeature</text>
+      <text x="567" y="166" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">what it trained on</text>
+
+      <path d="M558,75 L574,75" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
+      <path d="M567,126 L567,112 L637,112 L637,102" fill="none" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
+
+      <!-- the edge nothing else writes -->
+      <path d="M296,153 L504,153" stroke="#1b4de4" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ar-warn)"></path>
+      <text x="395" y="144" text-anchor="middle" fill="#1b4de4" font-family="ui-monospace,monospace" font-size="11">modelguard link</text>
+      <text x="395" y="192" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">the edge no ingestion source writes</text>
+    </svg>
+    <div class="legend">
+      <span><i></i>Lineage DataHub already holds</span>
+      <span><i class="dashed"></i>The join ModelGuard adds</span>
+    </div>
+  </div>
+
+  <p>
+    Read right to left, that edge is what makes a verdict possible: from the
+    live model back to the exact column, so a finding arrives as
+    <code>contract_renewed_flag &lt;- churn</code> rather than "something
+    upstream of this model looks wrong".
+  </p>
   <p>
     Detection is deterministic Python. A language model is used only to word an
     incident description and a report's assessment, never to decide whether a
@@ -102,10 +222,31 @@
     leaks, and the question that separates them is <em>which</em> of its
     features leaks, which is what somebody has to go and fix.
   </p>
+  <div class="bench">
+    <div class="bench-row">
+      <span class="who">ModelGuard<small>column-level lineage</small></span>
+      <span class="bench-bar"><i style="width:100%"></i></span>
+      <span class="val">1.00</span>
+    </div>
+    <div class="bench-row weak">
+      <span class="who">Table-level lineage<small>the usual catalog</small></span>
+      <span class="bench-bar"><i style="width:25%"></i></span>
+      <span class="val">0.25</span>
+    </div>
+    <div class="bench-row none">
+      <span class="who">Table quality checks<small>no lineage at all</small></span>
+      <span class="bench-bar"><i style="width:0%"></i></span>
+      <span class="val">0.00</span>
+    </div>
+  </div>
+  <p class="caption">
+    Precision at naming which feature leaks. Recall is 1.00, 1.00 and 0.00
+    respectively: the middle row does catch the leak, it just cannot say where.
+  </p>
   <table>
     <tr><th>Approach</th><th>Precision</th><th>Recall</th><th>Still alerting after the fix</th></tr>
-    <tr><td>ModelGuard (column-level lineage)</td><td>1.00</td><td>1.00</td><td>0 features</td></tr>
-    <tr><td>Table-level lineage</td><td>0.25</td><td>1.00</td><td>2 features</td></tr>
+    <tr><td>ModelGuard (column-level lineage)</td><td>1.00</td><td>1.00</td><td class="c-ok">0 features</td></tr>
+    <tr><td>Table-level lineage</td><td>0.25</td><td>1.00</td><td class="c-bad">2 features</td></tr>
     <tr><td>Table quality checks, no lineage</td><td>-</td><td>0.00</td><td>0 features</td></tr>
   </table>
   <p>
@@ -300,14 +441,48 @@ modelguard scan --model churn_model --review    # pause, show, write only what y
     A scan never reports something healthy that it could not measure. It names
     the check, the missing metadata, and how to supply it.
   </p>
-  <table>
-    <tr><th>Check</th><th>Needs</th><th>Who normally writes it</th></tr>
-    <tr><td>Freshness and blast radius</td><td>the <code>operation</code> aspect on the table</td><td>dbt, Airflow, Spark, or the SDK's <code>report_operation</code></td></tr>
-    <tr><td>Target leakage</td><td>features with source columns, plus a column carrying the label term</td><td><code>modelguard link</code></td></tr>
-    <tr><td>Schema drift</td><td>a training-time schema snapshot on the training run</td><td><code>modelguard link</code></td></tr>
-    <tr><td>Sensitive source</td><td>features with source columns, plus <code>MODELGUARD_SENSITIVE_TAG_URNS</code> or <code>..._TERM_URNS</code></td><td>your classifier, or a human in the UI</td></tr>
-    <tr><td>Deprecated input</td><td>the model's training run, and the <code>deprecation</code> aspect</td><td>the table's own owners</td></tr>
-  </table>
+  <div class="checks">
+    <div class="check">
+      <h4>Freshness and blast radius</h4>
+      <div>
+        <p>A source table stopped refreshing, and live models are still scoring
+          on features derived from it.</p>
+        <div class="needs">Needs the <code>operation</code> aspect, written by dbt, Airflow or Spark.</div>
+      </div>
+    </div>
+    <div class="check">
+      <h4>Target leakage</h4>
+      <div>
+        <p>A feature descends from the label the model predicts, so its offline
+          score is inflated by construction.</p>
+        <div class="needs">Needs features with source columns, from <code>modelguard link</code>.</div>
+      </div>
+    </div>
+    <div class="check">
+      <h4>Schema drift</h4>
+      <div>
+        <p>The input schema moved since training: a column added, removed or
+          retyped under a model nobody retrained.</p>
+        <div class="needs">Needs a training-time snapshot, from <code>modelguard link</code>.</div>
+      </div>
+    </div>
+    <div class="check">
+      <h4>Sensitive source</h4>
+      <div>
+        <p>A feature derives from a column somebody classified PII, PHI or
+          restricted. Nothing is broken; what the model was allowed to see is.</p>
+        <div class="needs">Needs <code>MODELGUARD_SENSITIVE_TAG_URNS</code>, your own taxonomy.</div>
+      </div>
+    </div>
+    <div class="check">
+      <h4>Deprecated input</h4>
+      <div>
+        <p>A table's owners marked it deprecated. They have no way to know a
+          live model still depends on it.</p>
+        <div class="needs">Needs nothing: <code>deprecation</code> is DataHub's own aspect.</div>
+      </div>
+    </div>
+  </div>
 
   <h3>The two that read the governance graph</h3>
   <p>

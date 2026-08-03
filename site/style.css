@@ -1,297 +1,754 @@
 /*
- * The documentation page's theme: black, brown, orange.
+ * The documentation page's theme: paper, ink, one blue.
  *
- * The palette is not decoration picked to match a season. Argos is drawn in
- * #d99347 coat over a #2a2119 saddle with a #160f0a outline, and those three
- * are the page's ink, panel, and background, so the character sits on the page
- * instead of on top of it. Only the collar is left out of the scheme, because
- * blue is the product's own accent and red is a live finding.
+ * Editorial rather than promotional. The rules this file keeps to, because the
+ * two drafts before it broke all of them and read as a generic landing page:
+ *
+ *   no gradients, no glows, no drop shadows, no gradient text
+ *   no pill badges, no glowing stat cards, no coloured panels for emphasis
+ *   one accent, used for links and almost nothing else
+ *   hairlines instead of borders, whitespace instead of boxes
+ *
+ * Emphasis comes from type and space. When something has to be set apart it
+ * gets a rule or a margin, not a background. The exceptions are the two places
+ * colour carries meaning rather than decoration, and they are the same two the
+ * desktop window reserves: --danger is a live finding and --ok is a check that
+ * ran and passed. Nothing else may use them.
  */
 
 :root {
-  --bg: #14100c;
-  --bg-deep: #0d0a07;
-  --panel: #1e1712;
-  --panel-edge: #3a2a1d;
-  --brown: #3b2a1d;
-  --coat: #d99347;
-  --orange: #e07a2f;
-  --ember: #f2a35c;
-  --text: #ece0d0;
-  --muted: #b09b85;
-  --link: #f0a463;
-  --code-bg: #100c09;
-  --max: 62rem;
+  /* Warm paper rather than white: a pure #fff page glares under a reading
+     lamp, and every long-form site worth reading pulls a few points of warmth
+     into it. */
+  --paper: #fdfcf9;
+  --paper-2: #f6f4ef;
+  --ink: #1a1a1a;
+  --body: #3f3f3d;
+  --muted: #6a6a66;
+  --faint: #91918c;
+  --rule: #e3e0d8;
+  --rule-soft: #edeae3;
+
+  /* Desaturated, not electric. A saturated blue on a warm page reads as a
+     button asking to be clicked; this one reads as a citation. */
+  --accent: #2f5d7c;
+  --ok: #3f6d4e;
+  --danger: #a33a30;
+  --warn: #8a6415;
+
+  --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Palatino Linotype",
+    Palatino, Georgia, ui-serif, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* A reading measure, in the low sixties of characters. Anything wider and
+     the eye loses the line return on a serif this size. */
+  --measure: 33rem;
+  --max: 64rem;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 4.5rem;
+}
+
+/* Serif for reading, sans for chrome. The body of a document that expects to be
+   read for ten minutes is set in a serif; the navigation and the labels around
+   it are furniture and stay out of the way in sans. */
 body {
   margin: 0;
-  background:
-    radial-gradient(120% 60% at 50% 0%, #241a12 0%, var(--bg) 55%, var(--bg-deep) 100%);
-  color: var(--text);
-  font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--paper);
+  color: var(--body);
+  font: 19px/1.78 var(--serif);
+  -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
 }
 
 a {
-  color: var(--link);
-  text-decoration-color: rgba(240, 164, 99, 0.4);
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(47, 93, 124, 0.3);
 }
 
 a:hover {
-  text-decoration-color: var(--link);
+  border-bottom-color: var(--accent);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--serif);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.24;
+  letter-spacing: -0.005em;
 }
 
 code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.9em;
-  color: var(--ember);
-  background: rgba(224, 122, 47, 0.1);
+  font-family: var(--mono);
+  font-size: 0.86em;
+  color: var(--ink);
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
   border-radius: 3px;
-  padding: 0.1em 0.32em;
+  padding: 0.06em 0.32em;
 }
 
 pre {
-  background: var(--code-bg);
-  border: 1px solid var(--panel-edge);
-  border-left: 3px solid var(--orange);
-  border-radius: 6px;
-  padding: 0.9rem 1.1rem;
+  position: relative;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 1rem 1.15rem;
   overflow-x: auto;
-  font-size: 0.86rem;
-  line-height: 1.6;
+  font-size: 0.83rem;
+  line-height: 1.7;
+  margin: 1.4rem 0;
 }
 
 pre code {
   background: none;
-  color: #e8d9c6;
+  border: 0;
   padding: 0;
-  font-size: inherit;
+  color: #2b3038;
+  font-size: 1em;
 }
 
-/* Header ------------------------------------------------------------------ */
+/* --- masthead ------------------------------------------------------------ */
 
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 50;
   display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.7rem 1.4rem;
-  background: rgba(13, 10, 7, 0.92);
-  border-bottom: 1px solid var(--panel-edge);
-  backdrop-filter: blur(6px);
+  align-items: baseline;
+  gap: 0.7rem;
+  padding: 1rem 2rem;
+  background: rgba(253, 252, 249, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
 }
 
-.topbar strong {
-  color: var(--coat);
-  letter-spacing: 0.02em;
+.topbar .brand {
+  font-family: var(--serif);
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.topbar .brand em {
+  font-style: normal;
+}
+
+.topbar .for {
+  font-size: 0.8rem;
+  color: var(--faint);
 }
 
 .topbar nav {
   margin-left: auto;
   display: flex;
-  gap: 1.1rem;
-  font-size: 0.9rem;
+  gap: 1.6rem;
+  font-size: 0.85rem;
 }
+
+.topbar nav a {
+  color: var(--muted);
+  border-bottom: 0;
+}
+
+.topbar nav a:hover {
+  color: var(--ink);
+}
+
+/* --- hero ---------------------------------------------------------------- */
 
 .hero {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 3.2rem 1.4rem 1rem;
+  padding: 6rem 2rem 3.5rem;
+}
+
+.eyebrow {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 1.6rem;
 }
 
 .hero h1 {
-  font-size: clamp(2.2rem, 6vw, 3.4rem);
-  line-height: 1.1;
-  margin: 0 0 0.6rem;
-  color: #fff3e4;
+  margin: 0 0 1.5rem;
+  font-size: clamp(2rem, 3.6vw, 2.7rem);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  max-width: 19ch;
 }
 
 .hero .tagline {
-  font-size: 1.15rem;
-  color: var(--muted);
-  max-width: 44rem;
+  margin: 0 0 2.2rem;
+  font-size: 1.07rem;
+  line-height: 1.72;
+  color: var(--body);
+  max-width: var(--measure);
 }
 
-.badges {
+.cta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 1.2rem 0;
+  align-items: center;
+  gap: 1.6rem;
+  font-family: var(--sans);
+  font-size: 0.9rem;
 }
 
-.badges span {
+.cta .go {
+  border-bottom-width: 2px;
+  font-weight: 500;
+}
+
+.cta .quiet {
+  color: var(--muted);
+  border-bottom-color: var(--rule);
+}
+
+.cta .quiet:hover {
+  color: var(--ink);
+  border-bottom-color: var(--faint);
+}
+
+/* --- the numbers, as a line of type rather than cards -------------------- */
+
+.figures {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2.5rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 2.2rem;
+}
+
+.figure b {
+  display: block;
+  font-family: var(--serif);
+  font-size: 1.75rem;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.figure span {
+  display: block;
+  font-family: var(--sans);
+  margin-top: 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* --- terminal ------------------------------------------------------------ */
+
+.term {
+  max-width: var(--max);
+  margin: 3.5rem auto 0;
+  padding: 0 2rem;
+}
+
+.term-inner {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.term-bar {
+  padding: 0.55rem 1rem;
+  background: var(--paper-2);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--faint);
+}
+
+.term pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
   font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--coat);
-  border: 1px solid var(--panel-edge);
-  background: var(--panel);
-  border-radius: 999px;
-  padding: 0.25rem 0.7rem;
+  line-height: 1.8;
 }
 
-/* Layout ------------------------------------------------------------------ */
+/* Terminal output. Only the two reserved colours plus the ink: a finding is
+   --danger, a pass is --ok, everything else is type weight and grey. */
+.c-dim {
+  color: var(--faint);
+}
+.c-cmd {
+  color: var(--ink);
+  font-weight: 600;
+}
+.c-bad {
+  color: var(--danger);
+  font-weight: 600;
+}
+.c-ok {
+  color: var(--ok);
+}
+.c-warn {
+  color: var(--warn);
+}
+.c-key {
+  color: var(--ink);
+  font-weight: 600;
+}
+.c-w {
+  color: var(--ink);
+}
+
+/* --- layout -------------------------------------------------------------- */
 
 .page {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 0 1.4rem 5rem;
+  padding: 4.5rem 2rem 5rem;
   display: grid;
   grid-template-columns: 13rem 1fr;
-  gap: 2.6rem;
-}
-
-/* A grid track defaults to min-content, and a wide `pre` is wider than the
-   viewport, so without this the whole page scrolls sideways instead of the code
-   block scrolling inside itself. */
-main {
-  min-width: 0;
+  gap: 4rem;
+  align-items: start;
 }
 
 .toc {
   position: sticky;
-  top: 4.2rem;
-  align-self: start;
+  top: 4.5rem;
+  font-family: var(--sans);
+  font-size: 0.82rem;
   max-height: calc(100vh - 6rem);
   overflow-y: auto;
-  font-size: 0.86rem;
-  border-left: 1px solid var(--panel-edge);
-  padding-left: 1rem;
+}
+
+.toc .group {
+  margin: 1.6rem 0 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.toc .group:first-child {
+  margin-top: 0;
 }
 
 .toc a {
   display: block;
-  padding: 0.22rem 0;
+  padding: 0.22rem 0 0.22rem 0.85rem;
+  margin-left: -1px;
+  border-left: 1px solid var(--rule);
+  border-bottom: 0;
   color: var(--muted);
-  text-decoration: none;
 }
 
 .toc a:hover {
-  color: var(--ember);
+  color: var(--ink);
+  border-left-color: var(--faint);
 }
 
-.toc .group {
-  color: var(--brown);
-  text-transform: uppercase;
-  font-size: 0.72rem;
-  letter-spacing: 0.09em;
-  margin-top: 1rem;
-  color: #7a5c40;
+.toc a.here {
+  color: var(--ink);
+  border-left-color: var(--accent);
+}
+
+main {
+  min-width: 0;
 }
 
 section {
+  margin-bottom: 4.5rem;
   scroll-margin-top: 4.5rem;
-  margin-bottom: 2.6rem;
+}
+
+section > p,
+section > ul {
+  max-width: var(--measure);
 }
 
 section h2 {
-  font-size: 1.5rem;
-  margin: 0 0 0.4rem;
-  color: var(--coat);
+  font-size: 1.42rem;
+  font-weight: 600;
+  margin: 0 0 1.2rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--rule);
 }
 
 section h3 {
-  font-size: 1.05rem;
-  margin: 1.6rem 0 0.3rem;
-  color: var(--ember);
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 2.4rem 0 0.7rem;
 }
+
+section ul {
+  padding-left: 1.1rem;
+}
+
+section li {
+  margin-bottom: 0.75rem;
+}
+
+blockquote {
+  margin: 1.5rem 0;
+  padding-left: 1.2rem;
+  border-left: 2px solid var(--rule);
+  color: var(--muted);
+  font-style: italic;
+}
+
+blockquote code {
+  font-style: normal;
+}
+
+/* --- tables -------------------------------------------------------------- */
 
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.88rem;
-  margin: 1rem 0;
-  display: block;
-  overflow-x: auto;
-}
-
-th,
-td {
-  text-align: left;
-  padding: 0.45rem 0.7rem;
-  border-bottom: 1px solid var(--panel-edge);
-  vertical-align: top;
+  margin: 1.6rem 0;
+  font-size: 0.92rem;
 }
 
 th {
-  color: var(--coat);
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 0.68rem;
   font-weight: 600;
-  white-space: nowrap;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 0 0.9rem 0.6rem 0;
+  border-bottom: 1px solid var(--ink);
 }
 
-blockquote {
-  margin: 1rem 0;
-  padding: 0.6rem 1rem;
-  border-left: 3px solid var(--brown);
-  color: var(--muted);
-  background: var(--panel);
-  border-radius: 0 6px 6px 0;
+td {
+  padding: 0.7rem 0.9rem 0.7rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+  color: var(--body);
+  vertical-align: top;
 }
+
+tr:last-child td {
+  border-bottom: 0;
+}
+
+/* --- notes --------------------------------------------------------------- */
 
 .note {
-  border: 1px solid var(--panel-edge);
-  background: var(--panel);
-  border-radius: 6px;
-  padding: 0.8rem 1rem;
-  font-size: 0.92rem;
+  margin: 1.6rem 0;
+  padding-left: 1.2rem;
+  border-left: 2px solid var(--rule);
+  font-size: 0.94rem;
   color: var(--muted);
+  max-width: var(--measure);
 }
 
 .note strong {
-  color: var(--coat);
+  color: var(--ink);
+  font-weight: 600;
 }
 
-/* Argos beats ------------------------------------------------------------- */
+/* --- the join diagram ---------------------------------------------------- */
 
-/*
- * A beat is a full-width strip between two sections. It is deliberately not a
- * decoration inside a section: the dog walks the reader from one idea to the
- * next, so it belongs in the gap.
- */
-canvas.beat {
+.joinviz {
+  margin: 2.2rem 0;
+}
+
+.joinviz svg {
   display: block;
   width: 100%;
-  height: 148px;
-  margin: 2.2rem 0;
-  image-rendering: pixelated;
+  height: auto;
 }
 
-canvas.beat.hero-beat {
-  height: 232px;
-  margin: 1rem 0 0;
+.joinviz .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.6rem;
+  margin-top: 1rem;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
+
+.joinviz .legend i {
+  display: inline-block;
+  width: 20px;
+  height: 0;
+  margin-right: 0.45rem;
+  vertical-align: middle;
+  border-top: 1.5px solid var(--faint);
+}
+
+.joinviz .legend i.dashed {
+  border-top: 1.5px dashed var(--accent);
+}
+
+/* --- benchmark ----------------------------------------------------------- */
+
+.bench {
+  margin: 1.8rem 0;
+  max-width: 40rem;
+}
+
+.bench-row {
+  display: grid;
+  grid-template-columns: 13rem 1fr 3rem;
+  gap: 1.2rem;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: 0.88rem;
+}
+
+.bench-row:last-child {
+  border-bottom: 0;
+}
+
+.bench-row .who {
+  color: var(--ink);
+}
+
+.bench-row .who small {
+  display: block;
+  color: var(--faint);
+  font-size: 0.76rem;
+}
+
+.bench-bar {
+  height: 3px;
+  background: var(--rule);
+}
+
+.bench-bar i {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+.bench-row.weak .bench-bar i,
+.bench-row.none .bench-bar i {
+  background: var(--faint);
+}
+
+.bench-row .val {
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  color: var(--ink);
+  text-align: right;
+}
+
+.bench-row.weak .val,
+.bench-row.none .val {
+  color: var(--faint);
+}
+
+.caption {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  color: var(--faint);
+  max-width: var(--measure);
+  margin-top: 0.2rem;
+}
+
+/* --- the five checks ----------------------------------------------------- */
+
+.checks {
+  margin: 1.8rem 0;
+  border-top: 1px solid var(--rule);
+}
+
+.check {
+  padding: 1.3rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: 1.5rem;
+  align-items: baseline;
+}
+
+.check h4 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.check p {
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
+  color: var(--body);
+}
+
+.check .needs {
+  font-family: var(--sans);
+  font-size: 0.79rem;
+  color: var(--faint);
+}
+
+/* --- copy button --------------------------------------------------------- */
+
+.copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.2rem 0.55rem;
+  font: 600 0.7rem var(--sans);
+  color: var(--muted);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+/* Keyboard users never hover, so focus has to reveal it or it is mouse-only. */
+pre:hover .copy,
+.copy:focus-visible {
+  opacity: 1;
+}
+
+.copy:hover {
+  color: var(--ink);
+  border-color: var(--faint);
+}
+
+.copy.done {
+  opacity: 1;
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+/* --- Argos's beats ------------------------------------------------------- */
+
+.beat {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 3rem 0;
+}
+
+.hero-beat {
+  max-width: var(--max);
+  margin: 3.5rem auto 0;
+  padding: 0 2rem;
+}
+
+/* --- footer -------------------------------------------------------------- */
 
 footer {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 2rem 1.4rem 4rem;
-  border-top: 1px solid var(--panel-edge);
-  color: var(--muted);
-  font-size: 0.88rem;
+  padding: 2.5rem 2rem 4rem;
+  border-top: 1px solid var(--rule);
+  color: var(--faint);
+  font-size: 0.84rem;
+  max-width: var(--max);
 }
 
-@media (max-width: 52rem) {
+/* --- responsive ---------------------------------------------------------- */
+
+@media (max-width: 60rem) {
+  .hero {
+    padding-top: 4rem;
+  }
+
+  .figures {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.8rem;
+  }
+
   .page {
     grid-template-columns: 1fr;
+    gap: 2rem;
   }
 
   .toc {
     position: static;
     max-height: none;
-    border-left: none;
-    border-bottom: 1px solid var(--panel-edge);
-    padding: 0 0 1rem;
-    columns: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 1.1rem;
+    padding-bottom: 1.2rem;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .toc .group {
+    display: none;
+  }
+
+  .toc a {
+    border-left: 0;
+    padding: 0.15rem 0;
+    margin: 0;
+  }
+
+  .toc a.here {
+    border-bottom: 1px solid var(--accent);
+  }
+
+  .check {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .bench-row {
+    grid-template-columns: 1fr 3rem;
+  }
+
+  .bench-row .bench-bar {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}
+
+@media (max-width: 34rem) {
+  body {
+    font-size: 16px;
+  }
+
+  .topbar,
+  .hero,
+  .figures,
+  .term,
+  .page,
+  footer,
+  .hero-beat {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
   }
 
   .topbar nav {
     display: none;
+  }
+
+  .figures {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
   }
 }

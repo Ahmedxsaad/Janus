@@ -77,10 +77,18 @@
     return Math.max(0, cells - SPACING);
   }
 
+  /**
+   * The bubble, on paper.
+   *
+   * A cream fill with a heavy black edge was drawn for a dark page; on the
+   * light one it reads as a sticker sitting on top of the document. White with
+   * a hairline rule is the same bubble wearing the page's own manners, and the
+   * text is the page's ink rather than a brown of its own.
+   */
   const COLOURS = {
-    bubble: "#f3e3cb",
-    bubbleEdge: "#160f0a",
-    bubbleText: "#2a1a10",
+    bubble: "#ffffff",
+    bubbleEdge: "#d8d8d4",
+    bubbleText: "#16181d",
   };
 
   /** Frames each pose cycles through, in order. */
@@ -359,5 +367,81 @@
     window.requestAnimationFrame(tick);
   }
 
-  window.addEventListener("DOMContentLoaded", start);
+  /**
+   * A copy button on every code block.
+   *
+   * Added by script rather than typed into the markup: there are thirty-odd
+   * blocks and a button in each one is thirty chances to paste the wrong
+   * label. The button is the last child, so it never lands inside the text a
+   * reader is selecting by hand.
+   */
+  function addCopyButtons() {
+    for (const pre of document.querySelectorAll("pre")) {
+      const code = pre.querySelector("code");
+      if (!code) {
+        continue;
+      }
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "copy";
+      button.textContent = "Copy";
+      button.addEventListener("click", () => {
+        // Not available over plain http on a remote host, and there is no
+        // sensible fallback worth the code: say nothing rather than lie.
+        navigator.clipboard?.writeText(code.innerText).then(
+          () => {
+            button.textContent = "Copied";
+            button.classList.add("done");
+            window.setTimeout(() => {
+              button.textContent = "Copy";
+              button.classList.remove("done");
+            }, 1400);
+          },
+          () => {},
+        );
+      });
+      pre.appendChild(button);
+    }
+  }
+
+  /**
+   * Mark the sidebar link for whichever section is currently being read.
+   *
+   * `rootMargin` pins the trigger line near the top of the viewport rather than
+   * its middle, which is where a reader's attention is on a long document: with
+   * the default the highlight lags a whole screen behind the heading on screen.
+   */
+  function addScrollSpy() {
+    const links = new Map();
+    for (const link of document.querySelectorAll(".toc a[href^='#']")) {
+      links.set(link.getAttribute("href").slice(1), link);
+    }
+    const sections = [...document.querySelectorAll("section[id]")].filter((s) => links.has(s.id));
+    if (!sections.length) {
+      return;
+    }
+    const seen = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) {
+            continue;
+          }
+          for (const link of links.values()) {
+            link.classList.remove("here");
+          }
+          links.get(entry.target.id)?.classList.add("here");
+        }
+      },
+      { rootMargin: "-80px 0px -70% 0px" },
+    );
+    for (const section of sections) {
+      seen.observe(section);
+    }
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    start();
+    addCopyButtons();
+    addScrollSpy();
+  });
 })();
