@@ -60,14 +60,17 @@ class FakeGraph:
         graphql_response: dict[str, Any] | None = None,
         related: dict[str, list[str]] | None = None,
         timeseries: dict[tuple[str, type], Any] | None = None,
+        by_entity_type: dict[str, list[str]] | None = None,
     ) -> None:
         self._aspects = aspects or {}
         self._exists = exists
         self._related = related or {}
         self._timeseries = timeseries or {}
+        self._by_entity_type = by_entity_type or {}
         self.graphql_response = graphql_response or {}
         self.emitted: list[Any] = []
         self.graphql_calls: list[tuple[str, dict[str, Any] | None]] = []
+        self.filter_calls: list[tuple[tuple[str, ...], tuple[Any, ...]]] = []
 
     def get_aspect(self, entity_urn: str, aspect_type: type, version: int = 0) -> Any:
         return self._aspects.get((entity_urn, aspect_type))
@@ -112,6 +115,22 @@ class FakeGraph:
         self, entity_urn: str, relationship_types: list[str], direction: Any
     ) -> Any:
         return [_RelatedEntity(urn) for urn in self._related.get(entity_urn, [])]
+
+    def get_urns_by_filter(
+        self,
+        *,
+        entity_types: list[str] | None = None,
+        extraFilters: list[dict[str, Any]] | None = None,  # noqa: N803 - the SDK's own spelling
+        **_: Any,
+    ) -> Any:
+        """Entity discovery by filter, the companion's owned-asset sweep.
+
+        Keyed by entity type so a test can hand back datasets for one call and
+        models for the next, which is what the real sweep does.
+        """
+        self.filter_calls.append((tuple(entity_types or ()), tuple(extraFilters or ())))
+        for entity_type in entity_types or []:
+            yield from self._by_entity_type.get(entity_type, [])
 
     def get_entities(
         self,
