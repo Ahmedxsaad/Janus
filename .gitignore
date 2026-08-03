@@ -30,3 +30,9 @@ htmlcov/
 *.log
 *.sqlite
 *.db
+
+# Rust build output for the Argos window. Cargo.lock is committed on purpose
+# (this crate builds a binary, so the lock is what makes a release
+# reproducible); target/ and Tauri's generated schemas are not.
+argos/target/
+argos/gen/

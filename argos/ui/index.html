@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Argos</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        /* The window is a pet, not a document: nothing here is selectable and
+           the OS caret must never appear over the dog. */
+        user-select: none;
+        cursor: default;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      #dog {
+        position: absolute;
+        left: 8px;
+        top: 24px;
+        image-rendering: pixelated;
+      }
+
+      /* The bubble and the menu are the only opaque things on screen, so they
+         carry the palette's stage colour rather than a system chrome look. */
+      #bubble,
+      #menu {
+        position: absolute;
+        display: none;
+        background: #242424;
+        color: #f7f7f7;
+        border: 2px solid #12233f;
+        font-size: 10px;
+        line-height: 1.35;
+      }
+
+      #bubble {
+        left: 4px;
+        top: 0;
+        right: 4px;
+        padding: 4px 5px;
+        max-height: 58px;
+        overflow: hidden;
+      }
+
+      #bubble .sev {
+        color: #f39f19;
+      }
+
+      #bubble .sev.high,
+      #bubble .sev.critical {
+        color: #e90101;
+      }
+
+      #menu {
+        left: 8px;
+        top: 8px;
+        padding: 2px;
+      }
+
+      #menu button {
+        display: block;
+        width: 100%;
+        padding: 3px 8px;
+        border: 0;
+        background: transparent;
+        color: #f7f7f7;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      #menu button:hover {
+        background: #1857d2;
+      }
+
+      #menu button:disabled {
+        color: #7d8590;
+        cursor: default;
+      }
+
+      #menu button:disabled:hover {
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="dog" width="128" height="128"></canvas>
+    <div id="bubble"></div>
+    <div id="menu">
+      <button type="button" data-cmd="scan_now">Scan now</button>
+      <button type="button" data-cmd="approve">Approve pending</button>
+      <button type="button" data-cmd="mute">Mute 1h</button>
+      <button type="button" data-cmd="open_datahub">Open in DataHub</button>
+    </div>
+    <script src="sprites.js"></script>
+    <script src="argos.js"></script>
+  </body>
+</html>

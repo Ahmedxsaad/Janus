@@ -1,0 +1,211 @@
+# Argos, 16x16, side profile facing right.
+#
+# One character per pixel, indexing the palette in argos.js:
+#   .  transparent      k  outline #12233F     w  coat #F7F7F7
+#   a  amber #F39F19    b  DataHub blue        d  deep blue      r  red
+#
+# Red is state, never decoration: no frame below uses r. The renderer paints the
+# collar tag red when a finding is live, and only then.
+#
+# A character is one file of this shape. Add frames by name; the loader reads
+# whatever is here and the state machine in argos.js maps states onto them.
+# Every frame must be 16 rows of exactly 16 characters, which tests/test_argos.py
+# checks, so a mistyped row fails the suite rather than the window.
+
+# idle_a
+................
+..........kkkk..
+.........kaaaak.
+.........kawwwwk
+..kk.....kwwkwwk
+.kaak....kwwwwwk
+.kaak....kwwwwkk
+.kakkkkkkkwwwwk.
+.kwwwwwwwwbbbbk.
+.kwwwwwwwwwbbk..
+.kwwwwwwwwwwwk..
+.kwwwwwwwwwwwk..
+.kwk.....kwwk...
+.kwk.....kwwk...
+.kkk.....kkkk...
+................
+
+# idle_b
+................
+..........kkkk..
+.........kaaaak.
+..kk.....kawwwwk
+.kaak....kwwkwwk
+.kaak....kwwwwwk
+.kaak....kwwwwkk
+.kakkkkkkkwwwwk.
+.kwwwwwwwwbbbbk.
+.kwwwwwwwwwbbk..
+.kwwwwwwwwwwwk..
+.kwwwwwwwwwwwk..
+.kwk.....kwwk...
+.kwk.....kwwk...
+.kkk.....kkkk...
+................
+
+# walk_a
+................
+..........kkkk..
+.........kaaaak.
+.........kawwwwk
+.........kwwkwwk
+..k......kwwwwwk
+.kak.....kwwwwkk
+.kakkkkkkkwwwwk.
+.kwwwwwwwwbbbbk.
+.kwwwwwwwwwbbk..
+.kwwwwwwwwwwwk..
+.kwwwwwwwwwwwk..
+..kwk...kwwk....
+..kwk..kwwk.....
+..kkk..kkkk.....
+................
+
+# walk_b
+................
+..........kkkk..
+.........kaaaak.
+.........kawwwwk
+.........kwwkwwk
+..k......kwwwwwk
+.kaak....kwwwwkk
+.kakkkkkkkwwwwk.
+.kwwwwwwwwbbbbk.
+.kwwwwwwwwwbbk..
+.kwwwwwwwwwwwk..
+.kwwwwwwwwwwwk..
+.kwk......kwwk..
+..kwk.....kwwk..
+..kkk.....kkkk..
+................
+
+# sniff
+................
+................
+................
+..........kkkk..
+.........kaaaak.
+..k......kawwwwk
+.kak.....kwwkwwk
+.kakkkkkkkwwwwwk
+.kwwwwwwwwbbbbkk
+.kwwwwwwwwwbbk..
+.kwwwwwwwwwwwk..
+.kwwwwwwwwwwwk..
+.kwk.....kwwk...
+.kwk.....kwwk...
+.kkk.....kkkk...
+................
+
+# alert_a
+..........kkkk..
+.........kaaaak.
+.........kawwwwk
+.........kwwkwwk
+.........kwwwwwk
+..k......kwwkkkk
+.kak.....kwwwwkk
+.kakkkkkkkwwwwk.
+.kwwwwwwwwbbbbk.
+.kwwwwwwwwwbbk..
+.kwwwwwwwwwwwk..
+.kwwwwwwwwwwwk..
+.kwk.....kwwk...
+.kwk.....kwwk...
+.kkk.....kkkk...
+................
+
+# alert_b
+..........kkkk..
+.........kaaaak.
+.........kawwwwk
+.........kwwkwwk
+.........kwwwwwk
+.kaak....kwwkkkk
+.kaak....kwwkkkk
+.kakkkkkkkwwwwk.
+.kwwwwwwwwbbbbk.
+.kwwwwwwwwwbbk..
+.kwwwwwwwwwwwk..
+.kwwwwwwwwwwwk..
+.kwk.....kwwk...
+.kwk.....kwwk...
+.kkk.....kkkk...
+................
+
+# sleep
+................
+................
+................
+................
+................
+................
+................
+..........kkkk..
+.........kaaaak.
+.........kwwwwwk
+..k......kkkwwwk
+.kak.....kwwwwwk
+.kakkkkkkkwwwwkk
+.kwwwwwwwwbbbbk.
+.kwwwwwwwwwwwk..
+..kkkkkkkkkkk...
+
+# tilt
+................
+..........kkkk..
+.........kaaaakk
+.........kawwwwk
+.........kwwkwwk
+..k.....kkwwwwwk
+.kak....kwwwwwkk
+.kakkkkkkkwwwk..
+.kwwwwwwwwbbbk..
+.kwwwwwwwwwbbk..
+.kwwwwwwwwwwwk..
+.kwwwwwwwwwwwk..
+.kwk.....kwwk...
+.kwk.....kwwk...
+.kkk.....kkkk...
+................
+
+# scribble
+................
+..........kkkk..
+.........kaaaak.
+.........kawwwwk
+.........kwwkwwk
+.........kwwwwwk
+..k......kwwwwkk
+.kak.....kwwwwk.
+.kakkkkkkkbbbbk.
+.kwwwwwwwwwbbk..
+.kwwwwwwwwwkkk..
+.kwwwwwwwwk.....
+.kwwwwwwwwk.....
+.kwwwwwwwwk.....
+.kkkkkkkkkk.....
+................
+
+# tug
+................
+................
+..........kkkk..
+.........kaaaak.
+.........kawwwwk
+..k......kwwkwwk
+.kak.....kwwwwwk
+.kakkkkkkkwwwkkk
+.kwwwwwwwwbbbbk.
+.kwwwwwwwwwbbk..
+.kwwwwwwwwwwwk..
+.kwwwwwwwwwwwk..
+.kwk.....kwwkk..
+.kwk.....kwwk...
+.kkk.....kkkk...
+................

@@ -1,0 +1,11 @@
+{
+  "identifier": "default",
+  "description": "What the two windows are allowed to call. Nothing here reaches the filesystem, the network, or a shell: the window renders and forwards clicks, and the producer does everything else.",
+  "windows": ["pet", "walk"],
+  "permissions": [
+    "core:default",
+    "core:event:allow-emit",
+    "core:event:allow-listen",
+    "core:window:allow-start-dragging"
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Argos",
+  "version": "0.1.0",
+  "identifier": "io.modelguard.argos",
+  "build": {
+    "frontendDist": "ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+    },
+    "windows": [
+      {
+        "label": "pet",
+        "title": "Argos",
+        "url": "index.html",
+        "width": 176,
+        "height": 176,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "resizable": false,
+        "dragDropEnabled": true
+      },
+      {
+        "label": "walk",
+        "title": "Argos blast radius",
+        "url": "walk.html",
+        "width": 1280,
+        "height": 800,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "focus": false,
+        "dragDropEnabled": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage", "dmg", "msi"],
+    "icon": ["icons/icon.png"],
+    "category": "DeveloperTool",
+    "shortDescription": "The DataHub watchdog",
+    "longDescription": "Argos renders the state of your data-to-model supply chain as a desktop pet, driven by a JSON event stream from ModelGuard or any other producer."
+  }
+}
