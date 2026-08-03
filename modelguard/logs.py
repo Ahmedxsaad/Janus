@@ -61,6 +61,27 @@ def logfmt(fields: Mapping[str, Any]) -> str:
     return " ".join(f"{key}={value}" for key, value in fields.items())
 
 
+#: The field a record sets to say which phase of a scan it opens. Some phases of
+#: a scan are slow (a lineage walk, an LLM call) and nothing returns from them
+#: until they are over, so the log is where a reader learns they started. A
+#: desktop companion reads it through a handler and draws the dog accordingly
+#: (modelguard/argos/handler.py); a person reads it in the terminal. Neither
+#: gets prose out of it: the rule at the top of this module holds, identifiers
+#: and counts only.
+PHASE_FIELD = "argos_phase"
+
+
+def phase(state: str, **fields: Any) -> dict[str, Any]:
+    """Build the ``extra`` mapping for a log line that opens a phase.
+
+    One helper so the call sites in detect/, agent/ and writeback/ cannot drift
+    from each other or from :data:`PHASE_FIELD`::
+
+        logger.info("lineage walk %s", logfmt(f), extra=phase("sniffing", **f))
+    """
+    return {LOG_FIELDS: {PHASE_FIELD: state, **fields}}
+
+
 class JsonFormatter(logging.Formatter):
     """Render a record as one JSON object per line.
 
