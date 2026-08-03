@@ -30,11 +30,16 @@
  *
  * A timeline of `[frame, milliseconds]` rather than a frame rate, because the
  * life is in the uneven timing: a two-second hold and a 130ms blink is a dog,
- * four frames at 3fps is a flipbook.
+ * four frames at 3fps is a flipbook. An optional third number lifts the sprite
+ * off the floor for that frame, in sprite pixels, which is how the bark jumps:
+ * the lift belongs to the frame rather than to a clock, so the dog is never
+ * airborne with its legs planted.
  *
  * `dim` and `alpha` are the two health modifiers, `collar` repaints the collar,
  * and `shake` rattles the whole sprite. Red is state, never decoration: only a
- * live finding sets it. `roams` is the one state allowed to move (see above).
+ * live finding sets it, and no frame of the art carries any. `roams` is the one
+ * state allowed to move (see above). `shout` is the punctuation that slams in
+ * over his head, and only two states have anything to punctuate.
  */
 const STATES = {
   patrolling: {
@@ -60,12 +65,15 @@ const STATES = {
     ],
   },
   barking: {
+    // Planted and shouting, then off the floor: a bark that only opened a mouth
+    // was the easiest state in the set to miss out of the corner of an eye.
     timeline: [
       ["alert_a", 150],
-      ["alert_b", 170],
+      ["alert_b", 170, 3.4],
     ],
     collar: "r",
     shake: true,
+    shout: "!",
   },
   scribbling: {
     timeline: [
@@ -84,6 +92,8 @@ const STATES = {
       ["sleep_a", 1500],
       ["sleep_b", 1600],
     ],
+    shout: "z",
+    shoutDrift: true,
   },
   recovered: {
     timeline: [
@@ -96,6 +106,7 @@ const STATES = {
       ["search_a", 750],
       ["search_b", 800],
     ],
+    shout: "?",
   },
   muted: {
     timeline: [
@@ -141,6 +152,18 @@ const BUBBLE_MS = 9000;
 
 /** How long a petting reaction lasts before the patrol resumes. */
 const PET_MS = 1800;
+
+/** Frames for picking the toy up and being pleased with himself about it. */
+const FETCH_CYCLE = [
+  ["sniff_b", 200],
+  ["tug_a", 190],
+  ["tug_b", 190],
+  ["wag_a", 140],
+  ["wag_b", 150],
+];
+
+/** How long he keeps the toy before dropping it and going back on patrol. */
+const FETCH_MS = 1500;
 
 /** Desktop pixels per second while roaming. A trot, not a sprint. */
 const ROAM_SPEED = 26;
@@ -216,6 +239,8 @@ class Argos {
     this.trust = document.getElementById("trust");
     this.menu = document.getElementById("menu");
     this.floor = document.getElementById("floor");
+    this.shout = document.getElementById("shout");
+    this.ball = document.getElementById("ball");
     this.hideAt = 0;
 
     // Where the dog is standing, and which way it is looking. `x` is the
@@ -232,6 +257,9 @@ class Argos {
     this.pointer = null;
     this.petUntil = 0;
     this.pets = 0;
+    // Where the thrown toy landed, and until when he is busy with it.
+    this.ballX = null;
+    this.fetchUntil = 0;
 
     for (let index = 0; index < 10; index += 1) {
       this.trust.appendChild(document.createElement("i"));
@@ -257,14 +285,36 @@ class Argos {
       this.step = 0;
       this.stepAt = 0;
       // A state that is not a patrol stands still, so a walk in progress is
-      // abandoned here rather than finishing under the wrong sprite.
+      // abandoned here rather than finishing under the wrong sprite. The game
+      // ends with it: a dog that kept fetching through a finding would be the
+      // sprite contradicting the event.
       this.target = null;
       this.restUntil = 0;
+      this.dropToy();
       // The squash-and-stretch on entry is what makes a state change feel like
       // the dog reacted rather than the sprite being swapped.
       this.enteredAt = performance.now();
     }
     this.showBubble();
+    this.showShout(STATES[this.state]);
+  }
+
+  /**
+   * Punctuate the state, courtroom-game style: the mark restarts on every
+   * event, because two findings in a row are two interruptions.
+   *
+   * Clearing the class and reading a layout property before setting it again is
+   * what restarts a CSS animation. Without the read, re-adding a class the
+   * element already carries is a no-op and the second bark arrives silently.
+   */
+  showShout(spec) {
+    this.shout.className = "";
+    if (!spec.shout) {
+      return;
+    }
+    this.shout.textContent = spec.shout;
+    void this.shout.offsetWidth;
+    this.shout.className = spec.shoutDrift ? "shown drift" : "shown";
   }
 
   showBubble() {
@@ -333,6 +383,43 @@ class Argos {
   }
 
   /**
+   * Somebody threw the toy at a spot on the floor, so he goes and gets it.
+   *
+   * Gated on the same rule the roam is: a state that stands still keeps
+   * standing still, because a dog that trotted off to play mid-finding would be
+   * the sprite contradicting what the producer just said. The throw itself is
+   * no more a claim about the graph than a hand on his back is.
+   *
+   * ponytail: the toy lands inside this window's own floor strip, not across
+   * the desktop. A screen-wide fetch means moving the window every animation
+   * frame, which src/main.rs already notes some window managers rate-limit;
+   * the overlay window the blast-radius walk uses is the upgrade path.
+   */
+  throwToy(x) {
+    if (!STATES[this.state].roams || this.petting(performance.now())) {
+      return;
+    }
+    this.ballX = Math.max(8, Math.min(this.floor.clientWidth - 8, x));
+    // Same animation restart as the shout: a second throw must re-arc.
+    this.ball.className = "";
+    void this.ball.offsetWidth;
+    this.ball.style.left = `${Math.round(this.ballX)}px`;
+    this.ball.className = "shown";
+    // He goes now, whatever he had planned. Interrupting the rest is the point.
+    this.target = Math.max(0, Math.min(this.span, this.ballX - this.size / 2));
+    this.facing = this.target > this.x ? 1 : -1;
+    this.restUntil = 0;
+    this.fetchUntil = 0;
+  }
+
+  /** Take the toy off the floor, whether he reached it or the game was cut. */
+  dropToy() {
+    this.ballX = null;
+    this.fetchUntil = 0;
+    this.ball.className = "";
+  }
+
+  /**
    * Move the dog along its strip.
    *
    * Alternates between standing somewhere and walking to a new spot. Only ever
@@ -364,6 +451,14 @@ class Argos {
     if (Math.abs(remaining) <= stride) {
       this.x = this.target;
       this.target = null;
+      if (this.ballX !== null) {
+        // Got it. The toy comes off the floor and he is pleased for a moment
+        // before the patrol picks up where it left off.
+        this.dropToy();
+        this.fetchUntil = now + FETCH_MS;
+        this.restUntil = now + FETCH_MS;
+        return false;
+      }
       // Stand a while before the next leg. The range is wide on purpose: an
       // even cadence reads as a machine pacing, not an animal.
       this.restUntil = now + between(1400, 5200);
@@ -398,9 +493,17 @@ class Argos {
       this.watchPointer();
     }
 
-    // Which timeline is playing: the walk while a leg is in progress, the wag
-    // while a hand is on the dog, otherwise the state's own.
-    const timeline = moving ? WALK_CYCLE : petting ? PET_CYCLE : spec.timeline;
+    // Which timeline is playing: the walk while a leg is in progress, the grab
+    // while the toy is in his mouth, the wag while a hand is on the dog,
+    // otherwise the state's own.
+    const fetching = now < this.fetchUntil;
+    const timeline = moving
+      ? WALK_CYCLE
+      : fetching
+        ? FETCH_CYCLE
+        : petting
+          ? PET_CYCLE
+          : spec.timeline;
     if (timeline !== this.timeline) {
       this.timeline = timeline;
       this.step = 0;
@@ -422,11 +525,20 @@ class Argos {
     this.canvas.style.transform = `translateX(${Math.round(this.x)}px)`;
     // The bubble's tail follows the head. Without this it stayed at 50% and
     // pointed into empty space the moment the dog walked off centre.
-    this.bubble.style.setProperty("--tail", `${Math.round(this.x + this.size / 2)}px`);
+    const centre = Math.round(this.x + this.size / 2);
+    this.bubble.style.setProperty("--tail", `${centre}px`);
+    // The mark travels with him like the bubble's tail does, and sits on the
+    // side he is not facing: the head fills the half he faces, and a mark drawn
+    // over the muzzle is a mark nobody can read.
+    this.shout.style.left = `${Math.round(centre - this.facing * this.size * 0.31)}px`;
+
+    // How far off the floor this frame is, in sprite pixels: the third number
+    // on a timeline entry, and zero on every entry that has only two.
+    const lift = timeline[this.step][2] || 0;
 
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.size, this.size);
-    this.drawShadow(spec, now, moving);
+    this.drawShadow(spec, now, moving, lift);
 
     // Entry squash: 180ms of a flattened, wider sprite settling back to square.
     const since = now - this.enteredAt;
@@ -434,11 +546,13 @@ class Argos {
     const shake = spec.shake ? Math.round(Math.sin(now / 45) * 1.2) : 0;
     // A walking dog rises and falls on its own stride; a petted one bounces a
     // little harder. Both are a fraction of a sprite pixel, not a hop.
-    const bob = moving
-      ? Math.abs(Math.sin(now / 110)) * -0.35
-      : petting
-        ? Math.abs(Math.sin(now / 90)) * -0.5
-        : 0;
+    const bob =
+      -lift +
+      (moving
+        ? Math.abs(Math.sin(now / 110)) * -0.35
+        : petting || fetching
+          ? Math.abs(Math.sin(now / 90)) * -0.5
+          : 0);
 
     ctx.save();
     ctx.translate(this.size / 2 + shake, this.size);
@@ -455,19 +569,23 @@ class Argos {
   }
 
   /** The ellipse that puts the dog on the desktop instead of above it. */
-  drawShadow(spec, now, moving) {
+  drawShadow(spec, now, moving, lift) {
     const ctx = this.ctx;
     // Breathing while still, stride while walking: the shadow is the cheapest
     // place to show weight shifting.
     const pulse = moving ? 1 + Math.sin(now / 110) * 0.06 : 1 + Math.sin(now / 900) * 0.03;
     ctx.save();
-    ctx.globalAlpha = (spec.alpha === undefined ? 1 : spec.alpha) * 0.22;
+    // A jump that keeps its shadow at full size is a dog sliding up the screen.
+    // The shadow shrinks and thins out as the sprite leaves the floor, which is
+    // the only cue that says off the ground rather than moved up.
+    const grounded = 1 - Math.min(lift / 6, 0.6);
+    ctx.globalAlpha = (spec.alpha === undefined ? 1 : spec.alpha) * 0.22 * grounded;
     ctx.fillStyle = "#000";
     ctx.beginPath();
     ctx.ellipse(
       this.size / 2,
       this.size - this.scale * 1.6,
-      this.size * 0.3 * pulse,
+      this.size * 0.3 * pulse * grounded,
       this.scale * 0.9,
       0,
       0,
@@ -503,6 +621,16 @@ function bindInteractions(app) {
     app.toggleBubble();
   });
   canvas.addEventListener("dblclick", () => app.walk());
+
+  // A click on the floor beside him throws the toy there. The canvas is left
+  // out because a click on the dog is a pat, and a click while the menu is open
+  // is somebody dismissing the menu rather than starting a game.
+  app.floor.addEventListener("click", (event) => {
+    if (event.target === canvas || app.menu.classList.contains("shown")) {
+      return;
+    }
+    app.throwToy(event.clientX - app.floor.getBoundingClientRect().left);
+  });
 
   // Following the cursor is what makes the window feel occupied rather than
   // decorated. Tracked on the whole page so the dog notices a hand approaching

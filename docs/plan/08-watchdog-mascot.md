@@ -101,6 +101,16 @@ Supporting interactions, in cost order:
 - Right-click: small pixel menu. Scan now, Approve pending, Mute 1h,
   Open DataHub.
 - Drag: move the dog.
+- Pet him: a click is also a hand, and he wags for a moment before the state he
+  was in resumes.
+- Click the floor beside him: the toy lands there and he goes and gets it,
+  carries it a second, then picks the patrol back up (D-102). It is a reaction
+  to a hand, like the petting, and it is gated on the states that already roam:
+  a dog that trotted off to play mid-finding would be the sprite contradicting
+  the event. The toy stays inside the pet window's own strip; a fetch across the
+  whole desktop means moving the window every animation frame, which some window
+  managers rate-limit, and the overlay window section 4's walk already uses is
+  the upgrade path if it is ever worth it.
 - Drop a file on it: the drop triggers a poll now and names the file in the
   bubble. It does *not* retarget the watch, and this is a correction to what
   draft 1 assumed: `link --infer` infers from the model in the graph, not from
@@ -127,7 +137,23 @@ more of the same silhouette.
 
 **Colour rule: red is state, not decoration.** The dog is blue and amber while
 the graph is healthy. Red enters only on a live finding, on the collar tag. That
-is what makes the health readable at a glance without reading anything.
+is what makes the health readable at a glance without reading anything. No frame
+of the art carries red at all (D-102): the bark's open mouth was drawn red once,
+being the one place red occurs naturally on a dog, and at 32 pixels it read as
+an injured animal rather than a barking one. It is the outline colour now, which
+is what an open mouth is anyway: a hole.
+
+**The two poses a viewer looks at longest got redrawn (D-102).** Asleep is held
+for minutes and the bark is the one state that must land in peripheral vision.
+Asleep is no longer the standing rig pushed down three rows (that read as a dog
+standing in a hole) but its own lying pose: haunch, a back sloping to a head laid
+on outstretched forepaws, a tail curled on the ground, one row of ribcage rising
+between the two frames, and a Z drifting up off the head. The bark is a jump: the
+second frame tucks the legs and the renderer lifts the sprite off the floor for
+exactly that frame while the shadow shrinks under it, with an exclamation mark
+that slams in over his shoulder the way the courtroom games do it. The mark is
+punctuation on a state the producer already sent, never a claim of its own, so
+only two states carry one: `!` for a bark and `?` for a check that could not run.
 
 Palette (D-101; the collar keeps the original DataHub blue, everything else is
 the breed's own colouring rather than the logo's):

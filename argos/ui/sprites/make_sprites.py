@@ -40,10 +40,10 @@ HEADER = """\
 #   g  coat shade #A96B2C   a  saddle/ears #2A2119  o  saddle shade #15100C
 #   b  DataHub blue         d  blue shade          r  red
 #
-# Red is state, never decoration. Only two frames use r, and both are the bark:
-# the open mouth has an inside, and nothing else in the character is allowed to
-# be red. The collar is blue here and the renderer repaints it when a finding
-# is live.
+# Red is state, never decoration, and no frame here uses r at all. The collar
+# is blue in the art and the renderer is the only thing that turns it red, when
+# a finding is live. An open mouth is drawn with the outline colour, because a
+# mouth is a hole and a red one made the bark read as an injured dog.
 #
 # A `# name` line opens a frame and every line after it is a row. Every frame is
 # 32 rows of exactly 32 characters, which tests/test_argos.py checks, so a
@@ -156,10 +156,12 @@ HEAD_TILT = """
 ............wwwwwwwwwaa.........
 """
 
-#: Open jaw, not a long red plank. The mouth opens from the same hinge the
-#: closed muzzle tapers from, upper lip in the marking colour and the gap
-#: between upper and lower jaw the only red in the character (rule 6 below):
-#: red is state, and a bark's open mouth is the one place it occurs naturally.
+#: Open jaw. The mouth opens from the same hinge the closed muzzle tapers from,
+#: upper lip in the marking colour and the gap between the jaws in the outline
+#: colour: a mouth is a hole, and this is where the light does not reach. It was
+#: red once, which was the one place red occurred naturally in the character and
+#: still the wrong call: at 32 pixels a red muzzle reads as a bleeding dog, not
+#: a barking one, and red already means a live finding on the collar.
 HEAD_BARK = """
 ................aa...aa.........
 ...............aaaa.aaaa........
@@ -169,8 +171,8 @@ HEAD_BARK = """
 .............wwwwwwwwwwww.......
 .............wwwwwwwwwwww.......
 ............wwwwwkkwwwwwwaaa....
-............wwwwwkkwwwwaarrraak.
-............wwwwwwwwwwrrrrrrak..
+............wwwwwkkwwwwaakkkaak.
+............wwwwwwwwwwkkkkkkak..
 ............wwwwwwwwwaaaaaak....
 .............wwwwwwwwwaa........
 """
@@ -207,20 +209,72 @@ HEAD_SEARCH = """
 ..........wwwwwwwwwaa...........
 """
 
-#: Asleep: eye shut and the muzzle laid flat.
-HEAD_SLEEP = """
-................................
-.................aa...aa........
-................aaaa.aaaa.......
-................aaaa.aaaa.......
-...............aaawwwaaaw.......
-...............awwwwwwwww.......
-..............wwwwwwwwwwww......
-..............wwwwwwwwwwww......
-.............wwwwwwwwwwwwww.....
-.............wwwwwwwwwwwaaaak...
-..............wwwwwwwwwwaaaak...
-...............wwwwwwwwaa.......
+# --- asleep ------------------------------------------------------------------
+#
+# The one pose that is not the standing rig with a part swapped, because a
+# sleeping dog is not a standing dog with different legs. The first attempt was
+# exactly that (the standing head and torso pushed down three rows, the legs
+# replaced by a flat slab) and it read as a dog standing in a hole. A dog asleep
+# is a low mound: the haunch at one end, the back sloping down to a head laid on
+# outstretched forepaws, and the tail curled around against the ground.
+
+#: Head laid low, eye shut, ears still up. Shepherds sleep with their ears up
+#: and folding them here lost the breed in the only pose it holds for minutes.
+SLEEP_HEAD = """
+..................aa...aa.......
+.................aaaa.aaaa......
+.................aaaa.aaaa......
+................aaawwwaaaw......
+................awwwwwwwww......
+...............wwwwwkkwwwww.....
+...............wwwwwwwwwwwww....
+...............wwwwwwwwwwwaaaak.
+................wwwwwwwwwaaaaak.
+.................wwwwwwwaaaak...
+"""
+
+#: Haunch, back and the forelegs stretched out in front. The last two rows are
+#: belly and legs as one mass on purpose: at this size a lying dog's legs are
+#: not separable from its underside, and drawing them apart made a caterpillar.
+#:
+#: The left edge stops at column 4 rather than at the frame's, to leave the tail
+#: somewhere to be. A body drawn out to the edge swallowed it: haunch and tail
+#: are both the saddle colour, so an overlapping tail is not a tail, it is two
+#: pixels nobody can see.
+SLEEP_BODY = """
+..........aaaaaaaa..............
+........aaaaaaaaaaaa............
+......aaaaaaaaaaaaaaa...........
+.....aaaaaaaaaaaaaaaa...........
+.....aaaaaaaaaaaaaaaw...........
+....waaaaaaaaaaaaawwww..........
+....wwwaaaaaaaawwwwwwww.........
+....gwwwwwwwwwwwwwwwwwwwwwwwww..
+....ggwwwwwwwwwwwwwwwwwwwwwww...
+"""
+
+#: The tail curled around the rear and down onto the ground, drawn after the
+#: body so the part that overlaps the haunch is hidden and only the curl shows.
+SLEEP_TAIL = """
+..aaaa..........................
+.aaaaao.........................
+aaaaoo..........................
+aaoo............................
+"""
+
+#: The collar, at the neck rather than at the standing rig's throat row. Most of
+#: it is behind the head; the few pixels that show are the point, because a dog
+#: that loses its collar in one pose stops being the same dog.
+SLEEP_COLLAR = """
+............bbbb................
+............dddd................
+"""
+
+#: One row of ribcage, added to the second sleeping frame only. That is the
+#: whole breath: raising the whole body instead reads as the dog levitating,
+#: and moving the head with it reads as a flinch.
+SLEEP_BREATH = """
+.........aaaaaaaa...............
 """
 
 # --- body ------------------------------------------------------------------
@@ -330,15 +384,14 @@ LEGS_WALK_C = leg_frame(fore_col=8, hind_col=13)
 LEGS_WALK_D = LEGS_WALK_B
 #: Sitting: the haunch is a shortened standing hind leg, not a fold elsewhere.
 LEGS_SIT = leg_frame(fore_col=4, hind_col=17, shorten="hind")
-#: Curled rather than a flat plank. A first pass was a rectangle wider than the
-#: torso sitting above it, sticking out past the body on both sides, and read
-#: as the dog lying on a skateboard. This tapers at each end to match the
-#: torso's own width instead.
-LEGS_SLEEP = """
-....wwwwwwwwwwwwwwwwww..........
-...wwwwwwwwwwwwwwwwwwww.........
-...gwwwwwwwwwwwwwwwwwwg.........
-....gg..........................
+#: Folded up under the body, for the airborne half of the bark. Both clusters
+#: are cut to their top rows and pulled inward: legs that stayed at full length
+#: while the sprite was lifted read as a dog on stilts, not a dog off the floor.
+LEGS_TUCK = """
+.....wwwggg....wwwggg...........
+.....wwwggg....wwwggg...........
+.....www.......www..............
+................................
 ................................
 ................................
 """
@@ -349,22 +402,37 @@ LEGS_PAW = leg_frame(fore_col=4, hind_col=17, lift="fore")
 ROWS = {"tail": 16, "torso": 15, "head": 2, "collar": 14, "legs": 23}
 
 
-def compose(head: str, legs: str, tail: str, *, drop: int = 0) -> list[str]:
-    """Build one frame from its parts, then find its outline.
+def compose(head: str, legs: str, tail: str) -> list[str]:
+    """Build one standing frame from its parts, then find its outline.
 
     Order matters: the tail goes down first so the torso sits in front of it,
     the head next so it overlaps the shoulder the way a big head does, and the
     collar last so it reads as worn rather than swallowed.
-
-    ``drop`` sinks the whole animal, which is how the sleeping pose keeps its
-    feet on the same ground line as the standing ones.
     """
     frame = grid()
-    stamp(frame, tail, ROWS["tail"] + drop)
-    stamp(frame, TORSO, ROWS["torso"] + drop)
-    stamp(frame, head, ROWS["head"] + drop)
-    stamp(frame, COLLAR, ROWS["collar"] + drop)
-    stamp(frame, legs, ROWS["legs"] + drop)
+    stamp(frame, tail, ROWS["tail"])
+    stamp(frame, TORSO, ROWS["torso"])
+    stamp(frame, head, ROWS["head"])
+    stamp(frame, COLLAR, ROWS["collar"])
+    stamp(frame, legs, ROWS["legs"])
+    return ["".join(row) for row in outline(frame)]
+
+
+#: Where the sleeping parts are stamped. Their own rows, not ``ROWS``: this pose
+#: has no torso, no leg clusters and no throat, so borrowing the standing rig's
+#: offsets would only make the two look related in the source.
+SLEEP_ROWS = {"tail": 25, "body": 20, "breath": 19, "collar": 22, "head": 17}
+
+
+def sleep_pose(*, breathing: bool) -> list[str]:
+    """Build one sleeping frame; ``breathing`` adds the raised ribcage row."""
+    frame = grid()
+    stamp(frame, SLEEP_TAIL, SLEEP_ROWS["tail"])
+    stamp(frame, SLEEP_BODY, SLEEP_ROWS["body"])
+    if breathing:
+        stamp(frame, SLEEP_BREATH, SLEEP_ROWS["breath"])
+    stamp(frame, SLEEP_COLLAR, SLEEP_ROWS["collar"])
+    stamp(frame, SLEEP_HEAD, SLEEP_ROWS["head"])
     return ["".join(row) for row in outline(frame)]
 
 
@@ -381,12 +449,15 @@ FRAMES: dict[str, list[str]] = {
     "walk_d": compose(HEAD, LEGS_WALK_D, TAIL_MID),
     "sniff_a": compose(HEAD_SNIFF, LEGS_STAND, TAIL_MID),
     "sniff_b": compose(HEAD_SNIFF, LEGS_PAW, TAIL_LOW),
-    "alert_a": compose(HEAD_BARK, LEGS_STAND, TAIL_LOW),
-    "alert_b": compose(HEAD_BARK, LEGS_PAW, TAIL_LOW),
+    # The bark is a jump: planted and shouting, then off the floor with the legs
+    # tucked. The lift itself belongs to the renderer, which raises the sprite
+    # on the second frame, so the two stay in step without a shared clock.
+    "alert_a": compose(HEAD_BARK, LEGS_STAND, TAIL_WAG),
+    "alert_b": compose(HEAD_BARK, LEGS_TUCK, TAIL_WAG),
     "tilt_a": compose(HEAD_TILT, LEGS_STAND, TAIL_MID),
     "tilt_b": compose(HEAD_TILT, LEGS_STAND, TAIL_DOWN),
-    "sleep_a": compose(HEAD_SLEEP, LEGS_SLEEP, TAIL_DOWN, drop=3),
-    "sleep_b": compose(HEAD_SLEEP, LEGS_SLEEP, TAIL_MID, drop=3),
+    "sleep_a": sleep_pose(breathing=False),
+    "sleep_b": sleep_pose(breathing=True),
     "sit": compose(HEAD, LEGS_SIT, TAIL_DOWN),
     "scribble_a": compose(HEAD_SNIFF, LEGS_PAW, TAIL_MID),
     "scribble_b": compose(HEAD_SNIFF, LEGS_STAND, TAIL_DOWN),

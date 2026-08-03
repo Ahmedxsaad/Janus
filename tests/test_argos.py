@@ -68,12 +68,14 @@ def test_every_frame_is_a_square_of_palette_characters():
         assert set("".join(rows)) <= PALETTE_CHARS, f"{name} uses a colour outside the palette"
 
 
-def test_only_the_bark_paints_red_because_red_is_state_not_decoration():
-    # The renderer repaints the collar red when a finding is live, and the bark
-    # frames carry an open mouth that is red by nature. Anything else already
-    # red would make a healthy graph look like a failing one.
+def test_no_frame_paints_red_because_red_is_state_the_renderer_applies():
+    # Red means one thing here: a live finding, painted onto the collar by the
+    # renderer for exactly as long as the finding is up. Art that carried its
+    # own red would make a healthy graph look like a failing one. The bark's
+    # open mouth used to be the exception; at 32 pixels it read as an injured
+    # dog rather than a barking one, and it is drawn with the outline colour now.
     reddened = {name for name, rows in _frames().items() if "r" in "".join(rows)}
-    assert reddened == {"alert_a", "alert_b"}, f"red leaked into {reddened}"
+    assert not reddened, f"red leaked into {reddened}"
 
 
 def test_the_state_machine_names_a_frame_that_exists():

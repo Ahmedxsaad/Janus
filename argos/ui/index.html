@@ -80,6 +80,129 @@
            and a transition would fight it, smearing the walk into a glide. */
       }
 
+      /* The mark that slams in over his head when a state has something to
+         exclaim or to ask, borrowed from the courtroom games: an interruption
+         that fades in politely is not an interruption. It is punctuation on the
+         state the producer already sent, never a claim of its own, which is why
+         only two states carry one and neither of them invented itself. */
+      #shout {
+        position: absolute;
+        /* Head height, over the shoulder. There is nowhere above the ears to
+           put it: the sprite fills its 128px canvas and the bubble starts where
+           the canvas stops, so the only free space at head height is behind
+           him, which is where a comic puts an exclamation anyway. The script
+           sets `left` from the direction he is facing. */
+        left: 0;
+        bottom: 96px;
+        margin-left: -7px;
+        display: none;
+        color: var(--amber);
+        font: italic 800 28px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        /* The heavy ink outline, done with four shadows rather than
+           -webkit-text-stroke: the stroke property needs paint-order to sit
+           behind the fill, and this window ships to three different webviews. */
+        text-shadow:
+          2px 0 0 var(--ink),
+          -2px 0 0 var(--ink),
+          0 2px 0 var(--ink),
+          0 -2px 0 var(--ink),
+          2px 2px 0 var(--ink),
+          -2px 2px 0 var(--ink),
+          2px -2px 0 var(--ink),
+          -2px -2px 0 var(--ink),
+          0 4px 8px rgba(0, 0, 0, 0.5);
+        pointer-events: none;
+      }
+
+      #shout.shown {
+        display: block;
+        animation: slam 420ms cubic-bezier(0.15, 1.3, 0.4, 1) both;
+      }
+
+      /* Sleep is the exception: a Z that slammed in would wake the neighbours.
+         It drifts up and away, over and over, for as long as he is out. */
+      #shout.drift {
+        color: var(--coat);
+        font-size: 17px;
+        animation: drift 2600ms ease-in-out infinite;
+      }
+
+      @keyframes slam {
+        0% {
+          opacity: 0;
+          transform: scale(3.2) rotate(-26deg);
+        }
+        45% {
+          opacity: 1;
+          transform: scale(0.84) rotate(-4deg);
+        }
+        70% {
+          transform: scale(1.14) rotate(-13deg);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1) rotate(-9deg);
+        }
+      }
+
+      @keyframes drift {
+        0% {
+          opacity: 0;
+          transform: translate(0, 8px) scale(0.6);
+        }
+        35% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+          transform: translate(11px, -24px) scale(1.2);
+        }
+      }
+
+      /* The thrown toy. It lands where the click was and he goes and gets it;
+         like the petting, it is a reaction to a hand and says nothing about the
+         catalogue. `left` is set from the click, the animation does the arc. */
+      #ball {
+        position: absolute;
+        bottom: 7px;
+        left: 0;
+        display: none;
+        box-sizing: border-box;
+        width: 10px;
+        height: 10px;
+        margin-left: -5px;
+        border: 2px solid var(--ink);
+        border-radius: 50%;
+        background: var(--blue);
+        pointer-events: none;
+      }
+
+      #ball.shown {
+        display: block;
+        animation: toss 700ms cubic-bezier(0.32, 0, 0.7, 1) both;
+      }
+
+      @keyframes toss {
+        0% {
+          transform: translate(-30px, -132px) scale(0.7);
+        }
+        50% {
+          transform: translate(0, 0) scale(1);
+        }
+        68% {
+          transform: translateY(-18px);
+        }
+        84% {
+          transform: translateY(0);
+        }
+        93% {
+          transform: translateY(-5px);
+        }
+        100% {
+          transform: translateY(0);
+        }
+      }
+
       #bubble {
         /* Sized by its content, never by a fixed height: clipping a finding's
            title is the one thing this element must not do. */
@@ -272,6 +395,8 @@
       </div>
       <div id="floor">
         <canvas id="dog" width="128" height="128"></canvas>
+        <i id="shout"></i>
+        <i id="ball"></i>
       </div>
       <div id="menu">
         <div class="head">argos</div>

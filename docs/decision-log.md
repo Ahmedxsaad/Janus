@@ -16,6 +16,49 @@ Entry template:
 
 ---
 
+## D-102: The two poses a viewer holds longest, and a toy to throw him (2026-08-03)
+- Decided by: Ghassen Naouar (asked for a better sleeping and alert pose, no red
+  on the muzzle, an Ace Attorney style intervention, and something to throw).
+- Decision: four changes to the window, none of them touching the event contract.
+  1. **No red anywhere in the art.** The bark's open mouth is drawn with the
+     outline colour. Red is state, and the renderer is now the only thing that
+     paints it, on *both* rows of the collar rather than the lit row alone.
+  2. **Asleep is its own pose**, not the standing rig dropped three rows: a
+     lying mound, head laid on outstretched forepaws, tail curled on the ground,
+     one row of ribcage rising between the two frames for the breath.
+  3. **The bark jumps, and shouts punctuation.** A timeline entry may carry a
+     third number, the lift in sprite pixels for that frame; the second bark
+     frame tucks its legs and rides 3.4px off the floor while the shadow shrinks
+     under it. A `!` slams in over his shoulder on a bark and a `?` on a check
+     that could not run, restarting on every event.
+  4. **Click the floor and he fetches.** The toy lands where the click was, he
+     trots over, grabs it, is pleased about it for a second and resumes.
+- Options considered:
+  - For the fetch: a right-click menu entry (discoverable but more menu), the
+    floor click (chosen: undiscoverable but it is a toy, not a control), or both.
+  - For its reach: inside the pet window's strip (chosen), moving the Tauri
+    window across the whole desktop, or drawing the chase in the full-screen
+    overlay the blast-radius walk already uses.
+  - For the jump: a sine on the wall clock (drifts out of step with the frames)
+    against a lift attached to the frame itself (chosen).
+- Why: red on the muzzle read as an injured dog at 32 pixels, and it spent the
+  one colour that is supposed to mean "a finding is live" on decoration. The
+  sleeping pose is the one held for minutes at a time and the bark is the one
+  that must land in peripheral vision, so they are the two worth redrawing. The
+  fetch is gated on the states that already roam, which is the same rule the
+  patrol obeys: a dog that trotted off to play mid-finding would be the sprite
+  contradicting the event. Screen-wide fetch was rejected for now because it
+  means repositioning the window every animation frame, which `src/main.rs`
+  already records as jank some window managers rate-limit.
+- Result: `argos/ui/sprites/make_sprites.py` (new sleeping parts, a tucked leg
+  cluster, a dark mouth, `sleep_pose`, `compose` loses its unused `drop`),
+  `argos/ui/argos.js` (frame lift, shout, fetch), `argos/ui/index.html` (the
+  mark and the toy), `argos/ui/sprites.js` (both collar rows), regenerated
+  `argos.txt` and `icons/icon.png`, and `tests/test_argos.py` now asserts that
+  *no* frame carries red. Verified by driving the page in headless Chrome:
+  the throw, the walk to the toy, the pickup at the exact target, the airborne
+  frame with its shrunken shadow, and the mark over the shoulder.
+
 ## D-101: Argos redrawn as a German Shepherd; roam, mirror, and a fixed bubble (2026-08-03)
 - Decided by: Ahmed Saad (asked for the character to be "a lot more alive",
   named a specific breed, and separately flagged that the speech bubble

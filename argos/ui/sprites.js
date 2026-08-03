@@ -140,7 +140,11 @@ window.ArgosSprites = (() => {
         if (key === ".") {
           continue;
         }
-        if (key === "b" && style.collar) {
+        // Both rows of the collar, not just the lit one. Repainting only 'b'
+        // left the shade row blue underneath, so a live finding showed as a
+        // red-over-blue stripe rather than as a red collar. The two rows still
+        // differ, because the top-down light below already separates them.
+        if ((key === "b" || key === "d") && style.collar) {
           key = style.collar;
         }
         const colour = PALETTE[key];
