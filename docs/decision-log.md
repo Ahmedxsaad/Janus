@@ -16,6 +16,65 @@ Entry template:
 
 ---
 
+## D-098: Argos, the desktop companion, and the stdio protocol behind it (2026-08-03)
+- Decided by: Ghassen Naouar (four choices settled through the planning
+  session), built by Claude on `feat/argos-companion`.
+- Decision: ModelGuard gains a second surface. A pixel watchdog named **Argos**
+  renders the state of the ML supply chain on the desktop, driven by a
+  versioned JSON event stream.
+  1. **Name: Argos.** Odysseus's dog, who waited and still recognised his
+     master, and Argus the hundred-eyed watchman. Rejected: *Cerb* (menacing
+     unless drawn as a puppy) and *Scout* (warmest, least distinctive).
+  2. **Shell: Tauri v2**, reversing draft 1's rejection of it. Rejected:
+     `pywebview` (same GTK layer, worse window control) and Electron (too
+     heavy). The Rust toolchain is a build-machine cost that no user meets.
+     `app.withGlobalTauri` is what keeps npm out of the build and
+     `app.macOSPrivateApi` is what makes the window transparent on macOS, at
+     the price of Mac App Store eligibility we do not want.
+  3. **Transport: stdio.** The producer spawns the window and writes
+     newline-delimited JSON to its stdin; commands come back on its stdout.
+     Rejected: a localhost HTTP server with SSE, which costs a bound port, a
+     shared secret, a CORS policy and an auth path to review. stdio binds
+     nothing, cannot be reached by another process, dies with its parent, and
+     keeps the GMS token out of the process that draws. Its one real hazard is
+     written into the code: the parent must drain the child's stdout on a
+     thread or both processes deadlock.
+  4. **Scope: a general DataHub companion, from day one.** `modelguard
+     companion` polls the assets one owner owns for open incidents, failing
+     assertion runs and deprecations, and emits the same events. ModelGuard is
+     one producer among several rather than the whole point. DataHub has no
+     desktop presence today, and that gap is the give-back.
+  5. **Distribution: pip-first.** maturin builds the binary into platform
+     wheels, so `pip install "modelguard-datahub[pet]"` works on macOS and
+     Windows. Linux carries a platform marker instead of a wheel: the binary
+     links system webkit2gtk, which no manylinux tag permits, so PyPI cannot
+     accept it and the `.deb` and `.AppImage` from the release are that route.
+- Options considered: also, for the four mid-scan states nothing returns
+  (lineage walk, narration, a write landing, an approval waiting), a progress
+  callback threaded through detect/ and writeback/ against five structured log
+  lines plus a `logging.Handler`. The log won: no rendering concern reaches a
+  detector's signature, and the lines are worth having for an operator anyway.
+  The constraint came with it, that log lines carry no prose, so the speech
+  bubble's sentence comes from the finding's title.
+- Why: the detection work is differentiated and the surface was not. Everything
+  ModelGuard produced landed in a terminal, a CI summary, or a DataHub page
+  somebody had to remember to open. The design law is root CLAUDE.md rule 4
+  applied to pixels: no animation exists without a real event behind it, and
+  the state a disconnected poll shows is a ghost, because a cheerful pet on a
+  broken watch is the lie that gets ambient displays switched off.
+- Result: `argos/` (Tauri v2 crate, static frontend, 11 text sprite frames, a
+  generated icon), `modelguard/argos/` (protocol, events, window, terminal
+  fallback, log handler, producer), `modelguard/companion.py`, `watch --pet`
+  and `modelguard companion`, a `pet` extra, and `.github/workflows/build-argos.yml`.
+  44 tests, each mutation-checked. Three claims in the plan doc were corrected
+  by building it: the sprite format is one file per character rather than one
+  per frame, the terminal fallback is a status line rather than pixel art (the
+  art does not ship in the Python wheel), and a dropped file triggers a poll
+  rather than a `link --infer`, because inference works from the model in the
+  graph and not from a script on disk. Unverified and named as such: the wheel
+  build (maturin is not installed here), macOS, and whether a Windows
+  GUI-subsystem build reads the stdin its parent hands it.
+
 ## D-097: F1 fixed, a truncated lineage walk is never read as clean (2026-08-02)
 - Decided by: Ahmed Saad (working through docs/plan/07's important findings one
   by one), applied by Claude. Numbered D-097 rather than continuing after

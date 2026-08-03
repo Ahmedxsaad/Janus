@@ -85,7 +85,8 @@ measured, alongside a scale table for a whole-catalog sweep.
 ## Repository layout
 
 ```
-modelguard/    Python package: seed/, detect/, writeback/, agent/
+modelguard/    Python package: seed/, detect/, writeback/, agent/, argos/
+argos/         Argos, the desktop window: a Tauri binary and its text sprite art
 skill/         OSS contribution: the datahub-ml-guard skill
 mcp_ext/       OSS contribution (stretch): MCP incident mutation tool
 examples/      Sample generated artifacts for judges
@@ -435,6 +436,35 @@ and no LLM anywhere in the decision. Configuring both, and the argument for keep
 detection deterministic rather than asking a capable model to eyeball a lineage
 graph, is in
 [skill/datahub-ml-guard/references/mcp-composition.md](https://github.com/Ahmedxsaad/DataHub/blob/main/skill/datahub-ml-guard/references/mcp-composition.md).
+
+## Watch it from the corner of your eye
+
+```bash
+pip install "modelguard-datahub[pet]"     # macOS and Windows; Linux: the .deb or
+                                          # .AppImage on the GitHub release
+modelguard watch --table loans_raw --pet  # ModelGuard's own findings
+modelguard companion                      # everything wrong with the assets you own
+```
+
+Argos is a 16x16 pixel watchdog that sits on your desktop and shows what the graph
+is doing. It patrols while a poll finds nothing, sniffs while a lineage walk is in
+flight, barks with a red collar the moment a finding lands, and turns into a
+translucent ghost when it cannot reach DataHub, because a cheerful pet on a
+disconnected watch is the lie that gets ambient status displays switched off. Nothing
+it does is on a timer: every state is an event a detector actually produced.
+
+Double-click a finding and it walks the blast radius across the screen, one hop per
+graph hop, with the column name floating over each jump. That is the column-level
+traversal the benchmark above measures, rendered as motion instead of a paragraph.
+
+`modelguard companion` is the half that is not about ModelGuard at all: it runs no
+detector, and sweeps the assets one owner owns for open incidents, failing assertion
+runs and deprecations. DataHub has no desktop presence today, and that is the gap it
+fills. Design and protocol:
+[docs/plan/08-watchdog-mascot.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/08-watchdog-mascot.md).
+
+With no window binary installed, both commands report one line per change in the
+terminal instead, which is also what runs over SSH.
 
 ## Run it without a Python install
 

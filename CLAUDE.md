@@ -15,7 +15,8 @@ Source of truth for what we build:
 
 | Path | What it is |
 |---|---|
-| modelguard/ | The Python package: seed/, detect/, writeback/, agent/, client, CLI |
+| modelguard/ | The Python package: seed/, detect/, writeback/, agent/, argos/, client, CLI |
+| argos/ | The desktop window: a Tauri v2 binary and its text sprite art, driven by the event stream modelguard/argos/ writes to its stdin |
 | skill/ | OSS contribution: the datahub-ml-guard skill |
 | mcp_ext/ | OSS contribution (stretch): MCP raise_incident mutation tool |
 | examples/ | Sample generated artifacts for judges, and real-project/, the live stack the product was validated against |
@@ -124,3 +125,4 @@ Source of truth for what we build:
 | 2026-07-10 | Claude (for Ghassen Naouar) | Code rule 6 rewritten: env.py is the sole config entry point, no fallbacks for identity values, all-or-nothing groups, secret hygiene, .env/.env.example parity. Add rule 8: provider-agnostic LLM |
 | 2026-07-23 | Claude (for Ahmed Saad) | Add charts/ to the repository map: the modelguard-watch Helm chart (D-056) |
 | 2026-08-01 | Claude (for Ghassen Naouar) | examples/ now also holds real-project/, the dbt + MLflow + postgres stack ModelGuard was validated against as an ordinary user would (D-074) |
+| 2026-08-03 | Claude (for Ghassen Naouar) | argos/ joins the repository map: the Tauri v2 desktop window (Argos) and its sprite art, driven by the JSON event stream modelguard/argos/ produces (D-098) |
