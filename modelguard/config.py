@@ -31,6 +31,7 @@ from modelguard.env import (
 )
 
 __all__ = [
+    "ENV_COMPANION_ENTITY_CAP",
     "ENV_FRESHNESS_SLA_HOURS",
     "ENV_LABEL_COLUMN_NAMES",
     "ENV_LABEL_TERM_URN",
@@ -51,6 +52,7 @@ ENV_LABEL_TERM_URN = "MODELGUARD_LABEL_TERM_URN"
 ENV_LABEL_COLUMN_NAMES = "MODELGUARD_LABEL_COLUMN_NAMES"
 ENV_SENSITIVE_TERM_URNS = "MODELGUARD_SENSITIVE_TERM_URNS"
 ENV_SENSITIVE_TAG_URNS = "MODELGUARD_SENSITIVE_TAG_URNS"
+ENV_COMPANION_ENTITY_CAP = "MODELGUARD_COMPANION_ENTITY_CAP"
 
 
 @dataclass(frozen=True)
@@ -198,6 +200,16 @@ class ScanConfig:
     trust_band_watch_min: float = 40.0
     """At or above this (but below healthy) a model is on watch; below it, at risk."""
 
+    companion_entity_cap: int = 200
+    """Most owned entities `modelguard companion` inspects in one poll.
+
+    Not politeness: the companion asks three questions per entity, so an
+    uncapped sweep of a large catalogue takes minutes and the dog ends up
+    describing the past. A cap is a threshold, not identity, so it has a
+    documented default and the poll says when it hit it rather than pretending
+    it saw everything.
+    """
+
     @classmethod
     def from_env(cls) -> ScanConfig:
         """Build a config, applying any ``MODELGUARD_*`` overrides from ``.env``.
@@ -228,4 +240,7 @@ class ScanConfig:
             sensitive_term_urns=optional_list(ENV_SENSITIVE_TERM_URNS),
             sensitive_tag_urns=optional_list(ENV_SENSITIVE_TAG_URNS),
             label_column_names=optional_list(ENV_LABEL_COLUMN_NAMES) or defaults.label_column_names,
+            companion_entity_cap=optional_int(
+                ENV_COMPANION_ENTITY_CAP, defaults.companion_entity_cap
+            ),
         )
