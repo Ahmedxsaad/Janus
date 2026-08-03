@@ -16,6 +16,38 @@ Entry template:
 
 ---
 
+## D-104: A documentation site at site/, with Argos walking the reader down it (2026-08-03)
+- Decided by: Ghassen Naouar (asked for a landing page documenting what ships to
+  a user, with the pixel character moving and explaining between sections, in a
+  warm autumn palette of black, brown and orange)
+- Decision: Three static files at `site/` (index.html, style.css,
+  argos-guide.js), served from the repository root. It documents the shipped
+  surface end to end: install and extras, quickstart, `inventory`, `link`,
+  `scan` and the five checks, `gate` and the action, `watch`, the Python API,
+  JSON output, the MCP server, Argos, Docker, configuration, and the security
+  model. Between sections, Argos walks in on a canvas, drops into a pose and
+  speaks one line in a pixel bubble.
+- Options considered: (a) a documentation generator (mkdocs, Docusaurus), which
+  brings a build step, a node or python toolchain and a theme to fight, for a
+  single page; (b) a hand-written page that copies the sprite art into its own
+  file, which is one file fewer to serve but two copies of the art; (c) this:
+  hand-written, reading the one copy of the art over `fetch`; (d) an HTML bubble
+  in a pixel web font, which is a font file to ship and still not the dog's own
+  pixel grid.
+- Why: The page is one page, and a generator's cost is all up front. Sharing the
+  art is the whole reason the window, the icon and the README animation already
+  read one file (D-098, D-103), and a fourth consumer changes nothing about
+  that. The trade the sharing buys is that the page needs a server rather than a
+  double-click, which is already true of `argos/ui/` and is one command. The
+  bubble font is a glyph table drawn as rects: M and W get four columns because
+  at three a W reads as an H, verified on screen rather than assumed.
+- Result: `site/` plus `tests/test_site.py`, five tests: every frame a pose names
+  exists in the art, every pose the page asks for is defined, every character the
+  dog says has a glyph, every glyph is five rows tall, and the page still reads
+  the one copy of the art rather than a vendored one. Rendered and read back
+  over CDP at 1280px and 380px. The palette is Argos's own coat, saddle and
+  outline, which is what makes "warm autumn" and the character the same decision.
+
 ## D-103: The README opens with the dog, generated not drawn (2026-08-03)
 - Decided by: Ghassen Naouar (asked for an `assets/` directory, a GIF of the dog
   in several states, and for it to sit at the head of the README).

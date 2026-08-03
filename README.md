@@ -75,6 +75,18 @@ measured, alongside a scale table for a whole-catalog sweep.
 
 ## Documentation
 
+Everything a user of the package needs is also a page: `site/` is a static
+documentation and landing page covering install, every command, the Python API,
+the MCP server and Argos, with the dog walking the reader down it. It reads the
+same sprite art the window does, so serve the repository root rather than
+opening the file:
+
+```bash
+python -m http.server        # then open http://localhost:8000/site/
+```
+
+The plan and the reasoning behind the product live here:
+
 | Doc | What it answers |
 |---|---|
 | [docs/plan/01-strategy-modelguard.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/01-strategy-modelguard.md) | Why this project, what it solves |
@@ -99,6 +111,7 @@ benchmarks/    ModelGuard-Bench: injection, metrics, measured RESULTS.md
 tests/         pytest unit and integration tests
 docs/          Plan, decision log, hackathon specs
 assets/        The animation at the top of this file, generated from the sprite art
+site/          The documentation and landing page for the shipped product
 ```
 
 ## Prerequisites
