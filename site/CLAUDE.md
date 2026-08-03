@@ -1,0 +1,35 @@
+# CLAUDE.md - site
+
+The documentation and landing page for what ships to a user: the PyPI package,
+the CLI, the Python API, the MCP server, and Argos. Three static files, no
+build step, no dependency.
+
+Run it with `python -m http.server` **from the repository root**, then open
+<http://localhost:8000/site/>. Not from inside this directory: the page reads
+the art out of `../argos/`, and `fetch` is blocked under `file://`.
+
+## Local rules
+
+1. **No second copy of the art.** `argos-guide.js` reads
+   `argos/ui/sprites/argos.txt` through `argos/ui/sprites.js`, the same two
+   files the Tauri window, the app icon and the README animation read. A
+   vendored copy here goes stale the first time somebody redraws a leg, and
+   nothing would fail. `tests/test_site.py` enforces this.
+2. **No framework, no bundler, no web font, no CDN.** The bubble text is a
+   glyph table drawn as rects, so it is made of the same pixels the dog is.
+3. **A beat is markup, not code.** Argos says what a `<canvas class="beat">`
+   carries in `data-say`, in the pose named by `data-pose`. Adding a beat is
+   adding one element; the tests check that the pose exists and that every
+   character has a glyph.
+4. **Red is a live finding here too.** `data-collar="r"` belongs on the beat
+   about a finding and nowhere else, for the same reason the window only paints
+   it off an event (argos/CLAUDE.md rule 6).
+5. This page documents the shipped product, so what it claims has to be true of
+   the released package. When a command, a flag or an extra changes, this page
+   changes in the same commit as the README.
+
+## Change Log
+
+| Date | Author | Change |
+|---|---|---|
+| 2026-08-03 | Claude (for Ghassen Naouar) | Initial version: the documentation page, its beats, and the rule against a second copy of the art (D-104) |
