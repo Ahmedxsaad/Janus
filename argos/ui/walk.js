@@ -68,15 +68,22 @@ class Walk {
     const { x, y } = this.nodeAt(index);
     const hop = this.path[index];
     const ctx = this.ctx;
-    ctx.fillStyle = "#12233f";
-    ctx.fillRect(x - 54, y + SPRITE_PX * 0.55, 108, 34);
-    ctx.fillStyle = "#f7f7f7";
+    const name = entityLabel(hop.urn);
+    const column = hop.column || "";
+    const top = y + SPRITE_PX * 0.55;
+
     ctx.font = "13px ui-monospace, monospace";
     ctx.textAlign = "center";
-    ctx.fillText(entityLabel(hop.urn).slice(0, 15), x, y + SPRITE_PX * 0.55 + 15);
-    if (hop.column) {
+    // Sized from the text rather than a guessed width: a clipped entity name is
+    // the one thing on this screen a person needs to read.
+    const width = Math.max(ctx.measureText(name).width, ctx.measureText(column).width) + 20;
+    ctx.fillStyle = "#12233f";
+    ctx.fillRect(x - width / 2, top, width, column ? 34 : 22);
+    ctx.fillStyle = "#f7f7f7";
+    ctx.fillText(name, x, top + 15);
+    if (column) {
       ctx.fillStyle = "#f39f19";
-      ctx.fillText(hop.column.slice(0, 15), x, y + SPRITE_PX * 0.55 + 29);
+      ctx.fillText(column, x, top + 29);
     }
   }
 
