@@ -725,6 +725,42 @@ paragraph. Which subcategory an artifact is evidence *for* is a fact about the
 artifact; whether the subcategory is *satisfied* is a judgement about your whole
 process, and nothing that reads a metadata graph is in a position to make it.
 
+## Generate the paperwork instead of maintaining it
+
+```bash
+modelguard model-card    --model credit_risk_v3   # prints; --write publishes it to DataHub
+modelguard evidence-pack --model credit_risk_v3   # EU AI Act Article 10
+```
+
+Two documents, both read entirely out of the catalog. A model card in the sense
+Mitchell et al. (FAT* 2019) proposed one: intended use, which columns each
+feature was actually computed from, the reported training metrics, the trust
+score with its waterfall, the findings open against the model, and the checks
+that could not run. An evidence pack that maps the same graph to Regulation (EU)
+2024/1689 Article 10 and Article 12, by paragraph number, so a reader can check
+the mapping rather than trust it.
+
+Neither is maintained by hand, which is the whole point: a hand-written model
+card is accurate until the model next changes, and most of them are already
+wrong. These are regenerated from the graph, so they are current by construction
+and empty where the catalog is. Anything DataHub does not record prints as *not
+recorded in the catalog* rather than being quietly dropped, so a gap is visible
+in the document instead of reading as an absence of a problem.
+
+The evidence pack's first heading is **This is not a compliance certification**,
+and its second is **What this pack could NOT establish**: deliberately the first
+section rather than a closing caveat, because a gap at the end of a long
+document is a gap nobody reads. It states, for instance, that freshness at
+training time is unknowable from this graph (ModelGuard measures freshness
+*now*, which is a different claim and not a substitute), and that whether anyone
+examined the data for bias is an activity no catalog records. A generated
+document that implied conformity would be worse than no document at all.
+
+Both print by default and write nothing. `--write` publishes the document
+against the model, keyed on the model alone, so regenerating replaces it rather
+than leaving a second copy behind. Either way the underlying scan is read-only:
+asking for documentation never raises an incident as a side effect.
+
 ## OSS contributions
 
 Built alongside ModelGuard and offered back to the DataHub ecosystem:
