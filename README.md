@@ -10,7 +10,9 @@ the warehouse-to-ML boundary that DataHub uniquely spans: it reads end-to-end
 column-level lineage and ML metadata to catch silent data-to-model failures
 (target leakage, upstream blast radius, training/serving schema drift), and
 writes incidents, model trust scores, impact reports, and guarding assertions
-back into the DataHub graph.
+back into the DataHub graph. Every scan is itself catalogued there, as a
+dataProcessInstance naming what it read and what it wrote, so the agent is
+subject to the same lineage it guards.
 
 Built for "Build with DataHub: The Agent Hackathon" (Devpost, deadline
 Aug 10, 2026). Category: Production ML Agents.
@@ -619,8 +621,9 @@ The rest of the security model, in the order it matters:
 - **Least privilege, honestly.** DataHub OSS personal access tokens are not
   scoped per operation, so ModelGuard cannot claim a narrowed token. What it can
   say is what it touches: incidents, tags, glossary terms, structured
-  properties, documents, and assertion aspects. Give it a token you are willing
-  to rotate, and rotate it.
+  properties, documents, assertion aspects, and the dataFlow, dataJob and
+  dataProcessInstance entities it records its own runs as. Give it a token you
+  are willing to rotate, and rotate it.
 
 Detection is measured, not asserted, and each detector implements a published
 result rather than a heuristic somebody liked:

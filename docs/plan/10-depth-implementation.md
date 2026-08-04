@@ -176,31 +176,49 @@ proves each one clears the finding it belongs to.
 
 ## Phase 2: the agent inside the graph
 
-### T-04 Emit scans as `dataProcessInstance` (09 section 3.1)
+### T-04 Emit scans as `dataProcessInstance` (09 section 3.1) [done, D-111]
 
 Independent of everything else. Land it whenever a slot opens.
 
-- [ ] Evaluate `datahub.api.entities.dataprocess.dataprocess_instance` `[verified]`
+- [x] Evaluate `datahub.api.entities.dataprocess.dataprocess_instance` `[verified]`
       before hand-rolling MCPs. There is no `datahub.sdk` wrapper for this entity
       `[verified]`, so the fallback is `MetadataChangeProposalWrapper`, as
-      `writeback/` already does in seven places.
-- [ ] A `dataFlow` for the ModelGuard agent and a `dataJob` for the scan.
-- [ ] One `dataProcessInstance` per scan, keyed by the existing `run_id` (D-013).
-- [ ] Inputs: the entities read. Outputs: the aspects written.
-- [ ] Run status via `DataProcessRunStatusClass.STARTED` / `.COMPLETE` `[verified]`
+      `writeback/` already does in seven places. Result: the helper builds the URN,
+      the properties and the relationships; its `emit_process_start/end` drivers are
+      not used, because they emit through `emitter.emit` and would also emit a
+      nameless template flow and job.
+- [x] A `dataFlow` for the ModelGuard agent and a `dataJob` for the scan. Their
+      `generate_mcp` always yields an empty `globalTags` and `ownership`, which are
+      whole-list upserts, so both are filtered out rather than emitted.
+- [x] One `dataProcessInstance` per scan, keyed by the existing `run_id` (D-013).
+- [x] Inputs: the entities read. Outputs: the aspects written. ~~Verbatim~~: the
+      input and output aspects accept `dataset` and `mlModel` **only**, which is the
+      relationship annotation in DataHub's own model and a 422 from a live GMS for
+      anything else. A column is reported as its parent dataset; incidents,
+      assertions, documents and terms are left out of the aspect and stay reachable
+      from the asset they hang off, each carrying the `run_id` (D-111).
+- [x] Run status via `DataProcessRunStatusClass.STARTED` / `.COMPLETE` `[verified]`
       and result via `DataProcessInstanceRunResultClass` (`type`,
-      `nativeResultType`) `[verified]`.
-- [ ] A failed scan emits a failed run, not silence. This closes part of F4 (a
+      `nativeResultType`) `[verified]`. Both events are built here rather than by
+      the helper, only so `messageId` can be derived from the `run_id`.
+- [x] A failed scan emits a failed run, not silence. This closes part of F4 (a
       mid-scan failure currently leaves the graph half-written and says nothing).
-- [ ] Respect `--dry-run`: a dry run emits nothing.
-- [ ] Idempotent on rerun with the same `run_id`, like every other write.
+      Detection runs inside the run too, so a scan that dies deciding what is wrong
+      is recorded like one that dies writing it down.
+- [x] Respect `--dry-run`: a dry run emits nothing.
+- [x] Idempotent on rerun with the same `run_id`, like every other write. Exactly so
+      for the entity and its versioned aspects; the run events are timeseries, so a
+      deterministic `messageId` is what makes a replay converge rather than stack.
 
 Files: new `modelguard/writeback/process_instance.py`, `modelguard/agent/pipeline.py`,
-`modelguard/models.py`.
+`modelguard/agent/graph.py`. ~~`modelguard/models.py`~~: the run is a write-back
+concern and never reaches a finding, so no model changed.
 
 Done when: after a scan the process instance is readable from the graph, its inputs
-match the entities read, its outputs match the aspects written, and clicking an
-incident in the DataHub UI reaches the run that raised it.
+match the entities read, its outputs match the aspects written, and an incident
+reaches the run that raised it. The last one is by the `run_id` the incident body
+already carries, which `scan_run_urn` turns into the run's URN; DataHub's model has
+no edge from an incident to a process instance.
 
 ---
 
@@ -416,8 +434,11 @@ None of these are on the critical path. Each is independently landable.
 Tracked here because they land inside other tasks rather than as their own.
 
 - [ ] **F1** (silent lineage truncation at 500) closes inside T-09's hop-cap trials.
-- [ ] **F4** (mid-scan failure leaves the graph half-written silently) closes inside
-      T-04's failed-run emission.
+- [ ] **F4** (mid-scan failure leaves the graph half-written silently) closes *the
+      silence* inside T-04's failed-run emission (D-111): a scan that dies now leaves
+      a FAILURE run event on its process instance. The other half of 07's remedy,
+      per-finding isolation so one unwritable finding does not cost the other four,
+      is not part of T-04 and stays open in 07.
 - [ ] **F6** (the benchmark scores itself) closes across T-08, T-09 and T-14.
 - [ ] **F7** (invented trust weights) closes inside T-01.
 - [ ] **F10 / F11** (the `link` cliff) close across T-05, T-06, T-07 and T-20.

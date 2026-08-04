@@ -16,6 +16,74 @@ Entry template:
 
 ---
 
+## D-111: A scan is an entity in the graph it guards, not only a log line (2026-08-04)
+- Decided by: Ghassen Naouar (asked for phase 2 of the depth plan), implemented by
+  Claude. Closes T-04, and the half of F4 that let a mid-scan failure be silent.
+- Decision: every scan is emitted as a `dataProcessInstance` under a `dataJob`
+  ("scan") under a `dataFlow` ("ModelGuard"), keyed by the `run_id` every write is
+  already stamped with (D-013). The instance carries the entities the scan read as
+  inputs, the entities it wrote to as outputs, a STARTED event, and a COMPLETE
+  event whose result is SUCCESS or FAILURE. A dry run emits nothing at all.
+- Options considered:
+  1. `DataProcessInstance.emit_process_start/end`, the SDK's own driver. Rejected as
+     the whole path: it emits through `emitter.emit`, and it would also emit a
+     template flow and job derived from the URN, which carry no name and no
+     description. Its `generate_mcp` is still what builds the properties and the
+     relationships aspects here, so the helper is used, not reimplemented.
+  2. Hand-rolled MCPs throughout, as `writeback/` does in seven places. Rejected for
+     the URN: the instance's id is a guid over `(cluster, orchestrator, run_id)`
+     and recomputing that by hand is the kind of detail that silently drifts.
+  3. Leaving the run in the logs. Rejected: it is the Use-of-DataHub argument, and
+     it leaves "the scan found nothing" and "the scan died" identical to a reader.
+- Why: the product's own thesis is that an uncatalogued process cannot be reasoned
+  about, and an agent that writes incidents while staying invisible in the same
+  graph exempts itself from that thesis. Concretely it buys three things: an
+  incident's `run_id` becomes an entity somebody can open rather than a string to
+  grep; a crashed scan leaves a FAILURE event instead of a half-written graph and
+  silence; and ModelGuard's own runs become subject to the same freshness reasoning
+  it applies to a warehouse table.
+- Result:
+  - `modelguard/writeback/process_instance.py`. `scan_run` is a context manager so
+    that however a scan ends, including by raising, the graph is told; the exception
+    is re-raised unchanged, because swallowing it would move the failure rather than
+    surface it. Detection runs inside the run too: a scan that dies working out what
+    is wrong failed as much as one that dies writing it down.
+  - Three corrections reality forced, each found by running it:
+    1. **A run's inputs and outputs may name only `dataset` and `mlModel`.** That is
+       the relationship annotation in DataHub's own model, and a live GMS answers
+       422 naming the offending path. `_iolet` therefore maps a column to its parent
+       dataset and drops incidents, assertions, documents and terms from the aspect.
+       Nothing becomes unreachable: each hangs off an asset the run does name, and
+       each carries the `run_id`. The plan doc (09 section 3.1, 10 T-04) said
+       "inputs: the entities read, outputs: the aspects written" and is corrected in
+       place per docs/CLAUDE.md rule 1.
+    2. **`DataFlow.generate_mcp` and `DataJob.generate_mcp` always emit `globalTags`
+       and `ownership`, empty or not.** Both are whole-list upserts (writeback rule
+       9), so emitting them verbatim would strip a tag or an owner somebody put on
+       ModelGuard's own flow, on every poll of `watch`. `_emit_template` drops them.
+    3. **The run events are built here rather than by the helper**, only so that
+       `messageId` can be set from the `run_id` and the phase. A run event is a
+       timeseries aspect, so it appends; a deterministic message id is what lets a
+       replay of one run converge instead of stacking. The entity itself is exactly
+       idempotent, its URN being a guid over the `run_id`.
+  - The outputs are recorded as the scan makes them, not derived from the finished
+    report. A recovery-only scan is clean and produces no findings at all, so a
+    report-derived output list would be empty for the one run whose outputs matter
+    most: `_reconcile_stale_findings` records every incident it resolves and every
+    asset it clears.
+  - The LangGraph path opens its run inside the write node rather than at the start
+    of the graph: nothing before the approval interrupt writes anything, and a
+    declined run would otherwise leave a process instance with no outputs,
+    indistinguishable from a crashed one.
+  - Tests: 12 offline in `tests/writeback/test_process_instance.py`, nine mutations
+    confirmed red per tests/CLAUDE.md rule 6, and five marked integration tests run
+    against a live Quickstart, which is where the 422 above was found. Three existing
+    tests asserting `graph.emitted == []` now assert `emitted_about_the_graph(graph)
+    == []`: every scan writes its own run, so "nothing was emitted" stopped being the
+    way to say "this healthy target was left alone".
+
+---
+
 ## D-110: Every finding carries a counterfactual, and the benchmark applies it (2026-08-04)
 - Decided by: Ghassen Naouar (asked for phase 1 of the depth plan), implemented by
   Claude. Closes T-03.

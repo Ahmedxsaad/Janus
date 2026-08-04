@@ -283,6 +283,11 @@ So represent each scan as what it is: a process run.
 - One `dataProcessInstance` per scan, keyed by the `run_id` every write is already
   stamped with (D-013).
 - **Inputs**: the entities the scan read. **Outputs**: the aspects it wrote.
+  Corrected by building it (D-111): both aspects accept `dataset` and `mlModel`
+  only, per the relationship annotation in DataHub's own model, and a live GMS
+  answers 422 for anything else. A column is reported as its parent dataset; the
+  incidents, assertions and documents a run writes stay reachable from the asset
+  they hang off rather than appearing in the aspect.
 - Run status and result via `DataProcessInstanceRunEventClass` and
   `DataProcessInstanceRunResultClass` (`type`, `nativeResultType` `[verified]`),
   with `DataProcessRunStatusClass.STARTED` / `.COMPLETE` `[verified]`.
