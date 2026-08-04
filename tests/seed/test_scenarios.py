@@ -4,19 +4,27 @@ import json
 from typing import Any
 
 import pytest
-from datahub.metadata.schema_classes import OperationClass, OperationTypeClass
+from datahub.metadata.schema_classes import (
+    GlossaryTermAssociationClass,
+    GlossaryTermsClass,
+    OperationClass,
+    OperationTypeClass,
+)
 from datahub.metadata.urns import SchemaFieldUrn
 
 from modelguard.seed import graph_spec as spec
 from modelguard.seed.scenarios import (
+    BACKUP_LABEL_COLUMN,
     SCENARIO_PROPERTY,
     SCHEMA_DRIFT,
     STALE_SOURCE,
     plant_leakage,
     plant_schema_drift,
+    plant_second_leak_path,
     plant_stale_source,
     revert_leakage,
     revert_schema_drift,
+    revert_second_leak_path,
     revert_stale_source,
 )
 from tests.conftest import FakeClient, FakeGraph, make_connection
@@ -252,3 +260,94 @@ def test_the_leakage_scenario_patches_the_feature_table():
     mcps = client.entities.updated[0].build()
     assert mcps[0].entityUrn == str(spec.feature_table_dataset_urn())
     assert mcps[0].aspectName == "upstreamLineage"
+
+
+# --------------------------------------------------------------------------
+# The multi-path scenario (T-03), the counterfactual's negative control
+# --------------------------------------------------------------------------
+
+
+def test_the_second_path_gives_the_leaking_feature_two_declared_label_upstreams():
+    """One finding reached twice, which is the case a one-edge remedy gets wrong."""
+    client = FakeClient()
+    result = plant_second_leak_path(make_connection(FakeGraph(), client))
+
+    edges = _sent_column_lineage(client)
+    assert edges[spec.LEAKAGE_FEATURE] == [
+        spec.LABEL_SOURCE_COLUMN,
+        BACKUP_LABEL_COLUMN.name,
+    ]
+    assert result.upstream_columns == (spec.LABEL_SOURCE_COLUMN, BACKUP_LABEL_COLUMN.name)
+
+
+def test_cutting_the_first_path_leaves_the_feature_deriving_from_the_second():
+    """The half-fixed state, planted as a state rather than assembled by a caller.
+
+    A caller building it out of two other calls would be the benchmark writing
+    its own graph shape, and the trial would stop measuring the scenario.
+    """
+    client = FakeClient()
+    plant_second_leak_path(make_connection(FakeGraph(), client), keep_first=False)
+
+    assert _sent_column_lineage(client)[spec.LEAKAGE_FEATURE] == [BACKUP_LABEL_COLUMN.name]
+
+
+def test_the_second_path_declares_its_column_a_label_with_the_term_the_seeder_uses():
+    """A different term would make the column invisible to the detector.
+
+    The scenario would then plant a second path nothing walks, and the trial
+    would pass by finding one path where it meant to find two.
+    """
+    graph = FakeGraph()
+    plant_second_leak_path(make_connection(graph, FakeClient()))
+
+    backup_column = str(spec.source_column_urn(BACKUP_LABEL_COLUMN.name))
+    declared = [
+        mcp
+        for mcp in graph.emitted
+        if mcp.entityUrn == backup_column and isinstance(mcp.aspect, GlossaryTermsClass)
+    ]
+    assert declared, "the backup column must be declared a label"
+    assert [term.urn for term in declared[-1].aspect.terms] == [spec.LABEL_TERM_URN]
+
+
+def test_reverting_the_second_path_undeclares_the_column_before_dropping_it():
+    """A term on a schemaField outlives the column's removal from the schema.
+
+    Dropping the column first would leave a declared label behind on a column
+    nobody can see, which is the sort of thing a later scan trips over long after
+    the benchmark that caused it has finished.
+    """
+    graph = FakeGraph(
+        aspects={
+            (
+                str(spec.source_column_urn(BACKUP_LABEL_COLUMN.name)),
+                GlossaryTermsClass,
+            ): GlossaryTermsClass(
+                terms=[GlossaryTermAssociationClass(urn=spec.LABEL_TERM_URN)], auditStamp=None
+            )
+        }  # type: ignore[arg-type]
+    )
+    client = FakeClient()
+
+    revert_second_leak_path(make_connection(graph, client))
+
+    backup_column = str(spec.source_column_urn(BACKUP_LABEL_COLUMN.name))
+    terms = [
+        mcp.aspect
+        for mcp in graph.emitted
+        if mcp.entityUrn == backup_column and isinstance(mcp.aspect, GlossaryTermsClass)
+    ]
+    assert terms and terms[-1].terms == []
+    # And the column itself is gone from the schema the revert wrote.
+    schema = _schema_of(_upserted_dataset(client))
+    assert BACKUP_LABEL_COLUMN.name not in schema
+
+
+def test_reverting_the_second_path_restores_the_seeded_single_path_leak():
+    """The baseline the demo expects to find (D-032), not a cleaned graph."""
+    client = FakeClient()
+    result = revert_second_leak_path(make_connection(FakeGraph(), client))
+
+    assert _sent_column_lineage(client)[spec.LEAKAGE_FEATURE] == [spec.LABEL_SOURCE_COLUMN]
+    assert result.leaking is True

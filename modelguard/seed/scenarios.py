@@ -43,6 +43,7 @@ from datahub.specific.dataset import DatasetPatchBuilder
 from modelguard.client import DataHubConnection
 from modelguard.seed import graph_spec as spec
 from modelguard.writeback.labels import ensure_tag
+from modelguard.writeback.terms import add_term, ensure_term, remove_term
 
 #: Names the scenario in the operation aspect's custom properties, so a reader of
 #: the graph can tell a planted failure from a real one.
@@ -61,6 +62,13 @@ SCHEMA_DRIFT = "input-schema-drift"
 #: it (D-032), so before this scenario existed the flagship detector had no
 #: negative control at all: no way to show the graph going clean.
 TARGET_LEAKAGE = "target-leakage"
+
+#: The multi-path scenario: the same feature reaches a declared label by two
+#: independent derivations instead of one. It exists for the counterfactual
+#: (T-03), which is only worth anything if it is right about the case where
+#: cutting one edge is not a fix, and that case cannot be asked of a graph that
+#: only ever has one edge to cut.
+SECOND_LEAK_PATH = "second-leak-path"
 
 #: The governance scenarios. A classified column upstream of a feature, and a
 #: training input its owners have marked deprecated. Both are facts an
@@ -413,6 +421,108 @@ def revert_leakage(conn: DataHubConnection) -> LeakageResult:
         feature_column=spec.LEAKAGE_FEATURE,
         upstream_columns=(),
         leaking=False,
+    )
+
+
+#: The column the multi-path scenario adds to the raw table: a backfilled copy of
+#: the label, declared a label itself. Chosen over a second unrelated marked
+#: column because it is what actually happens in a warehouse (somebody
+#: backfills the outcome into a second column and nobody removes it), and
+#: because it makes the finding genuinely two-pathed rather than two findings.
+BACKUP_LABEL_COLUMN = spec.Column(
+    "default_status_backup",
+    "BOOLEAN",
+    "A backfilled copy of default_status. Also the label, and also upstream of "
+    "prior_default_flag: the second path.",
+)
+
+
+def _emit_source_schema(
+    conn: DataHubConnection,
+    columns: tuple[spec.Column, ...],
+    *,
+    scenario: str | None,
+) -> None:
+    """Replace the raw table's live schema with the given columns.
+
+    The counterpart of :func:`_emit_feature_schema`, on the other table, and the
+    same reasoning applies: ``schemaMetadata`` is versioned, so planting and
+    reverting are one operation with two column lists. The description matches
+    what :func:`~modelguard.seed.seed_ml_graph.seed_warehouse_tables` writes, so
+    a revert restores the seeded dataset exactly rather than a near copy of it.
+
+    The scenario marker goes in this dataset's custom properties, which are free:
+    the drift scenario owns the *feature* table's, and the two never write to the
+    same aspect.
+    """
+    dataset = Dataset(
+        platform=spec.WAREHOUSE_PLATFORM,
+        name=spec.source_table_urn().name,
+        description="Raw loan applications. Holds the default_status label column.",
+        schema=[(c.name, c.native_type, c.description) for c in columns],
+        custom_properties={SCENARIO_PROPERTY: scenario} if scenario else {},
+    )
+    conn.client.entities.upsert(dataset)
+
+
+def plant_second_leak_path(conn: DataHubConnection, *, keep_first: bool = True) -> LeakageResult:
+    """Give the leaking feature a second, independent derivation from a label.
+
+    Adds :data:`BACKUP_LABEL_COLUMN` to the raw table, declares it a label with
+    the same glossary term the seeder uses, and wires ``prior_default_flag`` to
+    derive from it as well as from ``default_status``.
+
+    Args:
+        conn: A connection with write credentials.
+        keep_first: Whether the original derivation survives. False plants the
+            state a team lands in when they cut the path the incident quoted and
+            stopped: the feature still descends from a declared label, by the
+            other path, and the finding must still stand. That state is the whole
+            reason this scenario exists, so it is a state the scenario can plant
+            rather than something a caller has to assemble.
+
+    Returns:
+        What the feature table's lineage now says.
+    """
+    _emit_source_schema(
+        conn, (*spec.SOURCE_COLUMNS, BACKUP_LABEL_COLUMN), scenario=SECOND_LEAK_PATH
+    )
+    ensure_term(conn, spec.LABEL_TERM_URN, spec.LABEL_TERM_NAME, spec.LABEL_TERM_DEFINITION)
+    add_term(conn, str(spec.source_column_urn(BACKUP_LABEL_COLUMN.name)), spec.LABEL_TERM_URN)
+
+    upstreams = (
+        [spec.LABEL_SOURCE_COLUMN, BACKUP_LABEL_COLUMN.name]
+        if keep_first
+        else [BACKUP_LABEL_COLUMN.name]
+    )
+    _set_column_lineage(conn, {**spec.COLUMN_LINEAGE, spec.LEAKAGE_FEATURE: upstreams})
+    return LeakageResult(
+        name=SECOND_LEAK_PATH,
+        dataset_urn=str(spec.feature_table_dataset_urn()),
+        feature_column=spec.LEAKAGE_FEATURE,
+        upstream_columns=tuple(upstreams),
+        leaking=True,
+    )
+
+
+def revert_second_leak_path(conn: DataHubConnection) -> LeakageResult:
+    """Remove the second derivation and the column it came from.
+
+    Undeclares the backup column before dropping it from the schema, in that
+    order: a glossary term written on a ``schemaField`` outlives the column's
+    removal from ``schemaMetadata``, so dropping the column first would leave a
+    declared label behind on a column nobody can see. The seeded single-path
+    leak is restored, because that is the baseline the demo expects (D-032).
+    """
+    remove_term(conn, str(spec.source_column_urn(BACKUP_LABEL_COLUMN.name)), spec.LABEL_TERM_URN)
+    _emit_source_schema(conn, spec.SOURCE_COLUMNS, scenario=None)
+    _set_column_lineage(conn, dict(spec.COLUMN_LINEAGE))
+    return LeakageResult(
+        name=SECOND_LEAK_PATH,
+        dataset_urn=str(spec.feature_table_dataset_urn()),
+        feature_column=spec.LEAKAGE_FEATURE,
+        upstream_columns=(spec.LABEL_SOURCE_COLUMN,),
+        leaking=True,
     )
 
 
