@@ -16,6 +16,59 @@ Entry template:
 
 ---
 
+## D-115: T-08, mutation score for the detectors (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: `modelguard/detect/` is now mutation-tested with mutmut 3.7.0
+  (`[tool.mutmut]` in pyproject.toml), scoped there via `only_mutate` while
+  `source_paths = ["modelguard"]` keeps the rest of the package present and
+  importable. 1484 mutants generated, 1148 killed, 336 survived: a 0.77
+  score. Every survivor is grouped by function and given a verdict in
+  `benchmarks/mutation_report.py`'s `VERDICTS` (302 real gaps, 34 provably
+  equivalent), rendered into `benchmarks/RESULTS.md` between
+  `<!-- MUTATION:START -->`/`END` markers; a survivor with no verdict raises
+  rather than publishing silently. Wired into CI as its own advisory job
+  (`continue-on-error: true`), off the PR hot path (push-to-main and manual
+  dispatch only), matching the top-of-file note on why the integration suite
+  is kept off hosted runners too.
+- Options considered:
+  1. mutmut vs cosmic-ray (the plan's two named candidates): mutmut, for the
+     simpler CLI and the `only_mutate`/`do_not_mutate_patterns` config this
+     task specifically needed.
+  2. mutmut's `type_check_command` (mypy-assisted filtering, meant to drop
+     mutants like `x: bool = None` that mypy strict already refuses to
+     merge): tried, reverted. It crashed on this codebase --
+     `Could not find mutant for type error ...trust_score.py:7345 (Unused
+     "type: ignore" comment)` -- because a mutation shifts which line an
+     existing `# type: ignore` covers and mutmut cannot map the resulting
+     error back to a mutant. The `None`-for-`bool` class this would have
+     filtered is instead named once in `x_trust_inputs_from_findings`'s
+     verdict as provably equivalent, with the reasoning (truthiness-only
+     consumption, and mypy strict already forbids it) written out rather
+     than mechanically hidden.
+  3. Excluding `logger.*(...)` calls from mutation
+     (`do_not_mutate_patterns = ['logger\.\w+\(']`): kept. A corrupted log
+     line is invisible to every consumer this project has (modelguard/
+     CLAUDE.md rule 2, detect/ is pure); mutmut's own README documents this
+     exact pattern.
+- Why: 09 section 2.1's claim ("the detectors are correct") had never been
+  adversarially tested against itself; T-08 exists to produce the survivor
+  list T-09's confusable-negative trials are written against, per 10's own
+  ordering note ("run T-08 before T-09: the survivors will name exactly
+  which negatives are missing").
+- Result: two verdict classes recur across most of the 37 surviving
+  functions rather than being 37 independent findings: a finding's own
+  identifying field (a URN, a name) swapped for `None` survives wherever a
+  trial checks that a finding exists without checking what it says (the
+  majority), and `continue` mutated to `break` inside a per-item loop
+  survives wherever the seeded fixture gives that loop exactly one item
+  (schema_drift, governance) -- a model with two training runs or two input
+  datasets is untested in either detector. Both are now named for T-09
+  rather than guessed at. `tests/benchmarks/test_mutation_report.py` covers
+  the render itself, all four of its fail-loudly behaviours mutation-checked
+  by hand (tests/CLAUDE.md rule 6): an unparseable results line, a survivor
+  with no verdict, the score formula, and the splice-not-duplicate section
+  boundary.
+
 ## D-114: `link`'s usage errors no longer hide behind a connection failure (2026-08-04)
 - Decided by: Ahmed Saad.
 - Decision: the three argument-shape checks in `modelguard link` (`--repo`/

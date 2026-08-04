@@ -316,19 +316,36 @@ its report is unchanged and the mode's own finding carries the disclosure.
 Run T-08 before T-09: the mutation survivors will name exactly which negatives are
 missing, so let the tool write the list rather than guessing it.
 
-### T-08 Mutation score for the detectors (09 section 2.1)
+### T-08 Mutation score for the detectors (09 section 2.1) [done, D-115]
 
-- [ ] Pick `mutmut` (3.7.0) or `cosmic-ray` (8.4.6), both `[verified]` on PyPI,
-      neither installed. Add to the `dev` extra.
-- [ ] Scope to `modelguard/detect/` only. The claim is about detection; mutating the
-      whole package measures the wrong thing.
-- [ ] Test command: the offline suite plus the benchmark trials.
-- [ ] One generated section in `RESULTS.md`: mutants generated, killed, survived.
-- [ ] **Every survivor listed with a verdict**: a real gap in the trials (fix the
+- [x] Pick `mutmut` (3.7.0) or `cosmic-ray` (8.4.6), both `[verified]` on PyPI,
+      neither installed. Add to the `dev` extra. Chose mutmut.
+- [x] Scope to `modelguard/detect/` only. The claim is about detection; mutating the
+      whole package measures the wrong thing. `source_paths = ["modelguard"]` keeps
+      the rest of the package present and importable; `only_mutate =
+      ["modelguard/detect/*"]` is what actually restricts the mutations.
+- [x] Test command: the offline suite plus the benchmark trials. Needed no extra
+      config: `tests/benchmarks/` was already unmarked (not `integration`), so the
+      plain default (`pytest`, inheriting `addopts = "-m 'not integration'"` from
+      the copied pyproject.toml) already covers both.
+- [x] One generated section in `RESULTS.md`: mutants generated, killed, survived.
+      1484 generated, 1148 killed, 336 survived, score 0.77.
+- [x] **Every survivor listed with a verdict**: a real gap in the trials (fix the
       trials, which feeds T-09) or provably equivalent (document why). A survivor
-      list of zero with no explanation is not publishable.
-- [ ] Wire into CI as an advisory job, not a blocking one: mutation runs are slow and
-      a flaky block teaches people to ignore red.
+      list of zero with no explanation is not publishable. 336 survivors grouped
+      into 37 functions in `benchmarks/mutation_report.py`'s `VERDICTS`: 302 real
+      gaps, 34 provably equivalent. A survivor with no verdict raises rather than
+      publishing silently.
+- [x] Wire into CI as an advisory job, not a blocking one: mutation runs are slow and
+      a flaky block teaches people to ignore red. `continue-on-error: true`, off the
+      PR hot path (push-to-main and manual dispatch only, same reasoning as the
+      integration suite already documented at the top of `ci.yml`).
+
+`type_check_command` (mutmut's mypy-assisted filter for exactly the
+`None`-for-typed-value survivors this run found plenty of) was tried and reverted:
+it crashes on this codebase over a `# type: ignore` comment a mutation shifts
+underneath (D-115). The class it would have filtered is instead named once, in
+`x_trust_inputs_from_findings`'s verdict, as provably equivalent.
 
 ### T-09 Confusable negatives (09 section 2.2, closes F6 step 2)
 
