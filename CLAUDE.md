@@ -19,7 +19,7 @@ Source of truth for what we build:
 | argos/ | The desktop window: a Tauri v2 binary and its text sprite art, driven by the event stream modelguard/argos/ writes to its stdin |
 | skill/ | OSS contribution: the datahub-ml-guard skill |
 | mcp_ext/ | OSS contribution (stretch): MCP raise_incident mutation tool |
-| examples/ | Sample generated artifacts for judges, and real-project/, the live stack the product was validated against |
+| examples/ | Sample generated artifacts for judges, and real-project/, the live stack the product is validated and benchmarked against |
 | benchmarks/ | ModelGuard-Bench: injection, metrics, baselines, RESULTS.md |
 | tests/ | pytest unit and integration tests |
 | docs/ | hackathon-specs/ (official rules), plan/, decision-log.md |
@@ -131,3 +131,4 @@ Source of truth for what we build:
 | 2026-08-03 | Claude (for Ghassen Naouar) | site/ joins the repository map: the static documentation page for the shipped product (D-104) |
 | 2026-08-03 | Claude (for Ghassen Naouar) | argos/ joins the repository map: the Tauri v2 desktop window (Argos) and its sprite art, driven by the JSON event stream modelguard/argos/ produces (D-098) |
 | 2026-08-04 | Claude (for Ghassen Naouar) | modelguard/adapters/ joins the repository map: read-only, offline readers that import the model-to-column join out of a Feast repo or a dbt semantic model, behind `link --from` (D-112, T-05/T-06) |
+| 2026-08-04 | Claude (for Ghassen Naouar) | examples/real-project/ is a benchmark target as well as a validation stack: the detectors are scored on the graph its own ingestion builds, in its own RESULTS.md section (D-115, T-14) |

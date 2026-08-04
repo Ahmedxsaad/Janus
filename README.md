@@ -632,6 +632,14 @@ obvious 30-hour failure, because that is where a detector actually goes wrong: c
 one comparison from `>` to `>=` is caught by the trial sitting exactly on the SLA, and
 scores a clean 1.00 under the demo scenario alone.
 
+It also scores the detectors on a graph this project did not build. Stand up
+[examples/real-project/](https://github.com/Ahmedxsaad/DataHub/tree/main/examples/real-project)
+(a postgres warehouse, a dbt project, a scikit-learn script, an MLflow registry,
+ingested by DataHub's own sources) and the same command adds a section for it:
+the leak lives in the dbt model rather than in a seeding call, and the derivation
+the finding quotes comes from DataHub's SQL parser. Seven features are scored
+there, one of them leaking.
+
 The per-feature comparison against table-level lineage is
 [above](#the-one-thing-nothing-else-does-measured); the full numbers, and what is
 still not measured, are in [RESULTS.md](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md).

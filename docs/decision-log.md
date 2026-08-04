@@ -16,6 +16,81 @@ Entry template:
 
 ---
 
+## D-115: The detectors are scored on a graph this project did not build (2026-08-04)
+- Decided by: Ghassen Naouar.
+- Decision: `examples/real-project/` is promoted from a validation exercise to a
+  benchmark target (T-14, the whole of phase 6 in
+  docs/plan/10-depth-implementation.md). `benchmarks/ingested.py` measures the
+  detectors against the graph that stack's own ingestion produced, and
+  `run_bench` publishes it as its own section of RESULTS.md, never merged with
+  the seeded numbers. Ground truth is the dbt model on disk, not the graph: the
+  measurement reads `customer_features.sql` and asks whether it still builds the
+  leaking column, so playing the README's fix flips the truth column with no code
+  change. Two declarations of the same join were added to the stack (a dbt
+  semantic model and a Feast repo) so T-05 and T-06 are re-verified against this
+  graph rather than against the fixtures they were developed on.
+- Options considered:
+  1. Score the ingested graph inside the existing trial matrix. Rejected: the
+     matrix plants a fact, waits, and asks. Nothing here is planted, and averaging
+     "a detector on a graph built to be measured" with "a detector on somebody
+     else's ingestion" describes neither (benchmarks/CLAUDE.md rule 2).
+  2. Commit the ingestion artifacts (manifest, catalog) and score against a
+     replayed graph. Rejected by rule 6: a committed artifact is a fixture wearing
+     an ingestion's clothes, and the interesting failures found below all came
+     from running the real sources against a real warehouse.
+  3. Have the benchmark rebuild the dbt project to measure the post-fix state as
+     well. Rejected for now: it would make `run_bench` shell out to dbt and to
+     `datahub ingest`, which no other measurement needs, for a second state that
+     the six clean features of the first already discriminate against. RESULTS.md
+     says the post-fix graph is not measured rather than leaving it implied.
+- Why: F6 (the benchmark scores itself) has three steps, and this is the third
+  and the hardest: every other number in RESULTS.md is measured on the graph
+  `modelguard-seed` wrote, which is the one graph where the links the detectors
+  read are guaranteed to exist. It is also the verification for all of phase 3:
+  the adapters, the degraded mode and the table-level fallback were all built
+  against seeded or fixture graphs.
+- Result: the run found four things no seeded graph could have.
+  1. **A dbt semantic model named after its model overwrites it.** DataHub's dbt
+     source keys a semantic model as a dataset by name, so the feature table lost
+     its column-level lineage and kept the semantic model's entities as its
+     columns. The leak detector, which reads exactly those edges, reported
+     nothing to check on a graph that still held the leak. Renamed to `customers`
+     in the example, with the reason in the file; filed as feedback #15.
+  2. **A declared relation resolves to nothing.** A dbt semantic model's
+     `node_relation` and a Feast source's `table` both name a relation the way
+     the warehouse does (`analytics.customer_features`); DataHub names the
+     dataset with the database in front. `resolve_table` matched only the full
+     name or the last segment, so every imported declaration failed to resolve.
+     Now any dotted suffix matches, and an ambiguous one still refuses and prints
+     every candidate.
+  3. **Feast's SQL sources name their table nowhere the adapter looked.**
+     `PostgreSQLSource` keeps the relation in a private options object and
+     exposes it only through `get_table_query_string()`, so a postgres-backed
+     repo (the likeliest kind on this stack) had its source table reported as the
+     source's Feast *name*. The adapter now asks that method second and takes the
+     answer only when it is a bare relation, so a query-backed source still falls
+     back to its name rather than handing a parenthesised SELECT to a catalog
+     lookup.
+  4. **The degraded table-level mode has nothing to stand on here.** T-07 falls
+     back to the tables a model trains on; the mlflow source records no inputs on
+     a training run and emits no model-to-dataset lineage, so there are none. The
+     honest report on an ingested graph is the one D-074 already produced
+     (nothing was checked, and here is what each check was missing), and the
+     benchmark now measures that as a number instead of assuming it.
+  On that graph the leakage detector scores per feature: it named the leaking
+  column and none of the six clean ones, quoting a derivation DataHub's own SQL
+  parser produced. Per benchmarks/CLAUDE.md rule 8 that perfect score was checked
+  by breaking the detector it grades: capping the walk at one hop
+  (`column_marks.marked_ancestor`) drops recall on this graph to 0.00, because
+  the leak here is two hops away through the dbt sibling. The same mutation
+  leaves the seeded leakage row untouched, which is the clearest statement of
+  what this section adds. Tests: `tests/benchmarks/test_ingested.py` (ground
+  truth and the report, offline, mutation-checked), plus the two product fixes
+  above.
+  Phase 6 closes F6 step 3 in docs/plan/07-weaknesses-and-remedies.md.
+
+---
+
 ## D-114: `link`'s usage errors no longer hide behind a connection failure (2026-08-04)
 - Decided by: Ahmed Saad.
 - Decision: the three argument-shape checks in `modelguard link` (`--repo`/

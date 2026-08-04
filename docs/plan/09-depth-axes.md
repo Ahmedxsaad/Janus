@@ -243,7 +243,7 @@ same reversible scenarios the demo uses (benchmarks/CLAUDE.md rule 1).
 
 **Effort:** M. This is where the precision number starts being worth reading.
 
-### 2.3 Score against a graph this project did not build
+### 2.3 Score against a graph this project did not build [done, D-115]
 
 The strongest possible answer to F6, and the most work.
 
@@ -257,6 +257,18 @@ long before a human did. It also doubles as the verification for every item in
 section 1.
 
 **Effort:** L.
+
+Built (D-115, T-14). Three corrections from doing it, per docs/CLAUDE.md rule 1:
+~~score the detectors~~ only leakage is scoreable on that stack, because there is
+no lag, no schema change and no classification in it, and the checks that could
+not run are reported as a measured list rather than left silent. The verification
+of section 1 needed *two declarations added to the stack* (a dbt semantic model
+and a Feast repo), since a warehouse plus dbt plus MLflow declares the
+model-to-column join nowhere at all, which is the whole reason `link` exists. And
+it did not catch F10: it caught two defects in the readers that close F10 (a
+relation named the way a warehouse names it resolved against no dataset, and
+Feast's SQL sources hide their table behind a method), plus one in DataHub's dbt
+source that made the leak undetectable on a graph that still held it.
 
 ### 2.4 Score the narrative deterministically (faithfulness, not quality)
 
@@ -696,3 +708,4 @@ five.
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-04 | Claude (for Ghassen Naouar) | Initial version: the five depth axes, the section 0 filter, the rejected list, and the ranked shortlist (D-106) |
+| 2026-08-04 | Claude (for Ghassen Naouar) | Section 2.3 corrected in place per docs/CLAUDE.md rule 1 by building it: only leakage is scoreable on the ingested stack, the section-1 verification needed two declarations added to that stack, and what the exercise caught was not F10 but three defects nothing else would have found (D-115, T-14) |

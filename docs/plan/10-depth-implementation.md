@@ -413,19 +413,42 @@ Files: `modelguard/detect/governance.py`, `modelguard/detect/column_marks.py`,
 
 ## Phase 6: the hardest evidence
 
-### T-14 Score against a graph this project did not build (09 section 2.3, closes F6 step 3)
+### T-14 Score against a graph this project did not build (09 section 2.3, closes F6 step 3) [done, D-115]
 
 The largest item, and the verification for all of Phase 3.
 
-- [ ] Promote `examples/real-project/` from a validation exercise to a benchmark
-      target.
-- [ ] Plant the leak in the dbt model, not in the seeder.
-- [ ] Ingest with DataHub's own dbt and mlflow sources.
-- [ ] Score the detectors on the graph **ingestion** produced.
-- [ ] Report it as a separate section in `RESULTS.md`, alongside the seeded numbers,
+- [x] Promote `examples/real-project/` from a validation exercise to a benchmark
+      target. `benchmarks/ingested.py`, called by `run_bench` between the
+      counterfactuals and the scale sweep. A DataHub with that stack not ingested
+      into it gets a section saying so and how to fill it, not zeros.
+- [x] Plant the leak in the dbt model, not in the seeder. It already was;
+      what changed is that ground truth is now *read from that file*
+      (`leaking_features()` looks for the alias in `customer_features.sql`), so
+      playing the README's fix flips the truth column with no code change.
+- [x] Ingest with DataHub's own dbt and mlflow sources. Postgres too, which the
+      plan did not name and which is where the warehouse dataset (and therefore
+      the sibling ambiguity below) comes from.
+- [x] Score the detectors on the graph **ingestion** produced. Per feature, not
+      per model. ~~Every detector~~: only leakage is scoreable here, because
+      freshness, drift and the governance checks need a lag, a schema change and
+      a classification this stack does not have. Which checks could not run is
+      reported as a measured list rather than left as silence.
+- [x] Report it as a separate section in `RESULTS.md`, alongside the seeded numbers,
       never merged with them: they measure different things.
-- [ ] Re-verify T-05 and T-06 against this graph. As F6 notes, this would have caught
-      F10 long before a human did.
+- [x] Re-verify T-05 and T-06 against this graph. As F6 notes, this would have caught
+      F10 long before a human did. It caught three things instead: a semantic
+      model named after its dbt model overwrites it in the catalog (feedback #15),
+      a declared relation resolved against nothing because `resolve_table` matched
+      only the full name or the last segment, and Feast's SQL sources expose their
+      table only through `get_table_query_string()`. Both product fixes landed
+      with this task. Two declarations were added to the example stack to make the
+      re-verification possible: a dbt semantic model and a Feast repo, each
+      declaring the same seven columns.
+- [x] Not in the plan and found by building it: the T-07 degraded mode is not a
+      safety net on an ingested graph. It falls back to the tables a model trains
+      on, and DataHub's mlflow source records no run inputs and emits no
+      model-to-dataset lineage, so there are none. Measured as a number in the
+      section rather than asserted.
 
 ---
 
@@ -482,9 +505,12 @@ Tracked here because they land inside other tasks rather than as their own.
       a FAILURE run event on its process instance. The other half of 07's remedy,
       per-finding isolation so one unwritable finding does not cost the other four,
       is not part of T-04 and stays open in 07.
-- [ ] **F6** (the benchmark scores itself) closes across T-08, T-09 and T-14.
+- [ ] **F6** (the benchmark scores itself): step 3 closed in T-14 (D-115). Steps 1
+  and 2 stay open in T-08 and T-09.
 - [ ] **F7** (invented trust weights) closes inside T-01.
 - [ ] **F10 / F11** (the `link` cliff) close across T-05, T-06, T-07 and T-20.
+  T-14 verified the first three against an ingested graph and found two defects in
+  them (D-115); F10 stays open until T-20 closes the re-ingestion half.
 
 After the phase that closes each one, update `07-weaknesses-and-remedies.md` in place
 with the closing decision id. A finding that is fixed but still listed as open is the
@@ -520,3 +546,4 @@ purpose-limitation detector.
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-04 | Claude (for Ghassen Naouar) | Initial version: 21 tasks across 8 phases, the standing definition of done, the cross-cutting F-number closes, and the phase gates (D-107) |
+| 2026-08-04 | Claude (for Ghassen Naouar) | Phase 6 (T-14) done and corrected in place per docs/CLAUDE.md rule 1 by building it: only leakage is scoreable on that stack, postgres is a third ingestion source the task did not name, the re-verification needed two declarations added to the example, and the degraded mode turned out to have nothing to stand on there (D-115) |
