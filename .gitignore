@@ -41,3 +41,12 @@ argos/gen/
 # cache. Reproduced by `mutmut run`; only benchmarks/RESULTS.md's generated
 # section is the durable artifact.
 mutants/
+
+# dbt build output for the example project. The compiled SQL, the manifest and
+# the catalog are what `datahub ingest -c dbt.yml` reads, and they are produced
+# by `dbt run && dbt docs generate` on the machine that runs them: committing
+# them would ship one machine's absolute paths and turn a live ingestion into a
+# replayed fixture (benchmarks/CLAUDE.md rule 6). `.user.yml` is dbt's anonymous
+# usage id, which is per user.
+examples/real-project/churn_analytics/target/
+examples/real-project/churn_analytics/.user.yml

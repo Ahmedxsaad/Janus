@@ -75,11 +75,28 @@ def test_a_fully_qualified_name_resolves_too():
     assert resolve_table(_conn([TABLE_URN]), "ecommerce.public.loans_raw") == TABLE_URN
 
 
+def test_a_partly_qualified_name_resolves_too():
+    """`schema.table` is how a declaration spells a relation.
+
+    A dbt semantic model's node_relation and a Feast source's table both name a
+    relation the way the warehouse does, while DataHub names the dataset for it
+    with the database in front. Matching only the full name or the last segment
+    left every imported declaration resolving against nothing (T-14).
+    """
+    assert resolve_table(_conn([TABLE_URN]), "public.loans_raw") == TABLE_URN
+
+
 def test_a_search_hit_whose_name_does_not_match_is_ignored():
-    """Search is fuzzy. Only an exact name or last-segment match counts."""
+    """Search is fuzzy. Only an exact name or a dotted-suffix match counts."""
     unrelated = "urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.loans_archive,PROD)"
     with pytest.raises(TableResolutionError, match="no dataset named"):
         resolve_table(_conn([unrelated]), "loans_raw")
+
+
+def test_a_suffix_that_is_not_on_a_dot_boundary_is_not_a_match():
+    """`raw` must not resolve `loans_raw`: a suffix is a name, not a substring."""
+    with pytest.raises(TableResolutionError, match="no dataset named"):
+        resolve_table(_conn([TABLE_URN]), "raw")
 
 
 def test_an_unknown_table_on_a_local_quickstart_points_at_the_seeder():

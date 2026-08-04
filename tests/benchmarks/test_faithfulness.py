@@ -272,3 +272,39 @@ class TestRendering:
         rendered = self._rendered(check_template_narratives([make_finding()]))
 
         assert "quality" in rendered.lower()
+
+
+class TestMutationSectionSurvivesABenchmarkRun:
+    """run_bench rewrites RESULTS.md whole; the mutation section is not its to lose.
+
+    Without this, every benchmark run silently deleted a section written by a
+    different command, and that section's own CI job then re-added it and
+    reported the file as stale: a job wearing a permanent red X, which ci.yml's
+    own comments warn teaches people to ignore red (D-122).
+    """
+
+    def test_an_existing_mutation_section_is_carried_across(self, tmp_path):
+        from benchmarks.mutation_report import END_MARKER, START_MARKER
+        from benchmarks.run_bench import _carry_mutation_section
+
+        out = tmp_path / "RESULTS.md"
+        out.write_text(f"# old\n\n{START_MARKER}\n## Mutation score\n- Killed: 7\n{END_MARKER}\n")
+
+        carried = _carry_mutation_section(out, "# fresh report\n")
+
+        assert "# fresh report" in carried
+        assert "- Killed: 7" in carried
+        assert carried.count(START_MARKER) == 1
+
+    def test_a_file_with_no_mutation_section_is_left_alone(self, tmp_path):
+        from benchmarks.run_bench import _carry_mutation_section
+
+        out = tmp_path / "RESULTS.md"
+        out.write_text("# old, no mutation section\n")
+
+        assert _carry_mutation_section(out, "# fresh\n") == "# fresh\n"
+
+    def test_a_first_run_with_no_file_at_all_is_left_alone(self, tmp_path):
+        from benchmarks.run_bench import _carry_mutation_section
+
+        assert _carry_mutation_section(tmp_path / "absent.md", "# fresh\n") == "# fresh\n"

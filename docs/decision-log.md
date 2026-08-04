@@ -16,6 +16,113 @@ Entry template:
 
 ---
 
+## D-122: Merging phase 6, a decision-log collision and a section that deleted itself (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: `feat/depth-phase-6` (T-14) is merged into main after two fixes that
+  had nothing to do with what it built.
+- Options considered: none. Both were defects; the only question was whether to
+  merge around them or fix them first, and a merge that knowingly lands a
+  duplicate decision id is a merge that makes the log stop being an index.
+- Why the collision happened, and why it is worth writing down: the branch was
+  cut from main at D-114 and correctly took the next number, D-115. So did T-08
+  on a branch cut at the same commit. Two people numbering from the same
+  ancestor produce the same number, and nothing in this repo's tooling notices,
+  because the log is a file rather than a registry. Renumbered to **D-121** here
+  (the number is the only thing that changed) along with its twenty references
+  across the plan docs, the CLAUDE.md change logs, the README and the example
+  stack. One mis-citation of my own was corrected in the same pass:
+  `benchmarks/inject.py` credited the sensitive-source precondition bug to
+  D-115 when T-09 found it, which is D-116.
+- Result: the second fix is the one worth keeping. `run_bench` rewrites
+  RESULTS.md whole, and the mutation section (T-08) is written by a *different*
+  command on a different schedule, so **every benchmark run silently deleted
+  it**. Already true on main before this merge, and it had already happened
+  twice: the section was absent from the committed file. Its own CI job then
+  re-adds it and reports the file as stale, so that job would have sat
+  permanently red, which is the exact failure ci.yml's own comments warn
+  against ("a job wearing a permanent red X teaches the same lesson faster").
+  `_carry_mutation_section` now carries the block across verbatim, because
+  regenerating it needs a mutmut run `run_bench` does not do; three tests cover
+  it, including the two cases where it must do nothing. The section is
+  regenerated on the merged tree: 1792 mutants, 0.75, with verdicts added for
+  T-11's five new functions, which the guard had refused to publish without.
+  Verified after the fix: a full benchmark run leaves the section in place.
+
+## D-121: The detectors are scored on a graph this project did not build (2026-08-04)
+- Decided by: Ghassen Naouar.
+- Decision: `examples/real-project/` is promoted from a validation exercise to a
+  benchmark target (T-14, the whole of phase 6 in
+  docs/plan/10-depth-implementation.md). `benchmarks/ingested.py` measures the
+  detectors against the graph that stack's own ingestion produced, and
+  `run_bench` publishes it as its own section of RESULTS.md, never merged with
+  the seeded numbers. Ground truth is the dbt model on disk, not the graph: the
+  measurement reads `customer_features.sql` and asks whether it still builds the
+  leaking column, so playing the README's fix flips the truth column with no code
+  change. Two declarations of the same join were added to the stack (a dbt
+  semantic model and a Feast repo) so T-05 and T-06 are re-verified against this
+  graph rather than against the fixtures they were developed on.
+- Options considered:
+  1. Score the ingested graph inside the existing trial matrix. Rejected: the
+     matrix plants a fact, waits, and asks. Nothing here is planted, and averaging
+     "a detector on a graph built to be measured" with "a detector on somebody
+     else's ingestion" describes neither (benchmarks/CLAUDE.md rule 2).
+  2. Commit the ingestion artifacts (manifest, catalog) and score against a
+     replayed graph. Rejected by rule 6: a committed artifact is a fixture wearing
+     an ingestion's clothes, and the interesting failures found below all came
+     from running the real sources against a real warehouse.
+  3. Have the benchmark rebuild the dbt project to measure the post-fix state as
+     well. Rejected for now: it would make `run_bench` shell out to dbt and to
+     `datahub ingest`, which no other measurement needs, for a second state that
+     the six clean features of the first already discriminate against. RESULTS.md
+     says the post-fix graph is not measured rather than leaving it implied.
+- Why: F6 (the benchmark scores itself) has three steps, and this is the third
+  and the hardest: every other number in RESULTS.md is measured on the graph
+  `modelguard-seed` wrote, which is the one graph where the links the detectors
+  read are guaranteed to exist. It is also the verification for all of phase 3:
+  the adapters, the degraded mode and the table-level fallback were all built
+  against seeded or fixture graphs.
+- Result: the run found four things no seeded graph could have.
+  1. **A dbt semantic model named after its model overwrites it.** DataHub's dbt
+     source keys a semantic model as a dataset by name, so the feature table lost
+     its column-level lineage and kept the semantic model's entities as its
+     columns. The leak detector, which reads exactly those edges, reported
+     nothing to check on a graph that still held the leak. Renamed to `customers`
+     in the example, with the reason in the file; filed as feedback #15.
+  2. **A declared relation resolves to nothing.** A dbt semantic model's
+     `node_relation` and a Feast source's `table` both name a relation the way
+     the warehouse does (`analytics.customer_features`); DataHub names the
+     dataset with the database in front. `resolve_table` matched only the full
+     name or the last segment, so every imported declaration failed to resolve.
+     Now any dotted suffix matches, and an ambiguous one still refuses and prints
+     every candidate.
+  3. **Feast's SQL sources name their table nowhere the adapter looked.**
+     `PostgreSQLSource` keeps the relation in a private options object and
+     exposes it only through `get_table_query_string()`, so a postgres-backed
+     repo (the likeliest kind on this stack) had its source table reported as the
+     source's Feast *name*. The adapter now asks that method second and takes the
+     answer only when it is a bare relation, so a query-backed source still falls
+     back to its name rather than handing a parenthesised SELECT to a catalog
+     lookup.
+  4. **The degraded table-level mode has nothing to stand on here.** T-07 falls
+     back to the tables a model trains on; the mlflow source records no inputs on
+     a training run and emits no model-to-dataset lineage, so there are none. The
+     honest report on an ingested graph is the one D-074 already produced
+     (nothing was checked, and here is what each check was missing), and the
+     benchmark now measures that as a number instead of assuming it.
+  On that graph the leakage detector scores per feature: it named the leaking
+  column and none of the six clean ones, quoting a derivation DataHub's own SQL
+  parser produced. Per benchmarks/CLAUDE.md rule 8 that perfect score was checked
+  by breaking the detector it grades: capping the walk at one hop
+  (`column_marks.marked_ancestor`) drops recall on this graph to 0.00, because
+  the leak here is two hops away through the dbt sibling. The same mutation
+  leaves the seeded leakage row untouched, which is the clearest statement of
+  what this section adds. Tests: `tests/benchmarks/test_ingested.py` (ground
+  truth and the report, offline, mutation-checked), plus the two product fixes
+  above.
+  Phase 6 closes F6 step 3 in docs/plan/07-weaknesses-and-remedies.md.
+- Renumbered from D-115 to D-121 on merge: the branch was cut before T-08
+  landed and both claimed 115. The number is the only thing that changed.
+
 ## D-120: Phase 4 and 5 close-out, and two silent drops the live run found (2026-08-04)
 - Decided by: Ahmed Saad.
 - Decision: three registration gaps found by running the full benchmark rather
@@ -90,6 +197,42 @@ Entry template:
   suite fails if the disclaimer heading is renamed or if the gaps section moves
   below the evidence.
 
+## D-118: T-10, faithfulness is measurable where quality is not (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: `benchmarks/faithfulness.py` checks generated prose against the
+  facts its narrator was shown: every figure in the prose must appear in those
+  facts, and every URN must resolve in the graph. Reported in RESULTS.md as a
+  rate beside the count of figures actually checked.
+- Options considered:
+  1. Ground against `Finding.evidence`, which is what 10's task text says.
+     **Corrected in place per docs/CLAUDE.md rule 1**: the prompt shows
+     `evidence` *plus* `_evidence_detail` (a model's hop count, how many of its
+     features are at risk), so a checker grounded on the mapping alone reports a
+     correctly-quoted hop count as a hallucination. `narrate.grounding_facts`
+     is now the one source of truth for "what the model was allowed to speak
+     from", used by the prompt and the checker, so the two cannot drift.
+  2. An LLM-as-judge readability rubric. Kept out of the primary slot, per 09
+     section 7: soft evidence that varies by provider sits badly beside a
+     project whose decisions are deterministic. Quality stays unscored and
+     RESULTS.md says so.
+- Why: "narrative quality is not scored" was doing double duty as a disclosure
+  and as an excuse. Faithfulness is a property rather than a judgement, and
+  agent/CLAUDE.md rule 5 has claimed this self-check since Phase 1 without
+  anything measuring it.
+- Result: the check is numeric rather than textual, which matters: the evidence
+  renders a lag as `30.0` and prose writing "30 hours" has quoted it exactly,
+  where a substring match would also accept `3`. Identifiers are excluded on
+  both sides by the same rule, so `credit_risk_v3` yields no figure and a model
+  whose version is in its own name is not flagged forever. All six template
+  narrators pass at 1.00 over 6 figures; the checker is shown to reject
+  invented, derived ("five times the SLA"), and rounded figures, and an
+  unresolvable URN, so the green rate is a measurement and not a check that
+  cannot fail. **The plan's "runs against every provider in CI" is not what
+  shipped and RESULTS.md says so**: CI has no API key, so the template
+  narrator is what is always measured, a provider row appears only when a
+  credential for it was present, and its absence is explicitly not a passing
+  grade.
+
 ## D-117: T-11, proxy attributes as candidates rather than accusations (2026-08-04)
 - Decided by: Ahmed Saad.
 - Decision: a sixth detector, `proxy_candidate_findings`, looks for a **fork**
@@ -129,42 +272,6 @@ Entry template:
   (it never reached the guard), and the first nearest-ancestor test passed
   against keep-first because the fixture's alphabetically-first ancestor was
   also the nearest. Both rewritten until the mutation failed them.
-
-## D-118: T-10, faithfulness is measurable where quality is not (2026-08-04)
-- Decided by: Ahmed Saad.
-- Decision: `benchmarks/faithfulness.py` checks generated prose against the
-  facts its narrator was shown: every figure in the prose must appear in those
-  facts, and every URN must resolve in the graph. Reported in RESULTS.md as a
-  rate beside the count of figures actually checked.
-- Options considered:
-  1. Ground against `Finding.evidence`, which is what 10's task text says.
-     **Corrected in place per docs/CLAUDE.md rule 1**: the prompt shows
-     `evidence` *plus* `_evidence_detail` (a model's hop count, how many of its
-     features are at risk), so a checker grounded on the mapping alone reports a
-     correctly-quoted hop count as a hallucination. `narrate.grounding_facts`
-     is now the one source of truth for "what the model was allowed to speak
-     from", used by the prompt and the checker, so the two cannot drift.
-  2. An LLM-as-judge readability rubric. Kept out of the primary slot, per 09
-     section 7: soft evidence that varies by provider sits badly beside a
-     project whose decisions are deterministic. Quality stays unscored and
-     RESULTS.md says so.
-- Why: "narrative quality is not scored" was doing double duty as a disclosure
-  and as an excuse. Faithfulness is a property rather than a judgement, and
-  agent/CLAUDE.md rule 5 has claimed this self-check since Phase 1 without
-  anything measuring it.
-- Result: the check is numeric rather than textual, which matters: the evidence
-  renders a lag as `30.0` and prose writing "30 hours" has quoted it exactly,
-  where a substring match would also accept `3`. Identifiers are excluded on
-  both sides by the same rule, so `credit_risk_v3` yields no figure and a model
-  whose version is in its own name is not flagged forever. All six template
-  narrators pass at 1.00 over 6 figures; the checker is shown to reject
-  invented, derived ("five times the SLA"), and rounded figures, and an
-  unresolvable URN, so the green rate is a measurement and not a check that
-  cannot fail. **The plan's "runs against every provider in CI" is not what
-  shipped and RESULTS.md says so**: CI has no API key, so the template
-  narrator is what is always measured, a provider row appears only when a
-  credential for it was present, and its absence is explicitly not a passing
-  grade.
 
 ## D-116: T-09, the confusable negatives (2026-08-04)
 - Decided by: Ahmed Saad.

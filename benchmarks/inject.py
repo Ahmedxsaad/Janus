@@ -375,7 +375,7 @@ def _leakage_trials() -> tuple[Trial, ...]:
         # makes. Label-lookalike left last would leave applicant_income
         # deriving from target_indicator for every trial after it, which is
         # exactly what broke the sensitive-source trial's own precondition
-        # the first time this ran live (D-115).
+        # the first time this ran live (D-116).
         Trial(
             name="leakage-label-lookalike",
             family=FindingType.TARGET_LEAKAGE,

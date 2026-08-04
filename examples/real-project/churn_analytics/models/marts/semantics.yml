@@ -1,0 +1,53 @@
+# The dbt semantic layer over the feature table.
+#
+# A team that has adopted the semantic layer writes this for their BI tools, and
+# in doing so they write down exactly the thing `modelguard link` otherwise asks a
+# human to retype: which columns of this table are features, and which one is the
+# entity key that is not. `modelguard link --from dbt` reads it out of the compiled
+# manifest (modelguard/adapters/dbt.py, T-06) instead of asking a second time.
+#
+# Dimensions rather than measures throughout: a measure needs an aggregation time
+# dimension, and this table carries no event timestamp. What a column is aggregated
+# by is a BI question; which column a feature reads is the only one ModelGuard asks.
+# The name is deliberately not `customer_features`. DataHub's dbt source keys a
+# semantic model as a dataset by its name, so a semantic model named after the
+# dbt model it is built on lands on the same URN and overwrites it: the feature
+# table then carries the semantic model's entities as its columns and loses the
+# column-level lineage the compiled SQL produced, which is the one thing the leak
+# detector reads. Measured on this stack, 2026-08-04 (T-14, D-115).
+semantic_models:
+  - name: customers
+    description: One row per customer, the table the churn model trains on.
+    model: ref('customer_features')
+    entities:
+      - name: customer
+        type: primary
+        expr: customer_id
+    dimensions:
+      - name: tenure_months
+        type: categorical
+      - name: monthly_charges
+        type: categorical
+      - name: total_charges
+        type: categorical
+      - name: contract_type
+        type: categorical
+      - name: internet_service
+        type: categorical
+      - name: payment_method
+        type: categorical
+      # Declared like any other feature, because that is what the analyst who
+      # wrote it believed it was. The declaration is faithful; the column is the
+      # mistake, and importing the declaration is what puts it in front of a
+      # detector that can say so.
+      - name: contract_renewed_flag
+        type: categorical
+
+# dbt refuses to parse a project that declares a semantic model without one.
+models:
+  - name: metricflow_time_spine
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day

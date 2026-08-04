@@ -24,6 +24,7 @@ half a model's features.
 
 from __future__ import annotations
 
+import re
 import sys
 from contextlib import chdir
 from pathlib import Path
@@ -32,10 +33,16 @@ from typing import Any
 from modelguard.adapters import AdapterError, DeclaredFeature, DeclaredLink
 
 #: Attributes a Feast data source may carry its table under, in the order they
-#: are tried. Warehouse sources (BigQuery, Snowflake, Redshift, the SQL contrib
-#: sources) use ``table``; file sources use ``path``; anything else falls back to
-#: the source's declared name, which is at least a string the user chose.
+#: are tried. Warehouse sources (BigQuery, Snowflake, Redshift) use ``table``;
+#: file sources use ``path``; anything else falls back to the source's declared
+#: name, which is at least a string the user chose.
 _TABLE_ATTRIBUTES = ("table", "path")
+
+#: A bare relation, optionally schema-qualified. What ``get_table_query_string``
+#: returns for a source declared on a table, and what distinguishes that from the
+#: same method's answer for a source declared on a query (a parenthesised SELECT)
+#: or for a dialect that quotes its identifiers.
+_RELATION = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
 
 
 def _feast_repo(path: Path) -> Any:
@@ -94,11 +101,33 @@ def _join_keys(repo: Any, entity_names: list[str]) -> tuple[str, ...]:
 
 
 def _source_table(source: Any) -> str:
-    """Return the table a Feast data source reads, as the declaration spells it."""
+    """Return the table a Feast data source reads, as the declaration spells it.
+
+    The SQL contrib sources (postgres, and the others built on the same options
+    object) keep the table private and expose it only through
+    ``get_table_query_string``, so an attribute scan alone reports such a repo's
+    source table as the source's Feast *name*: a string that resolves against no
+    catalog, on the stack this reader is most likely to meet. Found by running
+    the adapter against the ingested real project (T-14).
+
+    That method is asked second and its answer is taken only when it is a bare
+    relation. A source declared on a query returns a parenthesised SELECT, and a
+    dialect that quotes its identifiers returns them quoted; neither is a table
+    name, and both fall through to the declared name rather than being handed to
+    a catalog lookup as one.
+    """
     for attribute in _TABLE_ATTRIBUTES:
         value = getattr(source, attribute, None)
         if value:
             return str(value)
+    relation = getattr(source, "get_table_query_string", None)
+    if callable(relation):
+        try:
+            candidate = str(relation()).strip()
+        except Exception:  # noqa: BLE001 - a vendor source's own failure, not ours
+            candidate = ""
+        if _RELATION.match(candidate):
+            return candidate
     return str(source.name)
 
 

@@ -6,15 +6,27 @@ detectors read already exist, which is precisely the assumption a real project
 breaks. So this is the same product run against an ordinary stack that knows
 nothing about it, and a record of what that found (D-074, 2026-08-01).
 
-Nothing here is a fixture. It is a public dataset, three dbt models, one
-scikit-learn script, and DataHub's own ingestion sources.
+It is also a benchmark target now, not only a validation exercise: ModelGuard-Bench
+scores the detectors against the graph **this** stack's ingestion produced, in its
+own section of `benchmarks/RESULTS.md`, never merged with the seeded numbers
+(D-121, T-14). Stand the stack up as below and `python -m benchmarks.run_bench`
+fills that section in; leave it down and the section says it was not run.
+
+Nothing here is a fixture. It is a public dataset, four dbt models, one
+scikit-learn script, two feature declarations, and DataHub's own ingestion
+sources.
 
 | Piece | What it is |
 |---|---|
 | `load_raw.py` | Lands IBM's public Telco customer-churn extract (7043 customers) in postgres, the way an EL job would |
-| `churn_analytics/` | A dbt project: a staging model, a feature table, a label table |
+| `churn_analytics/` | A dbt project: a staging model, a feature table, a label table, a semantic model over the features, and the time spine dbt requires beside one |
+| `feature_repo/` | A Feast repo declaring the same join a second way: feature view, label view, feature service |
 | `ml/train_churn.py` | Trains a logistic-regression churn model and tracks it in MLflow |
 | `ingestion/` | Three DataHub recipes: postgres, dbt, mlflow |
+
+Two declarations of one join is the point rather than duplication: `modelguard
+link --from dbt` and `--from feast` each read one of them, and the benchmark
+checks that both arrive at the same seven columns of the same ingested table.
 
 ## The mistake, and why it is the realistic one
 
@@ -59,6 +71,35 @@ Verified live on the demo VM, 2026-08-01, against DataHub GMS 1.5.0.6 with
    touch, so replaying it is `modelguard link --all`: no arguments, every linked
    model, safe on a schedule.
 
+## What the second run found (2026-08-04, D-121, T-14)
+
+Promoting this from a validation exercise to a benchmark target meant adding the
+two declarations and running the whole stack again. Three things fell out of
+that, each measured rather than reasoned about:
+
+5. **A semantic model named after its dbt model overwrites it.** DataHub's dbt
+   source keys a semantic model as a dataset by its *name*, so declaring
+   `semantic_models: - name: customer_features` over the model
+   `customer_features` lands both on one URN: the feature table then carries the
+   semantic model's entities as its columns (`customer` instead of
+   `customer_id`) and loses the column-level lineage the compiled SQL produced,
+   which is the one thing the leak detector reads. The scan went quiet on a
+   graph that still held the leak. The semantic model here is named `customers`
+   for that reason, and the collision is filed as
+   [feedback #15](../../docs/most-valuable-feedback.md).
+6. **A declared relation names two datasets.** The dbt source emits a
+   dbt-platform dataset beside the warehouse one, both named after the same
+   relation, so `--features analytics.customer_features` matches two. `link`
+   refuses and prints both, which is right; pass the warehouse URN, which is the
+   table the training script queried.
+7. **The table-level degraded mode has nothing to stand on here.** T-07 falls
+   back to the tables a model trains on, and this model has none: the mlflow
+   source records no inputs on the training run and emits no lineage from the
+   model to a dataset. So on an ingested graph the honest report is the one in
+   point 1 (nothing was checked, and here is what each check was missing), not a
+   weaker answer. The benchmark measures that as a number rather than asserting
+   it.
+
 ## Running it yourself
 
 Needs a DataHub (the Quickstart is fine), a postgres, and an MLflow tracking
@@ -81,11 +122,25 @@ python ml/train_churn.py
 cd ingestion && for r in postgres dbt mlflow; do datahub ingest -c $r.yml; done && cd ..
 
 modelguard inventory                    # telco_churn_1: not checked
+
+# The feature table is spelled by two datasets on a dbt stack (the warehouse
+# table and its dbt sibling), so name the warehouse one. `link` prints both and
+# refuses rather than choosing, which is what you want it to do.
+FEATURES='urn:li:dataset:(urn:li:dataPlatform:postgres,warehouse.analytics.customer_features,PROD)'
+LABELS='urn:li:dataset:(urn:li:dataPlatform:postgres,warehouse.analytics.customer_labels,PROD)'
 modelguard link --model telco_churn_1 \
-  --features analytics.customer_features \
-  --label-table analytics.customer_labels \
+  --features "$FEATURES" --label-table "$LABELS" \
   --label-column churned --exclude customer_id
 modelguard scan --model telco_churn_1   # the leak, with its derivation
+```
+
+Or import the join instead of typing it, from either declaration this project
+already carries (`--from` proposes and writes nothing until you confirm):
+
+```bash
+modelguard link --model telco_churn_1 --from feast --repo feature_repo
+modelguard link --model telco_churn_1 --from dbt --repo churn_analytics \
+  --label-table "$LABELS" --label-column churned
 ```
 
 On a schedule, the last three become `modelguard link --all && modelguard scan

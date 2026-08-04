@@ -520,12 +520,23 @@ warehouse produces:
 
 Each is a scenario plus a trial, and each one can genuinely go the wrong way.
 
-**3. Score against a graph this project did not build.** The strongest possible
-answer, and the most work. `examples/real-project/` already stands up a real dbt
-plus MLflow plus postgres stack. Promote it: plant a leak in the dbt model,
-ingest with DataHub's own sources, and score the detectors on the graph
-*ingestion* produced rather than the graph the seeder wrote. That measures the
-thing users actually have, and it would have caught F10 long ago.
+**3. Score against a graph this project did not build.** ~~The strongest possible
+answer, and the most work.~~ **Closed by D-121 (T-14).**
+`examples/real-project/` is a benchmark target now: `benchmarks/ingested.py`
+scores the detectors on the graph DataHub's own postgres, dbt and mlflow sources
+produced from that stack, with ground truth read from the dbt model on disk, and
+RESULTS.md carries it as its own section rather than merged with the seeded
+numbers. Leakage is scored per feature there (one leaking column, six clean
+ones); freshness, drift and the governance checks are reported as not evaluated,
+because that stack carries no lag, no schema change and no classification.
+
+It did what this step was predicted to do. Three defects came out of it that no
+seeded graph could have shown: a dbt semantic model named after its model
+overwrites the model in the catalog and takes its column-level lineage with it
+(filed as feedback #15), a relation named the way a warehouse names it resolved
+against no dataset at all, and Feast's SQL sources expose their table only
+through a method the adapter did not call. The last two were product defects in
+T-05/T-06 and were fixed with the task.
 
 ### How to verify
 
