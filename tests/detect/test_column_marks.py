@@ -115,6 +115,122 @@ def test_a_column_that_is_itself_marked_is_never_reported_truncated():
     assert walk.truncated is False
 
 
+# --- hop cap (T-09, F1: distinct from the result-count cap above) ------------
+
+
+def test_a_mark_exactly_at_the_hop_cap_fires():
+    """The cap is a hard limit, not an exclusive one: hops == cap still counts."""
+    graph = FakeGraph(aspects={(LABEL_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN)})
+    client = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=CONFIG.leakage_max_hops,
+                    direction="upstream",
+                    paths=column_path(LABEL_COLUMN_URN),
+                )
+            ]
+        }
+    )
+    conn = make_connection(graph, client)
+
+    walk = marked_ancestor(conn, LEAK_COLUMN_URN, _index(graph), CONFIG)
+
+    assert walk.hit is not None
+    assert walk.hit[0] == LABEL_COLUMN_URN
+    assert walk.hop_capped is False
+
+
+def test_a_mark_one_hop_beyond_the_cap_does_not_fire_and_is_reported_hop_capped():
+    """GMS answers past the cap (D-020); the walk must decline it, not miss it."""
+    graph = FakeGraph(aspects={(LABEL_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN)})
+    client = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=CONFIG.leakage_max_hops + 1,
+                    direction="upstream",
+                    paths=column_path(LABEL_COLUMN_URN),
+                )
+            ]
+        }
+    )
+    conn = make_connection(graph, client)
+
+    walk = marked_ancestor(conn, LEAK_COLUMN_URN, _index(graph), CONFIG)
+
+    assert walk.hit is None
+    assert walk.hop_capped is True
+
+
+def test_a_result_within_the_hop_cap_is_not_reported_hop_capped():
+    graph = FakeGraph()
+    client = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=CONFIG.leakage_max_hops,
+                    direction="upstream",
+                    paths=column_path(),
+                )
+            ]
+        }
+    )
+    conn = make_connection(graph, client)
+
+    walk = marked_ancestor(conn, LEAK_COLUMN_URN, _index(graph), CONFIG)
+
+    assert walk.hit is None
+    assert walk.hop_capped is False
+
+
+def test_a_hit_within_the_cap_does_not_hide_a_hop_capped_result_elsewhere():
+    """The two flags answer different questions and must not shadow each other.
+
+    The hop-capped result comes first and the real hit second, on purpose: a
+    walk that stopped entirely at the first hop-capped result (mistaking
+    "decline this one" for "stop looking") would never reach the hit at all,
+    where a hop-capped result trailing the hit would let that bug hide behind
+    an answer that happened to already be found.
+    """
+    graph = FakeGraph(aspects={(LABEL_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN)})
+    client = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    FEATURE_TABLE_URN,
+                    hops=CONFIG.leakage_max_hops + 1,
+                    direction="upstream",
+                    paths=column_path(),
+                ),
+                lineage_result(
+                    TABLE_URN, hops=1, direction="upstream", paths=column_path(LABEL_COLUMN_URN)
+                ),
+            ]
+        }
+    )
+    conn = make_connection(graph, client)
+
+    walk = marked_ancestor(conn, LEAK_COLUMN_URN, _index(graph), CONFIG)
+
+    assert walk.hit is not None
+    assert walk.hop_capped is True
+
+
+def test_a_column_that_is_itself_marked_is_never_reported_hop_capped():
+    """Nothing was walked to find a direct hit, so nothing could be hop-capped."""
+    graph = FakeGraph(aspects={(LEAK_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN)})
+    conn = make_connection(graph, FakeClient())
+
+    walk = marked_ancestor(conn, LEAK_COLUMN_URN, _index(graph), CONFIG)
+
+    assert walk.hit is not None
+    assert walk.hop_capped is False
+
+
 BACKUP_COLUMN_URN = f"urn:li:schemaField:({TABLE_URN},default_status_backup)"
 
 

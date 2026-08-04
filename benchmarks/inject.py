@@ -56,27 +56,27 @@ from modelguard.models import FindingType
 from modelguard.seed import graph_spec as spec
 from modelguard.seed.scenarios import (
     BACKUP_LABEL_COLUMN,
+    LOOKALIKE_COLUMN,
     SENSITIVE_SOURCE_COLUMN,
+    plant_common_ancestor_label,
     plant_delinked_model,
     plant_deprecated_input,
+    plant_label_lookalike,
     plant_leakage,
     plant_schema_drift,
     plant_second_leak_path,
     plant_sensitive_source,
     plant_stale_source,
+    revert_common_ancestor_label,
     revert_delinked_model,
     revert_deprecated_input,
+    revert_label_lookalike,
     revert_leakage,
     revert_schema_drift,
     revert_second_leak_path,
     revert_sensitive_source,
     revert_stale_source,
 )
-
-#: Every column any scenario can declare to be a label. The leakage precondition
-#: reads the lineage for these and nothing else, so an unrelated upstream column
-#: appearing in the graph cannot move it.
-_LABEL_COLUMNS: tuple[str, ...] = (spec.LABEL_SOURCE_COLUMN, BACKUP_LABEL_COLUMN.name)
 
 #: How long a planted fact may take to become visible through the read path the
 #: detector uses. Lineage converged in about three seconds on a local Quickstart;
@@ -129,12 +129,19 @@ class Trial:
     line flips them. RESULTS.md counts these per detector and says plainly, per
     row, whether that row could have failed."""
     leak_upstreams: tuple[str, ...] | None = None
-    """Which declared label columns the leaking feature must be seen deriving from.
+    """Which columns the queried feature must be seen deriving from, exactly.
 
-    Set only by the multi-path trials, where "is the label reachable" is no longer
+    Set by the multi-path trials, where "is the label reachable" is no longer
     the question: with two derivations planted, the interesting states differ in
     *which* of them survive, and a precondition that only asked whether some label
-    was reachable would pass on the wrong graph. None means the usual question."""
+    was reachable would pass on the wrong graph. Set by the T-09 confusable
+    negatives too, whose upstream is not a label at all. None means the usual
+    question: whether the declared label specifically is reachable."""
+    leak_feature_column: str = spec.LEAKAGE_FEATURE
+    """Which feature-table column's upstream lineage a leakage trial's
+    precondition inspects. Every trial about the flagship leak asks about
+    ``prior_default_flag``, the default; T-09's confusable-negative scenarios
+    never touch that column at all, so they name their own."""
     planted: bool | None = None
     """What is planted in the graph, when that differs from what should be found.
 
@@ -184,6 +191,23 @@ def _plant_two_leak_paths(conn: DataHubConnection, trial: Trial, now_ms: int) ->
     """
     assert trial.leak_upstreams is not None
     plant_second_leak_path(conn, keep_first=spec.LABEL_SOURCE_COLUMN in trial.leak_upstreams)
+
+
+def _plant_common_ancestor(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
+    """Plant or revert the common-ancestor scenario (T-09).
+
+    Planting also cuts the flagship leak, in the same write the scenario
+    itself makes (scenarios.py): prior_default_flag still deriving from
+    default_status would otherwise be a second, unrelated leakage finding on
+    this model, and ``_observe`` asks about the model as a whole, not about
+    applicant_income specifically.
+    """
+    plant_common_ancestor_label(conn) if trial.graph_state else revert_common_ancestor_label(conn)
+
+
+def _plant_label_lookalike(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
+    """Plant or revert the label-lookalike scenario (T-09). See _plant_common_ancestor."""
+    plant_label_lookalike(conn) if trial.graph_state else revert_label_lookalike(conn)
 
 
 def _plant_drift(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
@@ -332,6 +356,49 @@ def _leakage_trials() -> tuple[Trial, ...]:
             ),
             plant=_plant_leakage,
             overrides=(("label_term_urn", UNUSED_LABEL_TERM),),
+            boundary=True,
+        ),
+        # T-09 (09 section 2.2): precision of 1.00 is close to vacuous while the
+        # negative trials are absent positives rather than hard negatives. Both
+        # below plant a graph shape that could plausibly fool a weaker detector
+        # and must not fire. leakage-label-lookalike runs before
+        # leakage-common-ancestor, never after: nothing in this matrix reverts
+        # a trial's plant before the next one runs (restore_baseline is only
+        # called once, at the very end), and common-ancestor's own plant
+        # happens to restore applicant_income's baseline derivation from
+        # income as a side effect of the one _set_column_lineage call it
+        # makes. Label-lookalike left last would leave applicant_income
+        # deriving from target_indicator for every trial after it, which is
+        # exactly what broke the sensitive-source trial's own precondition
+        # the first time this ran live (D-115).
+        Trial(
+            name="leakage-label-lookalike",
+            family=FindingType.TARGET_LEAKAGE,
+            target=Target.MODEL,
+            expected=False,
+            planted=True,
+            detail=(
+                "applicant_income derives from a column named like a label, "
+                "target_indicator, which carries no label term"
+            ),
+            plant=_plant_label_lookalike,
+            leak_feature_column="applicant_income",
+            leak_upstreams=(LOOKALIKE_COLUMN.name,),
+            boundary=True,
+        ),
+        Trial(
+            name="leakage-common-ancestor",
+            family=FindingType.TARGET_LEAKAGE,
+            target=Target.MODEL,
+            expected=False,
+            planted=True,
+            detail=(
+                "applicant_income and a declared label both derive from income; "
+                "neither descends from the other"
+            ),
+            plant=_plant_common_ancestor,
+            leak_feature_column="applicant_income",
+            leak_upstreams=("income",),
             boundary=True,
         ),
     )
@@ -508,6 +575,19 @@ def _freshness_visible(
     return abs(signal.lag_hours - trial.lag_hours) < 0.05
 
 
+#: Every upstream column any leakage-family scenario can put in play. A trial
+#: that names an exact ``leak_upstreams`` set is filtered to this before the
+#: comparison, so a query answered mid-reindex, still carrying an edge a
+#: *previous* trial wrote, does not fail an exact-set match on noise neither
+#: trial cares about.
+_RELEVANT_UPSTREAM_COLUMNS: tuple[str, ...] = (
+    spec.LABEL_SOURCE_COLUMN,
+    BACKUP_LABEL_COLUMN.name,
+    "income",
+    LOOKALIKE_COLUMN.name,
+)
+
+
 def _leakage_visible(
     conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int
 ) -> bool:
@@ -516,23 +596,44 @@ def _leakage_visible(
     Asks the same column-lineage query the detector asks, but inspects the
     *lineage*, not whether a finding was raised.
 
-    A multi-path trial names the exact set of declared label columns the feature
-    must be seen deriving from, because with two derivations in play "a label is
-    reachable" is true of three different graphs and only one of them is the
-    trial.
+    A multi-path trial, and T-09's confusable-negative trials, name the exact
+    set of columns the queried feature must be seen deriving from, because
+    "a label is reachable" (or "the seeded default answers") is true of more
+    than one graph and only one of them is the trial. Both ask about
+    ``trial.leak_feature_column``, which is ``prior_default_flag`` for every
+    trial about the flagship leak and a different column for the ones that
+    never touch it.
+
+    T-09's trials also clear the flagship leak while their own scenario is
+    planted (and restore it on revert): ``_observe`` asks whether the *model*
+    has any leakage finding, so the flagship leak still being present would
+    read as a false positive on the scenario's own column rather than what it
+    actually is, a precondition that has not finished catching up.
     """
     results = conn.client.lineage.get_lineage(
+        source_urn=str(spec.feature_table_dataset_urn()),
+        source_column=trial.leak_feature_column,
+        direction="upstream",
+        max_hops=1,
+    )
+    reached = {step.column_name for result in results for step in (result.paths or [])}
+    if trial.leak_upstreams is not None:
+        matched = (reached & set(_RELEVANT_UPSTREAM_COLUMNS)) == set(trial.leak_upstreams)
+    else:
+        matched = (spec.LABEL_SOURCE_COLUMN in reached) == trial.graph_state
+    if not matched or trial.leak_feature_column == spec.LEAKAGE_FEATURE:
+        return matched
+
+    flagship = conn.client.lineage.get_lineage(
         source_urn=str(spec.feature_table_dataset_urn()),
         source_column=spec.LEAKAGE_FEATURE,
         direction="upstream",
         max_hops=1,
     )
-    reached = {step.column_name for result in results for step in (result.paths or [])} & set(
-        _LABEL_COLUMNS
-    )
-    if trial.leak_upstreams is not None:
-        return reached == set(trial.leak_upstreams)
-    return (spec.LABEL_SOURCE_COLUMN in reached) == trial.graph_state
+    flagship_reached = {step.column_name for result in flagship for step in (result.paths or [])}
+    # Planted (graph_state True) means the scenario's own column is what must
+    # answer, so the flagship leak must be *absent*; reverted restores it.
+    return (spec.LABEL_SOURCE_COLUMN in flagship_reached) != trial.graph_state
 
 
 def _drift_visible(conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int) -> bool:
@@ -555,13 +656,27 @@ def _drift_visible(conn: DataHubConnection, trial: Trial, config: ScanConfig, no
 def _sensitive_visible(
     conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int
 ) -> bool:
-    """Whether the classification this trial wrote is readable on the column.
+    """Whether the classification this trial wrote is readable *and reachable*.
 
-    Asks the same index the detector asks, about the column the scenario writes,
-    and compares against what was planted rather than against a finding.
+    The tag's own presence on the column resolves through a synchronously
+    served aspect read and says nothing about whether the lineage edge from
+    ``applicant_income`` up to it has been indexed yet. The detector needs
+    both: it walks that edge (``marked_ancestor``, the traversal leakage
+    shares), served from the async-indexed lineage read `_leakage_visible`
+    already accounts for. Checking only the tag let this precondition pass
+    while the walk still found nothing, live.
     """
     column_urn = str(spec.source_column_urn(SENSITIVE_SOURCE_COLUMN))
-    return sensitive_index(conn, config).is_marked(column_urn) == trial.expected
+    marked = sensitive_index(conn, config).is_marked(column_urn)
+
+    results = conn.client.lineage.get_lineage(
+        source_urn=str(spec.feature_table_dataset_urn()),
+        source_column="applicant_income",
+        direction="upstream",
+        max_hops=1,
+    )
+    reached = {step.column_name for result in results for step in (result.paths or [])}
+    return (marked and SENSITIVE_SOURCE_COLUMN in reached) == trial.expected
 
 
 def _deprecation_visible(
@@ -634,6 +749,10 @@ def restore_baseline(conn: DataHubConnection, *, now_ms: int | None = None) -> N
     # the seeded single-path lineage itself and would otherwise be the last word.
     revert_second_leak_path(conn)
     plant_leakage(conn)
+    # Both T-09 scenarios move applicant_income's own lineage, which nothing
+    # above touches, so they revert independently of the leak above.
+    revert_common_ancestor_label(conn)
+    revert_label_lookalike(conn)
     revert_schema_drift(conn)
     # The governance declarations are anomalies planted on top of the seed, not
     # part of it, so the baseline is the withdrawn state for both. The leak above

@@ -125,9 +125,15 @@ def test_the_multi_path_trials_name_the_label_columns_they_wait_for():
     Both trials leave the feature descending from a declared label, so the plain
     precondition would pass on either graph and on the wrong one. Each therefore
     names the exact set of label columns it expects to be reachable, and that set
-    is what tells the two apart.
+    is what tells the two apart. Filtered to prior_default_flag: T-09's
+    confusable negatives set leak_upstreams too, about a different column
+    entirely, and are not this test's concern.
     """
-    trials = {t.name: t for t in _trials(FindingType.TARGET_LEAKAGE) if t.leak_upstreams}
+    trials = {
+        t.name: t
+        for t in _trials(FindingType.TARGET_LEAKAGE)
+        if t.leak_upstreams and t.leak_feature_column == spec.LEAKAGE_FEATURE
+    }
 
     assert set(trials) == {"leakage-two-paths", "leakage-one-of-two-cut"}
     assert len(trials["leakage-two-paths"].leak_upstreams or ()) == 2
@@ -138,6 +144,30 @@ def test_the_multi_path_trials_name_the_label_columns_they_wait_for():
     assert set(trials["leakage-one-of-two-cut"].leak_upstreams or ()).isdisjoint(
         {spec.LABEL_SOURCE_COLUMN}
     ), "the quoted path is the one that gets cut"
+
+
+def test_the_confusable_negative_trials_ask_about_a_different_column():
+    """T-09: neither scenario touches prior_default_flag at all.
+
+    Both plant a shape on applicant_income instead, so a precondition that kept
+    asking about the flagship leak's own feature would watch a column neither
+    scenario ever changes and pass immediately, on the wrong graph.
+    """
+    trials = {
+        t.name: t
+        for t in _trials(FindingType.TARGET_LEAKAGE)
+        if t.name in {"leakage-common-ancestor", "leakage-label-lookalike"}
+    }
+
+    assert len(trials) == 2
+    for trial in trials.values():
+        assert trial.leak_feature_column == "applicant_income"
+        assert trial.leak_upstreams
+        assert spec.LABEL_SOURCE_COLUMN not in trial.leak_upstreams
+        # Both plant the shape (graph_state True) and expect no finding: the
+        # interesting case is that a live scenario does not fire, not its absence.
+        assert trial.graph_state is True
+        assert trial.expected is False
 
 
 def test_a_trial_config_carries_only_that_trials_overrides():
