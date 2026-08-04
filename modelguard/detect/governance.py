@@ -126,7 +126,13 @@ def sensitive_source_findings(
         sensitive_urn, marker_urn, column_path = walk.hit
         findings.append(
             _sensitive_finding(
-                model, feature_urn, source_column, sensitive_urn, marker_urn, column_path
+                model,
+                feature_urn,
+                source_column,
+                sensitive_urn,
+                marker_urn,
+                column_path,
+                walk.others,
             )
         )
 
@@ -140,6 +146,7 @@ def _sensitive_finding(
     sensitive_column_urn: str,
     marker_urn: str,
     column_path: tuple[str, ...],
+    other_paths: tuple[tuple[str, ...], ...] = (),
 ) -> SensitiveSourceFinding:
     """Assemble one finding from the columns the traversal actually proved."""
     source_field = SchemaFieldUrn.from_string(source_column_urn)
@@ -157,6 +164,7 @@ def _sensitive_finding(
             sensitive_dataset_name=DatasetUrn.from_string(sensitive_field.parent).name,
             marker_urn=marker_urn,
             column_path=column_path,
+            other_paths=other_paths,
         ),
     )
 

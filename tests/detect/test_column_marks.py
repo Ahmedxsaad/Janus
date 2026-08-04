@@ -11,9 +11,10 @@ from dataclasses import replace
 from datahub.metadata.schema_classes import GlossaryTermAssociationClass, GlossaryTermsClass
 
 from modelguard.config import ScanConfig
-from modelguard.detect.column_marks import ColumnMarkIndex, marked_ancestor
+from modelguard.detect.column_marks import ColumnMarkIndex, marked_ancestor, split_paths
 from tests.conftest import (
     FEATURE_TABLE_URN,
+    INCOME_COLUMN_URN,
     LABEL_COLUMN_URN,
     LABEL_TERM_URN,
     LEAK_COLUMN_URN,
@@ -112,3 +113,114 @@ def test_a_column_that_is_itself_marked_is_never_reported_truncated():
 
     assert walk.hit is not None
     assert walk.truncated is False
+
+
+BACKUP_COLUMN_URN = f"urn:li:schemaField:({TABLE_URN},default_status_backup)"
+
+
+def _two_flattened_paths() -> FakeClient:
+    """One upstream table reached by two derivations, as the SDK returns them.
+
+    ``LineageResult.paths`` is a single flat list: the SDK appends every step of
+    every path GMS answered with into one list, so two derivations through the
+    same upstream table arrive concatenated. Each one starts at the column that
+    was queried, which is the only boundary there is.
+    """
+    return FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=1,
+                    direction="upstream",
+                    paths=column_path(
+                        LEAK_COLUMN_URN,
+                        LABEL_COLUMN_URN,
+                        LEAK_COLUMN_URN,
+                        BACKUP_COLUMN_URN,
+                    ),
+                )
+            ]
+        }
+    )
+
+
+def test_the_shortest_chain_is_still_the_one_quoted_as_proof():
+    """T-03's precondition: widening the result must move no existing output.
+
+    The walk now carries every match, and `hit` still has to answer with the
+    shortest, ties broken deterministically, because that chain is what an
+    incident quotes and a proof that moves between runs is not a proof.
+    """
+    graph = FakeGraph(
+        aspects={
+            (LABEL_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN),
+            (BACKUP_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN),
+        }
+    )
+    conn = make_connection(
+        graph,
+        FakeClient(
+            lineage_by_column={
+                "prior_default_flag": [
+                    lineage_result(
+                        TABLE_URN,
+                        hops=1,
+                        direction="upstream",
+                        paths=column_path(
+                            LEAK_COLUMN_URN,
+                            INCOME_COLUMN_URN,
+                            BACKUP_COLUMN_URN,
+                            LEAK_COLUMN_URN,
+                            LABEL_COLUMN_URN,
+                        ),
+                    )
+                ]
+            }
+        ),
+    )
+
+    walk = marked_ancestor(conn, LEAK_COLUMN_URN, _index(graph), CONFIG)
+
+    assert walk.hit is not None
+    assert walk.hit[2] == ("prior_default_flag", "default_status")
+    assert len(walk.matches) == 2
+
+
+def test_every_derivation_is_carried_not_only_the_winner():
+    """The counterfactual needs them: cutting one path of two clears nothing."""
+    graph = FakeGraph(
+        aspects={
+            (LABEL_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN),
+            (BACKUP_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN),
+        }
+    )
+    conn = make_connection(graph, _two_flattened_paths())
+
+    walk = marked_ancestor(conn, LEAK_COLUMN_URN, _index(graph), CONFIG)
+
+    assert walk.others == (("prior_default_flag", "default_status_backup"),)
+
+
+def test_a_chain_never_carries_the_tail_of_the_derivation_before_it():
+    """The flattened list is cut back into paths before any of it is quoted.
+
+    Truncating by index into the concatenation would quote
+    "prior_default_flag <- default_status <- prior_default_flag <-
+    default_status_backup" as one derivation, which is two derivations wearing
+    the shape of one and is not what the graph says.
+    """
+    graph = FakeGraph(aspects={(BACKUP_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN)})
+    conn = make_connection(graph, _two_flattened_paths())
+
+    walk = marked_ancestor(conn, LEAK_COLUMN_URN, _index(graph), CONFIG)
+
+    assert walk.hit is not None
+    assert walk.hit[2] == ("prior_default_flag", "default_status_backup")
+
+
+def test_a_path_list_that_does_not_start_at_the_queried_column_is_left_whole():
+    """A fixture, or a GMS that omits the start entity, must not lose its path."""
+    steps = column_path(LABEL_COLUMN_URN, INCOME_COLUMN_URN)
+
+    assert split_paths(steps, LEAK_COLUMN_URN) == [steps]
