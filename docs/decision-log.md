@@ -16,6 +16,33 @@ Entry template:
 
 ---
 
+## D-125: A test read a file mutmut does not copy, and the score went to zero (2026-08-05)
+- Decided by: Ahmed Saad.
+- Decision: `README.md` joins `[tool.mutmut] also_copy`, and `tests/test_docs.py`
+  reads its documents inside the tests rather than at import.
+- Why: D-123's new test read `README.md` at module scope. mutmut runs the suite
+  from a copied tree, `also_copy` lists what gets copied beyond `modelguard/`
+  and `tests/`, and `README.md` was not on it. So the read raised
+  `FileNotFoundError` during *collection*, which is not one failing test but no
+  tests at all: mutmut reported all 1792 mutants as "no tests" and rendered a
+  score of **0.00** into RESULTS.md. `site/` was already on the list, which is
+  why `test_site.py` had done the same thing for months without trouble.
+- Why the D-124 fix looked complete and was not: D-124 was real and is fixed
+  (the whitespace diff is gone from this run). The failure was verified by
+  replaying `_splice` against the committed file, which is the right check for
+  the bug it addressed and says nothing about whether `mutmut run` still works.
+  The job runs mutmut and then diffs; I checked the second half locally and not
+  the first, so a test added in the same pull request took the score to zero
+  under a job that had just been made to compare scores properly. The green
+  suite was not wrong, it was answering a different question.
+- Result: both halves changed, because they fail differently. `also_copy` gains
+  the file, which is the fix; reading inside the test is the containment, so the
+  next omission fails two docs tests instead of collapsing the entire run into
+  an unexplained 0.00. Verified this time by running `mutmut run` locally rather
+  than reasoning about it.
+
+---
+
 ## D-124: The mutation section grew a newline per run (2026-08-05)
 - Decided by: Ahmed Saad.
 - Decision: `_splice` normalizes both sides of the section instead of reusing

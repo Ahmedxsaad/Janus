@@ -214,11 +214,14 @@ addopts = "-m 'not integration'"
 # copy; only_mutate is what keeps cli.py or writeback/ from padding the
 # survivor count. also_copy adds what the full suite reads off disk beyond
 # modelguard and tests/ (both already copied by default): the adapter fixture
-# repo, the sprite art and its two other readers, and benchmarks/, which
-# tests/benchmarks/ imports directly.
+# repo, the sprite art and its two other readers, benchmarks/, which
+# tests/benchmarks/ imports directly, and README.md, which tests/test_docs.py
+# reads. A file the suite opens and this list omits is not a failing test but a
+# collection error inside the copied tree, which mutmut reports as every mutant
+# having no tests: a 0.00 score with nothing to say what went wrong (D-125).
 source_paths = ["modelguard"]
 only_mutate = ["modelguard/detect/*"]
-also_copy = ["examples/", "argos/", "site/", "benchmarks/"]
+also_copy = ["examples/", "argos/", "site/", "benchmarks/", "README.md"]
 # type_check_command (mutmut's mypy-assisted filter, verified against 3.7.0):
 # tried and reverted. It crashes on this codebase --
 # "Could not find mutant for type error ...trust_score.py:7345 (Unused

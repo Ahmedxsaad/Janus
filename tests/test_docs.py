@@ -19,8 +19,6 @@ from pathlib import Path
 from modelguard.cli import app
 
 ROOT = Path(__file__).resolve().parent.parent
-README = (ROOT / "README.md").read_text()
-PAGE = (ROOT / "site" / "index.html").read_text()
 
 
 def _command_names() -> list[str]:
@@ -34,13 +32,25 @@ def _command_names() -> list[str]:
     return sorted(names)
 
 
+def _missing_from(document: Path) -> list[str]:
+    """Commands `document` never shows a reader.
+
+    Read inside the test rather than at import: mutmut runs this suite from a
+    copied tree (`[tool.mutmut] also_copy`), and a module-level read of a file
+    that was not copied is a collection error, which takes the whole suite down
+    with it instead of these two tests (D-125).
+    """
+    text = document.read_text()
+    return [name for name in _command_names() if f"modelguard {name}" not in text]
+
+
 def test_the_readme_shows_every_command() -> None:
     """A command absent from the README is one nobody discovers."""
-    missing = [name for name in _command_names() if f"modelguard {name}" not in README]
+    missing = _missing_from(ROOT / "README.md")
     assert not missing, f"README.md never shows: {missing}"
 
 
 def test_the_documentation_page_shows_every_command() -> None:
     """The page claims to cover every command; hold it to that."""
-    missing = [name for name in _command_names() if f"modelguard {name}" not in PAGE]
+    missing = _missing_from(ROOT / "site" / "index.html")
     assert not missing, f"site/index.html never shows: {missing}"
