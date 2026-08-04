@@ -16,6 +16,66 @@ Entry template:
 
 ---
 
+## D-110: Every finding carries a counterfactual, and the benchmark applies it (2026-08-04)
+- Decided by: Ghassen Naouar (asked for phase 1 of the depth plan), implemented by
+  Claude. Closes T-03.
+- Decision: `Finding.counterfactual` is abstract on the ABC, so every detector says
+  what would have to change for its finding not to exist. A `Counterfactual` holds
+  `Remedy` objects, each sufficient **on its own**, each carrying a stable
+  `RemedyKind`, a sentence, and every target it touches. Rendered in the incident
+  body above the assessment, in the impact report beside the proof, in the terminal,
+  and in the JSON. Five things make it more than a template:
+  1. **The walk carries every derivation, not only the winner.** `WalkResult.matches`
+     is the field and `hit` is now a property returning the shortest, so the quoted
+     proof is byte-identical to before (asserted in a test written first). The rest
+     exist because a finding reached by two paths is not cleared by cutting one, and
+     a remedy that named only the quoted path would confidently prescribe half a fix.
+  2. **`LineageResult.paths` is not one path.** The SDK's `_create_lineage_result`
+     appends every step of every path GMS returned into a single flat list
+     `[verified]`, so two derivations through one upstream table arrive concatenated.
+     `split_paths` cuts them back apart on the queried column, which each path starts
+     with. This also fixes a latent defect: a chain truncated by index into the
+     concatenation carried the tail of the previous derivation into the quoted proof.
+  3. **The remedies are verified by performing them.** `benchmarks/counterfactuals.py`
+     plants each family's failure, reads the counterfactual off the finding, applies
+     the remedies it has an applier for, and asks the same detector again. Remedies
+     no metadata write can perform (retrain, migrate onto a successor, drop a feature
+     from somebody's model) are listed by name as not mechanically applicable rather
+     than counted as passes.
+  4. **The multi-path case is planted, not argued.** `plant_second_leak_path` adds a
+     backfilled copy of the label column to the raw table, declares it a label, and
+     wires the leaking feature to derive from both. Two new trials, plus a benchmark
+     measurement: cutting the derivation the incident quoted must **not** clear the
+     finding, and cutting both must.
+  5. **The classification remedy is a correction, never a dismissal.** "Remove the
+     PII tag to make this go away" is the one sentence this feature could ship that
+     would be worse than shipping nothing, so both governance remedies name the
+     owner of the classification and say the finding rests on their declaration.
+- Options considered:
+  - Where the counterfactual is computed: (a) on the finding, from data the detector
+    already collected, (b) a new module deriving it from the graph. (a) chosen: the
+    findings already compute `title` and `evidence` the same way, it keeps detection
+    a single pass, and it makes the counterfactual available to `gate`, which is
+    read-only and is exactly where a remedy is most useful.
+  - The multi-path graph: (a) a second declared label column in the existing raw
+    table, (b) a third table. (a) chosen: it is one schema write, it is what actually
+    happens in a warehouse, and it produces two genuinely distinct chains once
+    `split_paths` exists. (b) would have measured the same property for the cost of
+    seeding another table.
+  - Rendering: a fenced block of alternatives rather than a numbered list, because a
+    numbered list of sufficient-on-their-own fixes reads as steps to perform in order.
+- Why: 09-depth-axes.md section 4.1. A finding says what is wrong and leaves the
+  reader to work out what to do; the graph already holds enough to say it. The part
+  that makes it real is the verification: a suggested fix nobody performed is not a
+  measurement, and this is a project whose whole argument is that it measures itself.
+- Result: 649 offline tests green, mutation-checked per tests/CLAUDE.md rule 6 (the
+  shortest-chain tie-break, the path splitting, the both-edges remedy, the half-fix
+  scenario state, the undeclare-before-drop ordering, and both render surfaces each
+  confirmed red before green). Not yet run: the live benchmark and the two
+  integration tests in `tests/integration/test_counterfactual.py`, which need a
+  Quickstart; `benchmarks/RESULTS.md` therefore still carries the numbers from
+  D-109's run and gains its counterfactual section on the next live regeneration.
+
 ## D-109: The NIST AI RMF crosswalk is generated, and says it is not conformity (2026-08-04)
 - Decided by: Ghassen Naouar (asked for phase 0 of the depth plan), implemented by
   Claude. Closes T-02.

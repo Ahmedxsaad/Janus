@@ -149,6 +149,13 @@ The scan names the live model at risk, then writes the incident, the
 `model-at-risk` tag, the risk properties, the guarding assertion, and the impact
 report into DataHub. Run it twice: nothing duplicates.
 
+Every finding also carries its counterfactual: the changes that would make it
+stop existing, each one sufficient on its own. Cut the derivation, drop the
+feature, or withdraw the declaration the finding rests on. Where a feature
+reaches a label by more than one path it says so, and names every edge, because
+cutting one of two fixes nothing. These are not advice: the benchmark applies
+them to the graph and checks the finding clears.
+
 One caveat if you paste these as a block rather than typing them: DataHub indexes
 a freshness change asynchronously, about three seconds locally, so a scan run in
 that window still reports the state from before. The scenario command says so when
@@ -385,7 +392,8 @@ to; outside Actions the variable is unset and nothing is written.
 
 Routing findings somewhere ModelGuard does not know about? Both `scan` and `gate`
 take `--format json` and put the whole report (evidence, models at risk, trust
-deductions, the gate's violations) on stdout as one parseable document, with
+deductions, each finding's counterfactual, the gate's violations) on stdout as
+one parseable document, with
 progress lines moved to stderr so the stream stays clean.
 
 ## Call it from your training script
