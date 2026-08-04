@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ModelGuard - the missing CI for your ML supply chain</title>
+<meta name="description" content="ModelGuard reads DataHub column-level and ML lineage to catch target leakage, stale upstreams and training/serving drift, and writes incidents, trust scores and assertions back into the graph.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="brand">Model<em>Guard</em></span>
+  <span class="for">for DataHub</span>
+  <nav>
+    <a href="#what">How it works</a>
+    <a href="#measured">Benchmark</a>
+    <a href="#quickstart">Quickstart</a>
+    <a href="#detectors">Checks</a>
+    <a href="#argos">Argos</a>
+    <a href="https://github.com/Ahmedxsaad/DataHub">GitHub</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <span class="eyebrow">Data-to-model reliability for DataHub</span>
+  <h1>The missing CI for your ML supply chain</h1>
+  <p class="tagline">
+    A model breaks because a column three joins upstream changed, and nothing
+    connects the two. ModelGuard writes that connection into DataHub, then reads
+    across it: target leakage, stale upstreams, training-serving drift, and the
+    two governance checks nothing else joins back to a model.
+  </p>
+  <div class="cta">
+    <a class="go" href="#quickstart">Run the quickstart</a>
+    <a class="quiet" href="https://github.com/Ahmedxsaad/DataHub">Source on GitHub</a>
+    <a class="quiet" href="#measured">Read the benchmark</a>
+  </div>
+</div>
+
+<div class="figures">
+  <div class="figure">
+    <b>1.00</b>
+    <span>precision naming which feature leaks</span>
+  </div>
+  <div class="figure">
+    <b>Five</b>
+    <span>checks, each with the column chain as proof</span>
+  </div>
+  <div class="figure">
+    <b>Zero</b>
+    <span>duplicate writes after a rerun, measured</span>
+  </div>
+  <div class="figure">
+    <b>Zero</b>
+    <span>language model calls in any verdict</span>
+  </div>
+</div>
+
+<!-- Not a mockup: the shape of a real scan against the seeded graph, which is
+     the run the quickstart below produces. -->
+<div class="term">
+  <div class="term-inner">
+    <div class="term-bar">modelguard scan --table loans_raw</div>
+<pre><code><span class="c-dim">$</span> <span class="c-cmd">modelguard scan --table loans_raw</span>
+
+<span class="c-bad">Stale upstream data in ecommerce.public.loans_raw</span>  <span class="c-dim">(severity: critical)</span>
+  stale for <span class="c-warn">30.0h</span> against a 6.0h SLA
+  blast radius: 1 dataset, 2 features, 1 model
+    <span class="c-dim">-</span> Credit Risk v3 <span class="c-bad">(critical)</span> <span class="c-warn">LIVE</span>, 3 hops
+
+<span class="c-key">Trust scores</span>
+  Credit Risk v3  <span class="c-warn">35/100</span> <span class="c-dim">(at-risk)</span>
+  <span class="c-dim">freshness_lag, missing_owner, upstream_failure</span>
+
+<span class="c-key">Wrote back</span>
+  <span class="c-w">incident</span>          urn:li:incident:f49230b1
+  <span class="c-w">assertion</span>         <span class="c-bad">FAILURE</span>, on the source table
+  <span class="c-w">tagged models</span>     1 of 1 at risk
+  <span class="c-w">impact report</span>     linked from the model
+
+<span class="c-dim">run id: scan-cb2ef85ba9a8</span>
+</code></pre>
+  </div>
+</div>
+
+<canvas class="beat hero-beat" data-pose="idle" data-scale="4" data-text-scale="3"
+        data-say="I AM ARGOS. I WATCH THE COLUMNS BETWEEN YOUR WAREHOUSE AND YOUR MODELS."></canvas>
+
+<div class="page">
+
+<aside class="toc">
+  <div class="group">Start</div>
+  <a href="#what">How it works</a>
+  <a href="#measured">The benchmark</a>
+  <a href="#install">Install</a>
+  <a href="#quickstart">Quickstart</a>
+  <div class="group">Use it</div>
+  <a href="#inventory">inventory</a>
+  <a href="#link">link</a>
+  <a href="#scan">scan</a>
+  <a href="#detectors">The five checks</a>
+  <a href="#gate">gate</a>
+  <a href="#watch">watch</a>
+  <div class="group">Interfaces</div>
+  <a href="#python">Python API</a>
+  <a href="#json">JSON output</a>
+  <a href="#mcp">MCP server</a>
+  <a href="#argos">Argos, the pet</a>
+  <a href="#docker">Docker</a>
+  <div class="group">Reference</div>
+  <a href="#config">Configuration</a>
+  <a href="#security">Security model</a>
+  <a href="#links">Everything else</a>
+</aside>
+
+<main>
+
+<section id="what">
+  <h2>What it does</h2>
+  <p>
+    DataHub holds two graphs that no other catalog holds together: column-level
+    lineage across the warehouse, and ML metadata for the models. Nothing joins
+    them, so a model is not connected to a single column and a data failure
+    cannot be traced to the model it breaks.
+  </p>
+  <p>
+    <strong>ModelGuard writes that join</strong> (<code>modelguard link</code>)
+    and then reads across it. Every check below exists because of that one edge:
+    a feature knows the exact source column it came from, so a stale table, a
+    leaking label or a classified column can be walked forward into the live
+    model that consumes it, with the column chain as evidence.
+  </p>
+
+  <!-- The one picture the prose above cannot replace: two graphs, the gap
+       between them, and the edge ModelGuard adds. Inline SVG rather than an
+       image, so it inherits the palette and stays sharp at any width. -->
+  <div class="joinviz">
+    <svg viewBox="0 0 720 208" role="img"
+         aria-label="Column-level lineage runs from a raw table through a staging column into a feature table. DataHub's ML graph holds the model and its training run. Nothing joins the two until modelguard link writes the edge from feature to source column.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#16181d"></path>
+        </marker>
+        <marker id="ar-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#1b4de4"></path>
+        </marker>
+      </defs>
+
+      <!-- the two worlds -->
+      <rect x="6" y="6" width="392" height="196" rx="12" fill="#f7f7f5" stroke="#e4e4e1"></rect>
+      <text x="22" y="28" fill="#8a9099" font-family="ui-monospace,monospace" font-size="11" letter-spacing="1.4">WAREHOUSE GRAPH</text>
+
+      <rect x="420" y="6" width="294" height="196" rx="12" fill="#f7f7f5" stroke="#e4e4e1"></rect>
+      <text x="436" y="28" fill="#8a9099" font-family="ui-monospace,monospace" font-size="11" letter-spacing="1.4">ML GRAPH</text>
+
+      <!-- warehouse chain -->
+      <rect x="26" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
+      <text x="85" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">loans_raw</text>
+      <text x="85" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">raw table</text>
+
+      <rect x="166" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
+      <text x="225" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">stg_customers</text>
+      <text x="225" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">staging</text>
+
+      <rect x="18" y="130" width="274" height="46" rx="8" fill="#ffffff" stroke="#16181d"></rect>
+      <text x="155" y="150" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="10">customer_features.contract_renewed_flag</text>
+      <text x="155" y="166" text-anchor="middle" fill="#2f5d7c" font-family="ui-monospace,monospace" font-size="10">a column, not a table</text>
+
+      <path d="M144,75 L162,75" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
+      <path d="M225,98 L225,118 L160,118 L160,126" fill="none" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
+
+      <!-- ml side -->
+      <rect x="440" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
+      <text x="499" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">training run</text>
+      <text x="499" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">mlflow</text>
+
+      <rect x="578" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
+      <text x="637" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">credit_risk_v3</text>
+      <text x="637" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">live model</text>
+
+      <rect x="508" y="130" width="118" height="46" rx="8" fill="#ffffff" stroke="#16181d"></rect>
+      <text x="567" y="150" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">mlFeature</text>
+      <text x="567" y="166" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">what it trained on</text>
+
+      <path d="M558,75 L574,75" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
+      <path d="M567,126 L567,112 L637,112 L637,102" fill="none" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
+
+      <!-- the edge nothing else writes -->
+      <path d="M296,153 L504,153" stroke="#1b4de4" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ar-warn)"></path>
+      <text x="395" y="144" text-anchor="middle" fill="#1b4de4" font-family="ui-monospace,monospace" font-size="11">modelguard link</text>
+      <text x="395" y="192" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">the edge no ingestion source writes</text>
+    </svg>
+    <div class="legend">
+      <span><i></i>Lineage DataHub already holds</span>
+      <span><i class="dashed"></i>The join ModelGuard adds</span>
+    </div>
+  </div>
+
+  <p>
+    Read right to left, that edge is what makes a verdict possible: from the
+    live model back to the exact column, so a finding arrives as
+    <code>contract_renewed_flag &lt;- churn</code> rather than "something
+    upstream of this model looks wrong".
+  </p>
+  <p>
+    Detection is deterministic Python. A language model is used only to word an
+    incident description and a report's assessment, never to decide whether a
+    finding exists. Without an LLM key, template prose is written instead and
+    every verdict is identical.
+  </p>
+</section>
+
+<canvas class="beat" data-pose="sniff"
+        data-say="EVERY FINDING I REPORT COMES WITH THE COLUMN CHAIN THAT PROVES IT."></canvas>
+
+<section id="measured">
+  <h2>Measured, not claimed</h2>
+  <p>
+    The same graph, the same ground truth, three ways of reading it, scored per
+    <strong>feature</strong>: every approach can tell that a leaking model
+    leaks, and the question that separates them is <em>which</em> of its
+    features leaks, which is what somebody has to go and fix.
+  </p>
+  <div class="bench">
+    <div class="bench-row">
+      <span class="who">ModelGuard<small>column-level lineage</small></span>
+      <span class="bench-bar"><i style="width:100%"></i></span>
+      <span class="val">1.00</span>
+    </div>
+    <div class="bench-row weak">
+      <span class="who">Table-level lineage<small>the usual catalog</small></span>
+      <span class="bench-bar"><i style="width:25%"></i></span>
+      <span class="val">0.25</span>
+    </div>
+    <div class="bench-row none">
+      <span class="who">Table quality checks<small>no lineage at all</small></span>
+      <span class="bench-bar"><i style="width:0%"></i></span>
+      <span class="val">0.00</span>
+    </div>
+  </div>
+  <p class="caption">
+    Precision at naming which feature leaks. Recall is 1.00, 1.00 and 0.00
+    respectively: the middle row does catch the leak, it just cannot say where.
+  </p>
+  <table>
+    <tr><th>Approach</th><th>Precision</th><th>Recall</th><th>Still alerting after the fix</th></tr>
+    <tr><td>ModelGuard (column-level lineage)</td><td>1.00</td><td>1.00</td><td class="c-ok">0 features</td></tr>
+    <tr><td>Table-level lineage</td><td>0.25</td><td>1.00</td><td class="c-bad">2 features</td></tr>
+    <tr><td>Table quality checks, no lineage</td><td>-</td><td>0.00</td><td>0 features</td></tr>
+  </table>
+  <p>
+    Table-level lineage does catch the leak. It just cannot say which of the two
+    features carries it, because both descend from the same labelled table. And
+    having never seen the column edge, it cannot see the column edge being
+    removed either, so it keeps alerting on a graph somebody has already fixed.
+    That last column is what gets a reliability tool switched off.
+  </p>
+  <p>
+    Method, ground truth and what is still not measured:
+    <a href="https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md">benchmarks/RESULTS.md</a>.
+  </p>
+</section>
+
+<section id="install">
+  <h2>Install</h2>
+  <p>
+    Linux, Python 3.11 exactly. Nothing else is required for a local run: the
+    DataHub Quickstart ships with metadata service authentication disabled, and
+    no LLM key is needed.
+  </p>
+<pre><code>pip install modelguard-datahub          # the CLI and the Python API
+
+pip install "modelguard-datahub[agent]" # scan --review, the approval agent
+pip install "modelguard-datahub[mcp]"   # the modelguard-mcp server
+pip install "modelguard-datahub[pet]"   # Argos, the desktop window
+pip install "modelguard-datahub[openai]"    # or [anthropic], or [google]
+</code></pre>
+  <div class="note">
+    <strong>On the distribution name.</strong> The exact name
+    <code>modelguard</code> was already taken on PyPI by an unrelated package,
+    so the distribution is <code>modelguard-datahub</code>. The commands you run
+    are still <code>modelguard</code>, <code>modelguard-seed</code>,
+    <code>modelguard-scenario</code> and <code>modelguard-mcp</code>.
+  </div>
+  <p>Developing on ModelGuard itself, or before the first release is cut:</p>
+<pre><code>git clone https://github.com/Ahmedxsaad/DataHub
+cd DataHub
+pip install -e ".[dev]"
+cp .env.example .env     # DATAHUB_GMS_URL=http://localhost:8080
+</code></pre>
+</section>
+
+<canvas class="beat" data-pose="search" data-from="right"
+        data-say="INSTALLED? GOOD. NOW LET US SEE WHAT YOUR GRAPH ALREADY KNOWS."></canvas>
+
+<section id="quickstart">
+  <h2>Quickstart: watch a failure fire and clear</h2>
+  <p>
+    This builds the ML supply chain the DataHub datapacks lack, plants one
+    silent failure, and detects it end to end. About two CPUs and 8 GB free.
+  </p>
+<pre><code>datahub docker quickstart            # UI at http://localhost:9002 (datahub/datahub)
+
+modelguard-seed                      # the ML supply chain: tables, columns, model, lineage
+modelguard-scenario --lag-hours 30   # a source table silently stops refreshing
+modelguard scan --table loans_raw    # detect, explain, write back
+</code></pre>
+  <p>
+    The scan names the live model at risk, then writes the incident, the
+    <code>model-at-risk</code> tag, the risk properties, the guarding assertion
+    and the impact report into DataHub. Run it twice: nothing duplicates.
+  </p>
+  <p>Then recover and rescan:</p>
+<pre><code>modelguard scan --table loans_raw --dry-run   # detect and explain, write nothing
+modelguard-scenario --revert                  # the table refreshes
+modelguard scan --table loans_raw             # no finding, no writes
+</code></pre>
+  <div class="note">
+    <strong>One caveat if you paste these as a block.</strong> DataHub indexes a
+    freshness change asynchronously, about three seconds locally, so a scan run
+    inside that window still reports the state from before. The scenario command
+    says so when it returns. Give it a moment, or rerun the scan.
+  </div>
+</section>
+
+<section id="inventory">
+  <h2>inventory: what can already be checked</h2>
+  <p>
+    Your DataHub is not the demo graph, so start by asking what ModelGuard can
+    see. Expect most models to come back "not checked", and that is the honest
+    answer rather than a failure: out of the box a model is not connected to a
+    single column, so a detector that walks from a feature to its source column
+    has nowhere to start.
+  </p>
+<pre><code>modelguard inventory        # every model, and what can and cannot be checked
+</code></pre>
+</section>
+
+<canvas class="beat" data-pose="tilt"
+        data-say="MOST MODELS COME BACK NOT CHECKED. I WILL NOT CALL A THING HEALTHY THAT I COULD NOT MEASURE."></canvas>
+
+<section id="link">
+  <h2>link: join the model to its columns</h2>
+  <p>
+    <code>modelguard link</code> declares a model's features (one per column,
+    each carrying the exact source column it came from), marks the label column
+    with the glossary term the leakage detector reads, and captures the input
+    schema as the baseline drift is measured against.
+  </p>
+
+  <h3>Let it work the arguments out first</h3>
+<pre><code>modelguard link --model churn_model --infer
+</code></pre>
+  <p>
+    It tries four routes in descending order of confidence and tells you which
+    one answered: the inputs the training run recorded
+    (<code>dataProcessInstanceInput</code>), a run parameter naming a table
+    (where DataHub's mlflow source puts MLflow params), a dataset the catalog
+    already declares upstream of the model, and failing all of those, a
+    shortlist of nearby tables for you to pick from.
+  </p>
+<pre><code>Inferred from the graph:
+  feature table: the only input recorded on churn_model's training run(s), from dataProcessInstanceInput
+  label column: churned matches a known label name (MODELGUARD_LABEL_COLUMN_NAMES). This one is a guess: check it
+  excluded columns: customer_id, from the schema's own key declarations (primaryKeys, isPartOfKey, isPartitioningKey) and the label itself
+
+Proposed:
+modelguard link \
+  --model churn_model \
+  --features analytics.customer_features \
+  --label-column churned \
+  --exclude customer_id
+
+Declare this? [Y/n]
+</code></pre>
+  <p>
+    There is no LLM in that, and nothing is written until you answer. Where
+    nothing in the graph names a label at all it refuses to invent one and asks
+    for <code>--label-column</code>, because a wrong label makes every leakage
+    verdict wrong in both directions. Exclusions come only from the warehouse's
+    own key declarations, never from column names that look like identifiers:
+    <code>customer_id</code> is usually a join key and <code>score_id</code> is
+    usually a feature, and no rule over names tells them apart.
+  </p>
+
+  <h3>Or type it</h3>
+<pre><code>modelguard link \
+  --model churn_model \
+  --features analytics.customer_features \
+  --label-table analytics.customer_labels \
+  --label-column churned \
+  --exclude customer_id
+</code></pre>
+
+  <h3>Keep the link alive</h3>
+  <p>
+    DataHub's mlflow source upserts the whole <code>mlModelProperties</code>
+    aspect and drops the features. The arguments are recorded on the model in an
+    aspect ingestion does not touch, so the replay needs no arguments at all and
+    one command covers every model at once. A model nobody has linked is skipped
+    rather than guessed at, so <code>--all</code> is safe on a schedule.
+  </p>
+<pre><code>datahub ingest -c mlflow.yml     # your existing pipeline, unchanged
+modelguard link --all            # put back what it dropped, for every linked model
+modelguard scan --all-models     # audit the whole catalog
+</code></pre>
+  <p>
+    One line in the training script makes the next ingest self-describing, which
+    is what lets <code>--infer</code> read the feature table rather than guess:
+  </p>
+<pre><code class="language-python">mlflow.log_param("modelguard_features", "analytics.customer_features")
+</code></pre>
+</section>
+
+<canvas class="beat" data-pose="scribble" data-from="right"
+        data-say="LINKED. NOW EVERY FEATURE KNOWS THE EXACT COLUMN IT CAME FROM."></canvas>
+
+<section id="scan">
+  <h2>scan: detect, explain, write back</h2>
+<pre><code>modelguard scan --table loans_raw       # start from a table, walk into the models
+modelguard scan --model churn_model     # start from a model, walk back to the columns
+modelguard scan --all-models            # the whole catalog
+modelguard scan --model churn_model --dry-run   # detect and explain, write nothing
+modelguard scan --model churn_model --review    # pause, show, write only what you approve
+</code></pre>
+  <p>What a scan writes back, all of it idempotent and keyed so reruns never duplicate:</p>
+  <table>
+    <tr><th>Write</th><th>Where it lands</th></tr>
+    <tr><td>Incident</td><td>on the offending dataset, with the column chain as evidence</td></tr>
+    <tr><td><code>model-at-risk</code> tag</td><td>on every downstream model in the blast radius</td></tr>
+    <tr><td><code>modelguard.trust_score</code>, <code>trust_band</code></td><td>structured properties on the model</td></tr>
+    <tr><td>Guarding assertion</td><td>on the source table, with its measured result</td></tr>
+    <tr><td>Model Impact Report</td><td>a document linked from the model</td></tr>
+  </table>
+</section>
+
+<section id="detectors">
+  <h2>The five checks, and what each one needs</h2>
+  <p>
+    A scan never reports something healthy that it could not measure. It names
+    the check, the missing metadata, and how to supply it.
+  </p>
+  <div class="checks">
+    <div class="check">
+      <h4>Freshness and blast radius</h4>
+      <div>
+        <p>A source table stopped refreshing, and live models are still scoring
+          on features derived from it.</p>
+        <div class="needs">Needs the <code>operation</code> aspect, written by dbt, Airflow or Spark.</div>
+      </div>
+    </div>
+    <div class="check">
+      <h4>Target leakage</h4>
+      <div>
+        <p>A feature descends from the label the model predicts, so its offline
+          score is inflated by construction.</p>
+        <div class="needs">Needs features with source columns, from <code>modelguard link</code>.</div>
+      </div>
+    </div>
+    <div class="check">
+      <h4>Schema drift</h4>
+      <div>
+        <p>The input schema moved since training: a column added, removed or
+          retyped under a model nobody retrained.</p>
+        <div class="needs">Needs a training-time snapshot, from <code>modelguard link</code>.</div>
+      </div>
+    </div>
+    <div class="check">
+      <h4>Sensitive source</h4>
+      <div>
+        <p>A feature derives from a column somebody classified PII, PHI or
+          restricted. Nothing is broken; what the model was allowed to see is.</p>
+        <div class="needs">Needs <code>MODELGUARD_SENSITIVE_TAG_URNS</code>, your own taxonomy.</div>
+      </div>
+    </div>
+    <div class="check">
+      <h4>Deprecated input</h4>
+      <div>
+        <p>A table's owners marked it deprecated. They have no way to know a
+          live model still depends on it.</p>
+        <div class="needs">Needs nothing: <code>deprecation</code> is DataHub's own aspect.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>The two that read the governance graph</h3>
+  <p>
+    The first three checks ask whether a model's data is <em>correct</em>. The
+    last two ask something the organization has already answered elsewhere in
+    DataHub, and that nothing today joins back to the model.
+  </p>
+  <p>
+    <strong>Sensitive source.</strong> Somebody classified a column as PII, PHI
+    or restricted. Three joins downstream, a feature derives from it and a live
+    model trains on that feature. Nothing is broken; what is wrong is what the
+    model was allowed to see. It is the leakage walk with a different mark, so
+    it produces the same auditable proof:
+  </p>
+  <blockquote>
+    <code>credit_risk_v3</code> feature <code>applicant_income</code> derives,
+    through <code>applicant_income &lt;- income</code>, from
+    <code>loans_raw.income</code>, classified <code>modelguard.sensitive</code>.
+  </blockquote>
+<pre><code>MODELGUARD_SENSITIVE_TAG_URNS=urn:li:tag:PII,urn:li:tag:Confidential
+MODELGUARD_SENSITIVE_TERM_URNS=urn:li:glossaryTerm:Classification.Restricted
+</code></pre>
+  <p>
+    There is deliberately no default. A guessed classification URN either
+    matches nothing or matches a term that means something else in your catalog,
+    and a false incident about a compliance exposure is the worst kind to be
+    wrong about. Leave both empty and every scan reports the check as
+    <strong>not evaluated</strong>, never as clean.
+  </p>
+  <p>
+    <strong>Deprecated input.</strong> A table's owners marked it deprecated,
+    with a note and sometimes a decommission date. They have no way to know a
+    model depends on it. This needs no configuration:
+    <code>deprecation</code> is DataHub's own aspect with one meaning
+    everywhere. It is never more than <code>medium</code> severity, because it
+    is a deadline rather than a defect.
+  </p>
+  <p>Both are reversible scenarios, so you can watch them fire and clear:</p>
+<pre><code>modelguard-scenario --scenario sensitive-source
+modelguard scan --model credit_risk_v3
+modelguard-scenario --scenario sensitive-source --revert
+</code></pre>
+</section>
+
+<canvas class="beat" data-pose="alert" data-collar="r"
+        data-say="FINDING! LOANS_RAW WENT STALE AND CREDIT_RISK_V3 STILL EATS IT. RED COLLAR MEANS LIVE."></canvas>
+
+<section id="gate">
+  <h2>gate: block a bad model before it merges</h2>
+  <p>
+    Everything above audits a graph that already holds the mistake.
+    <code>modelguard gate</code> is the preventive half, for a pull request. It
+    runs the same detectors, judges them against a policy, and answers in an
+    exit code.
+  </p>
+<pre><code>modelguard gate --model credit_risk_v3 --block-at-or-above high   # exit 1 if it leaks
+modelguard gate --model credit_risk_v3 --min-trust 80             # exit 1 if trust &lt; 80
+</code></pre>
+  <table>
+    <tr><th>Exit code</th><th>Meaning</th></tr>
+    <tr><td><code>0</code></td><td>shippable</td></tr>
+    <tr><td><code>1</code></td><td>the policy was violated</td></tr>
+    <tr><td><code>2</code></td><td>the gate could not reach a verdict (DataHub unreachable, bad config)</td></tr>
+  </table>
+  <p>
+    The third one is the point. A gate that reported "I could not connect" as a
+    policy violation would teach a team to wave through every red build, so a
+    setup failure never masquerades as a finding. The gate writes nothing by
+    default, because it runs on every push and one incident per run would fill
+    the graph with findings about branches that never merged.
+  </p>
+  <h3>In a workflow</h3>
+<pre><code class="language-yaml">- uses: Ahmedxsaad/DataHub@main
+  with:
+    model: credit_risk_v3
+    block-at-or-above: high
+    gms-url: ${{ secrets.DATAHUB_GMS_URL }}
+    gms-token: ${{ secrets.DATAHUB_GMS_TOKEN }}
+</code></pre>
+  <p>
+    The verdict lands on the run's own summary page, not just in the log:
+    findings, severities, trust scores and the checks that could not run, as a
+    table the reviewer sees without opening anything. That needs no input and no
+    token, because GitHub already gives every step a
+    <code>GITHUB_STEP_SUMMARY</code> file to append markdown to; outside Actions
+    the variable is unset and nothing is written.
+  </p>
+</section>
+
+<canvas class="beat" data-pose="sit" data-from="right"
+        data-say="A RED BUILD BEATS A RED DASHBOARD. CATCH IT BEFORE IT MERGES."></canvas>
+
+<section id="watch">
+  <h2>watch: keep looking</h2>
+  <p>
+    <code>watch</code> is the long-running entry point: it polls, scans on
+    change, and auto-approves its writes because it is unattended by definition.
+    It is what the
+    <a href="https://github.com/Ahmedxsaad/DataHub/tree/main/charts/modelguard-watch">modelguard-watch Helm chart</a>
+    runs, alongside an optional <code>link --all</code> CronJob for the models
+    that are not retrained nightly.
+  </p>
+<pre><code>modelguard watch --table loans_raw           # poll one table
+modelguard watch --table loans_raw --pet     # and put Argos on the desktop
+</code></pre>
+</section>
+
+<section id="python">
+  <h2>Call it from your training script</h2>
+  <p>
+    The command line is the main interface, but there is one place ModelGuard
+    belongs inside your code: the script that trains the model. That is the only
+    moment when the feature table, the label column and the training-time schema
+    are all known.
+  </p>
+<pre><code class="language-python">import mlflow
+
+from modelguard import link_model, scan_model
+
+FEATURE_TABLE = "analytics.customer_features"
+
+# Logged as a run parameter as well as declared: the parameter survives into
+# DataHub through the ordinary mlflow ingest, which is what lets `link --infer`
+# read the table next time instead of guessing at it.
+mlflow.log_param("modelguard_features", FEATURE_TABLE)
+
+link_model(
+    model="churn_model",
+    features=FEATURE_TABLE,
+    label_column="churned",
+    exclude=["customer_id"],
+)
+
+report = scan_model(model="churn_model", dry_run=True)
+if not report.clean:
+    raise SystemExit(f"{len(report.writes)} finding(s) before this model ships")
+</code></pre>
+  <p>
+    Declared here, the link is re-declared by the same run that produces the
+    model, so the next training run repairs whatever the last ingest dropped.
+  </p>
+  <p>
+    Two functions and their result types, and deliberately no more: those names
+    are the supported surface a script may pin to. They are thin wrappers over
+    exactly the functions <code>modelguard link</code> and
+    <code>modelguard scan</code> call, so a finding found here is found
+    identically at the command line. Both read <code>.env</code> the same way
+    the CLI does; pass <code>conn=</code> to reuse one connection across many
+    models. Everything else in the package is importable and documented, but its
+    shape is free to change.
+  </p>
+</section>
+
+<canvas class="beat" data-pose="wag"
+        data-say="TWO FUNCTIONS. THAT IS THE WHOLE SUPPORTED SURFACE. PIN TO THEM."></canvas>
+
+<section id="json">
+  <h2>JSON output</h2>
+  <p>
+    Routing findings somewhere ModelGuard does not know about? Both
+    <code>scan</code> and <code>gate</code> take <code>--format json</code> and
+    put the whole report (evidence, models at risk, trust deductions, the gate's
+    violations) on stdout as one parseable document, with progress lines moved
+    to stderr so the stream stays clean.
+  </p>
+<pre><code>modelguard scan --model credit_risk_v3 --format json | jq '.findings[].severity'
+</code></pre>
+</section>
+
+<section id="mcp">
+  <h2>Ask it, do not type it</h2>
+<pre><code>pip install "modelguard-datahub[mcp]"
+modelguard-mcp   # serves check_leakage, check_freshness, check_gate over stdio
+</code></pre>
+  <p>
+    Point an MCP client at the installed <code>modelguard-mcp</code> command and
+    ask "is credit_risk_v3 leaking?" in plain language. All three tools are
+    read-only, enforced at registration (<code>readOnlyHint: true</code>) and by
+    calling every scan in dry-run with no way to turn that off: the model on the
+    other end of an MCP client is not ModelGuard's own narrator, it is outside
+    this project's control entirely, so it gets to ask what is wrong and nothing
+    more.
+  </p>
+  <p>
+    It is meant to run <em>beside</em> DataHub's own
+    <a href="https://github.com/acryldata/mcp-server-datahub">mcp-server-datahub</a>,
+    not instead of it. That server answers what the catalog contains: search,
+    lineage, schemas, ownership, the open-ended questions where a model's job is
+    to explore. ModelGuard answers the three that have to be reproducible, with
+    the column chain as evidence and no LLM anywhere in the decision.
+  </p>
+</section>
+
+<canvas class="beat" data-pose="tilt" data-from="right"
+        data-say="ASK ME ANYTHING IN PLAIN LANGUAGE. I STILL WILL NOT WRITE A THING."></canvas>
+
+<section id="argos">
+  <h2>Argos, the pet on your desktop</h2>
+<pre><code>pip install "modelguard-datahub[pet]"      # macOS and Windows; Linux: the .deb or
+                                           # .AppImage on the GitHub release
+modelguard watch --table loans_raw --pet   # ModelGuard's own findings
+modelguard companion                       # everything wrong with the assets you own
+</code></pre>
+  <p>
+    Argos is a 32x32 pixel watchdog that sits on your desktop and shows what the
+    graph is doing. He patrols while a poll finds nothing, sniffs while a
+    lineage walk is in flight, barks with a red collar the moment a finding
+    lands, and turns into a translucent ghost when he cannot reach DataHub,
+    because a cheerful pet on a disconnected watch is the lie that gets ambient
+    status displays switched off. Nothing he does is on a timer: every state is
+    an event a detector actually produced.
+  </p>
+  <p>
+    Double-click a finding and he walks the blast radius across the screen, one
+    hop per graph hop, with the column name floating over each jump. That is the
+    column-level traversal the benchmark above measures, rendered as motion
+    instead of a paragraph.
+  </p>
+  <p>
+    <code>modelguard companion</code> is the half that is not about ModelGuard
+    at all: it runs no detector, and sweeps the assets one owner owns for open
+    incidents, failing assertion runs and deprecations. DataHub has no desktop
+    presence today, and that is the gap it fills.
+  </p>
+  <p>
+    With no window binary installed, both commands report one line per change in
+    the terminal instead, which is also what runs over SSH. Design and protocol:
+    <a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/08-watchdog-mascot.md">docs/plan/08-watchdog-mascot.md</a>.
+  </p>
+  <div class="note">
+    <strong>The dog on this page is the dog in the window.</strong> Every frame
+    here is read from <code>argos/ui/sprites/argos.txt</code>, the same file the
+    Tauri window, the app icon and the README animation read. A hand-made copy
+    of the art would go stale the first time somebody redrew a leg.
+  </div>
+</section>
+
+<canvas class="beat" data-pose="tug"
+        data-say="DOUBLE CLICK A FINDING AND I WALK THE BLAST RADIUS, ONE HOP PER GRAPH HOP."></canvas>
+
+<section id="docker">
+  <h2>Run it without a Python install</h2>
+<pre><code>datahub docker quickstart              # once: builds DataHub's own stack
+docker compose run --rm modelguard-seed
+docker compose run --rm modelguard scan --table loans_raw
+docker compose run --rm modelguard gate --model credit_risk_v3 --block-at-or-above high
+docker compose up modelguard-mcp       # long-running, stdio
+</code></pre>
+  <p>
+    The compose file adds ModelGuard to the Docker network
+    <code>datahub docker quickstart</code> already creates, rather than
+    reimplementing DataHub's own multi-container stack inside this repository.
+  </p>
+</section>
+
+<section id="config">
+  <h2>Configuration</h2>
+  <p>
+    Configuration enters the process in exactly one module,
+    <code>modelguard/env.py</code>, and comes from <code>.env</code>. Copy
+    <code>.env.example</code> and fill it in; the two files carry an identical
+    key set in the same order, so copying one produces a working run.
+  </p>
+<pre><code>DATAHUB_GMS_URL=http://localhost:8080
+DATAHUB_GMS_TOKEN=                      # not needed for a local Quickstart
+
+MODELGUARD_LLM_PROVIDER=                # anthropic, openai or google. Optional
+MODELGUARD_LLM_MODEL=
+MODELGUARD_LLM_API_KEY=
+
+MODELGUARD_SENSITIVE_TAG_URNS=          # your own classification taxonomy
+MODELGUARD_SENSITIVE_TERM_URNS=
+MODELGUARD_LABEL_TERM_URN=              # honor your existing label term
+</code></pre>
+  <p>Three rules govern that file, and they are worth knowing before you debug a run:</p>
+  <ul>
+    <li>
+      <strong>Anything that identifies a system, an account or a vendor has no
+      default and no fallback.</strong> Server URLs, tokens, API keys, provider
+      names, model ids. A fallback is a machine-specific value in tracked code:
+      it turns a missing <code>.env</code> into a silent connection to the wrong
+      place, or a silent call to the wrong vendor billed to whatever key is in
+      the ambient environment. Missing means missing, and it fails loudly,
+      naming the variable.
+    </li>
+    <li>
+      <strong>A group of related settings is all-or-nothing.</strong> Set every
+      one or none. A half-configured feature fails loudly, it never downgrades
+      in silence.
+    </li>
+    <li>
+      <strong>Algorithm parameters are not identity.</strong> Thresholds, hop
+      caps and score weights keep documented defaults in
+      <code>modelguard/config.py</code>, and you can override them.
+    </li>
+  </ul>
+  <p>
+    Already have a glossary term for labels? Point
+    <code>MODELGUARD_LABEL_TERM_URN</code> at it and the detector honors yours
+    instead of creating one.
+  </p>
+</section>
+
+<section id="security">
+  <h2>Security model</h2>
+  <ul>
+    <li>
+      <strong>The LLM never decides anything.</strong> Detection is
+      deterministic Python. Catalog text (descriptions, column names, glossary
+      definitions) is attacker-controllable, so it is wrapped as delimited
+      untrusted data and delimiter lookalikes are stripped before wrapping. Even
+      a successful injection cannot invent a finding: it is downstream of the
+      detectors.
+    </li>
+    <li>
+      <strong>Writes are fixed and parameterized.</strong> A closed set of
+      mutations with validated arguments. There is no code path that sends a
+      GraphQL string the caller supplied.
+    </li>
+    <li>
+      <strong>Writes are idempotent and reversible in place.</strong> Keyed on
+      <code>(resource_urn, incident_type, title)</code> with read-before-write,
+      stamped with a <code>modelguard.run_id</code> for provenance. The
+      benchmark reads the graph back after a rerun and measures the duplicates
+      created: 0.
+    </li>
+    <li>
+      <strong>Writes are gated on a human.</strong> <code>scan --review</code>
+      writes only what you approve. <code>gate</code> does not write unless you
+      pass <code>--write</code>. The MCP tools cannot write at all, on any flag.
+      <code>watch</code> auto-approves because it is unattended by definition.
+    </li>
+    <li>
+      <strong>The token stays a secret.</strong> It enters the process in one
+      module, lives only in a git-ignored <code>.env</code>, and is never
+      logged, echoed or put in an exception message. Errors name the
+      <em>variable</em>, never its value.
+    </li>
+    <li>
+      <strong>Least privilege, honestly.</strong> DataHub OSS personal access
+      tokens are not scoped per operation, so ModelGuard cannot claim a narrowed
+      token. What it can say is what it touches: incidents, tags, glossary
+      terms, structured properties, documents and assertion aspects. Give it a
+      token you are willing to rotate, and rotate it.
+    </li>
+  </ul>
+  <p>Each detector implements a published result rather than a heuristic somebody liked:</p>
+  <table>
+    <tr><th>What</th><th>Source</th></tr>
+    <tr><td>Target leakage as illegitimate information about the target, found by inspecting how a feature was constructed</td><td>Kaufman, Rosset and Perlich, <em>Leakage in Data Mining</em> (KDD 2011 / ACM TKDD 2012)</td></tr>
+    <tr><td>Undeclared consumers: a table acquiring model consumers its owners never agreed to serve</td><td>Sculley et al., <em>Hidden Technical Debt in Machine Learning Systems</em> (NeurIPS 2015)</td></tr>
+    <tr><td>A schema fixed at training time, against which serving data is continuously validated</td><td>Breck, Polyzotis, Roy, Whang and Zinkevich, <em>Data Validation for Machine Learning</em> (MLSys 2019)</td></tr>
+    <tr><td>The prompt-injection and sensitive-disclosure threat model</td><td>OWASP Top 10 for LLM Applications (2025), LLM01 and LLM06</td></tr>
+  </table>
+</section>
+
+<section id="links">
+  <h2>Everything else</h2>
+  <table>
+    <tr><th>Where</th><th>What it answers</th></tr>
+    <tr><td><a href="https://modelguard.ahmedxsaad.me">Live demo</a></td><td>A real DataHub instance with the failure planted and <code>watch</code> running against it</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub">GitHub</a></td><td>Source, issues, releases</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/architecture.md">architecture.md</a></td><td>How it works: layers, flows, diagrams</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md">RESULTS.md</a></td><td>The benchmark, its method, and what it does not measure</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/07-weaknesses-and-remedies.md">07-weaknesses-and-remedies.md</a></td><td>An adversarial audit: known weaknesses, each with a fix</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/tree/main/skill/datahub-ml-guard">datahub-ml-guard</a></td><td>The skill, offered back to the DataHub ecosystem</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/most-valuable-feedback.md">most-valuable-feedback.md</a></td><td>Fourteen reproducible bugs and doc gaps found while building</td></tr>
+  </table>
+</section>
+
+<canvas class="beat" data-pose="sleep" data-from="right"
+        data-say="NOTHING BROKEN RIGHT NOW. I WILL BARK IF THAT CHANGES."></canvas>
+
+</main>
+</div>
+
+<footer>
+  ModelGuard, built for "Build with DataHub: The Agent Hackathon".
+  Apache 2.0. Argos is drawn from
+  <code>argos/ui/sprites/argos.txt</code>, the one copy of the art.
+</footer>
+
+<script src="../argos/ui/sprites.js"></script>
+<script src="argos-guide.js"></script>
+</body>
+</html>

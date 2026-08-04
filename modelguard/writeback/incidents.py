@@ -45,6 +45,7 @@ whatever the connected server allows.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 
 from datahub.ingestion.graph.openapi import RelationshipDirection
@@ -57,6 +58,9 @@ from datahub.metadata.schema_classes import (
 from datahub.metadata.urns import SchemaFieldUrn, Urn
 
 from modelguard.client import DataHubConnection
+from modelguard.logs import logfmt, phase
+
+logger = logging.getLogger(__name__)
 
 #: The relationship an incident declares onto each entity it concerns.
 INCIDENT_ON_RELATIONSHIP = "IncidentOn"
@@ -247,6 +251,14 @@ def raise_incident(
     urn = response.get("raiseIncident")
     if not urn:
         raise IncidentWriteError(f"raiseIncident returned no URN for {resource_urn}: {response}")
+    # The scribble: an aspect actually landed on the graph. Written after the
+    # mutation, never before, so the desktop companion depicts a write that
+    # happened rather than one that was attempted (docs/plan/08 section 3).
+    logger.info(
+        "incident raised %s",
+        logfmt({"urn": urn, "run_id": run_id}),
+        extra=phase("scribbling", urn=urn, run_id=run_id),
+    )
     return IncidentWrite(urn=urn, created=True)
 
 

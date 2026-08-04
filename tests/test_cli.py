@@ -17,7 +17,10 @@ from datahub.metadata.schema_classes import (
     OperationTypeClass,
     StructuredPropertiesClass,
 )
+from rich.console import Console
 
+from modelguard.argos.producer import ArgosProducer
+from modelguard.argos.protocol import Command
 from modelguard.cli import (
     WATCH_FAILURE_ESCALATION_THRESHOLD,
     TableResolutionError,
@@ -451,3 +454,46 @@ def test_infer_is_refused_on_a_whole_catalog_replay():
 
     assert result.exit_code == 2
     assert "incompatible" in result.output
+
+
+def test_a_mute_defers_the_write_and_never_swallows_it():
+    """Muting from the window stops the write for an hour; it must not cancel it.
+
+    The trap this covers: a change seen while muted is remembered as the new
+    steady state, so the poll after the mute expires compares equal and would
+    stay quiet forever. The incident nobody muted would then never be raised.
+    """
+    graph, client = _watch_fixture(30.0)
+    producer = ArgosProducer.start(Console(record=True), window=False)
+    state = WatchState()
+    try:
+        producer.handle(Command(name="mute"))
+        muted = _watch_once(
+            make_connection(graph, client),
+            ScanConfig(),
+            table_urn=TABLE_URN,
+            model_urn=None,
+            llm=None,
+            previous=None,
+            state=state,
+            argos=producer,
+        )
+        assert muted, "the finding is still detected while muted"
+        assert graph.graphql_calls == [], "muted means nothing was written"
+
+        # The mute expires. Nothing about the graph changed, so the signature is
+        # identical, and the write is owed.
+        producer._muted_until = 0.0
+        _watch_once(
+            make_connection(graph, client),
+            ScanConfig(),
+            table_urn=TABLE_URN,
+            model_urn=None,
+            llm=None,
+            previous=muted,
+            state=state,
+            argos=producer,
+        )
+        assert graph.graphql_calls, "the deferred write must land once the mute is over"
+    finally:
+        producer.close()

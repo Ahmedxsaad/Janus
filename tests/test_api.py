@@ -112,7 +112,11 @@ class TestScanModel:
         modelguard.scan_model(model="credit_risk_v3", dry_run=True, conn=conn, config=CONFIG)
 
         assert conn.graph.emitted == []  # type: ignore[attr-defined]
-        assert conn.graph.graphql_calls == []  # type: ignore[attr-defined]
+        # Reads are allowed and expected here: resolving the model name is a
+        # GraphQL scroll (modelguard/discovery.py). What a dry run may never do
+        # is mutate, so the assertion names that rather than counting calls.
+        sent = [query for query, _ in conn.graph.graphql_calls]  # type: ignore[attr-defined]
+        assert [query for query in sent if "mutation" in query] == []
 
     def test_the_checks_that_could_not_run_are_reported_not_hidden(self):
         """The API returns the same honest report the CLI prints, gaps included."""

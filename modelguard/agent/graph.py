@@ -44,6 +44,7 @@ turns a missing install into an actionable error, so the out-of-the-box
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -68,8 +69,11 @@ from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.coverage import Unevaluated
 from modelguard.llm import LLMConfig
+from modelguard.logs import logfmt, phase
 from modelguard.models import Finding
 from modelguard.writeback.assertions import render_assertion_yaml
+
+logger = logging.getLogger(__name__)
 
 #: A caller's approval decision, given the preview of what would be written. The
 #: CLI prints the preview and prompts before the callback returns a decision.
@@ -201,6 +205,14 @@ def build_scan_graph(
         re-execution LangGraph performs on resume writes nothing.
         """
         artifacts.preview = _preview()
+        # The sleeve tug: a write is waiting on a person. Logged before the
+        # interrupt suspends the graph, which is the only moment anything gets
+        # to say so (docs/plan/08 section 3).
+        logger.info(
+            "approval pending %s",
+            logfmt({"run_id": run_id, "findings": len(artifacts.findings)}),
+            extra=phase("tugging", run_id=run_id, findings=len(artifacts.findings)),
+        )
         decision = interrupt(True)
         return {"approved": bool(decision)}
 

@@ -16,6 +16,436 @@ Entry template:
 
 ---
 
+## D-107: The depth axes get a task-numbered build order, not just a doc (2026-08-04)
+- Decided by: Ghassen Naouar (asked for the implementation plan as a checklist),
+  written by Claude.
+- Decision: `docs/plan/10-depth-implementation.md`, 21 tasks (T-01 to T-21) across
+  eight phases, each task carrying the files it touches and a done-when. Ordered
+  by dependency rather than by axis, so an axis is split wherever its pieces
+  unblock each other.
+- Options considered:
+  - A checklist inside 09 itself. Rejected: 09 is the argument (what earns a place
+    and what does not), and a build order edited on every landed task would churn
+    the doc that has to stay stable to be cited.
+  - One checklist per axis. Rejected for the same reason the axes were not split
+    in 09: the real order interleaves them. The evidence work (T-08) has to precede
+    the negative trials (T-09) because the mutation survivors *are* the list of
+    missing trials, and proxy detection (T-11) reuses the common-ancestor scenario
+    T-09 builds. An axis-ordered checklist would have hidden both.
+  - Effort estimates per task. Kept only in 09; repeating them here would let the
+    two drift.
+- Why: three things needed to be written down once rather than thirty times. The
+  standing definition of done collects the obligations every task inherits from
+  the repo's own rules (mutation-check per tests rule 6, `.env` parity per root
+  rule 6e, regenerated benchmark numbers per benchmarks rule 4, a decision-log
+  entry, a CLAUDE.md row), because those are what actually make a task done and
+  they are spread across five files. The phase gates stop a half-finished phase
+  from being carried into the next one. The cross-cutting section maps five open
+  F-numbers from 07 onto the tasks that close them, with the instruction to update
+  07 in place when they do: a finding that is fixed but still listed as open is
+  the plan rotting, which docs/CLAUDE.md rule 1 exists to prevent.
+- Result: `docs/plan/10-depth-implementation.md`. Two deviations from 09's
+  suggested order, both recorded in the file: narrative faithfulness (09 section
+  2.4) moves into the evidence phase because it is benchmark work and belongs with
+  the other evidence items, and continuous reconciliation (09 section 1.2) is
+  marked blocked on the MCL consumer rather than sequenced as if it were free.
+  Nothing is built by this entry.
+
+## D-106: The depth axes get a plan doc before any of them get code (2026-08-04)
+- Decided by: Ghassen Naouar (asked how the solution generalizes and what to add
+  on evaluation, observability, xAI and AI governance, deeply rather than
+  superficially), written up by Claude.
+- Decision: `docs/plan/09-depth-axes.md` records the whole map: generalizability
+  (adapters, continuous reconciliation, a degraded table-level mode), evaluation
+  (mutation score, confusable negatives, scoring on an ingested graph,
+  deterministic narrative faithfulness), observability (scans emitted as
+  `dataProcessInstance`, guard coverage as a trend, OTel behind an extra),
+  explainability (counterfactual remediation, feature provenance cards, the trust
+  waterfall), and governance (proxy-attribute detection, an EU AI Act Article 10
+  evidence pack, model cards, a NIST AI RMF crosswalk). Two axes nobody asked for
+  are added (FinOps, incident MTTR). Nothing is built by this entry.
+- Options considered:
+  - Start implementing the highest-value item immediately and document after.
+    Rejected: five axes with cross-dependencies (proxy detection reuses the
+    common-ancestor scenario the benchmark needs; every generalizability item is
+    verified by the same ingested-graph benchmark) would have been discovered in
+    the wrong order and built twice.
+  - One doc per axis. Rejected: the axes share a single filter and a single
+    ranked order, and splitting them would hide both.
+  - Add to 04-improvements.md. Rejected: that doc is a list of proposals against
+    the original plan; this is a forward map for a shipped product, which is the
+    same distinction that justified 06 and 07 as separate docs.
+- Why: the filter is the point, and it needed writing down before the ideas did.
+  Every good feature in the product is one primitive applied again (a marked walk
+  over column lineage, computable without touching a row), and the proposals that
+  fail that test would have cost more than their build time: SHAP and value-level
+  drift both need row access and would forfeit the no-rows-to-the-LLM property
+  outright. So section 7 records what is deliberately *not* being built and why,
+  alongside what is. The other thing that needed recording before code: coverage,
+  not detector count, is the binding constraint. F10 and F11 already rate the
+  `link` cliff High, and a new detector multiplies a number near zero on a
+  stranger's catalog, so the adapters outrank every new check.
+- Result: `docs/plan/09-depth-axes.md`. Every SDK symbol it names was introspected
+  against the installed `acryl-datahub==1.6.0.13` and marked `[verified]`, the
+  rest `[confirm]`, per root rule 7: the `DataProcessInstance*` aspect classes all
+  exist but there is no `datahub.sdk` wrapper for the entity, so 3.1 goes through
+  `MetadataChangeProposalWrapper` as `writeback/` already does, with
+  `datahub.api.entities.dataprocess.dataprocess_instance` to evaluate first.
+  `datahub.ingestion.source.feast` ships with the SDK while `feast` itself does
+  not, so 1.1 is an extra. Reading the code also shrank the flagship item:
+  `marked_ancestor` already collects every chain to the label and discards all but
+  the shortest, so the counterfactual in 4.1 is mostly a widened return type
+  rather than a new traversal.
+
+## D-105: Every click on the dog was dying at mousedown, and the fetch never caught anything (2026-08-03)
+- Decided by: Ahmed Saad (reported the toy would not throw, then that the toy
+  was too small and smooth, then that the dog never picked it up), fixed by
+  Claude.
+- Decision: three fixes to the window, no change to the event contract.
+  1. **`startDragging()` waits for an actual drag.** It fired on the bare
+     mousedown, which hands the pointer to the window manager for a native
+     window move; on WebKitGTK that swallows the matching mouseup rather than
+     delivering it. Every click and double-click on the dog therefore died
+     half-finished: mousedown fired and nothing else ever did, so petting, the
+     bubble toggle, the blast-radius walk and the fetch all looked dead. It is
+     now gated on the press lasting 120ms *and* moving 10px.
+  2. **The toy is drawn from the palette** on a canvas at the sprite's own
+     4px-per-pixel scale, instead of a 10px `border-radius` circle.
+  3. **The fetch aims his mouth, not his centre.** Aiming the centre left him
+     stopping half a body short, and the pickup then fired anyway, so the toy
+     blinked out of existence beside him. The toy also stays visible in his
+     mouth for the celebration instead of being removed the instant he
+     arrives, and a throw is clamped to what his mouth can actually reach.
+- Options considered:
+  - For the click: moving the gesture to a double-click (tried first, and
+    reverted: it changed nothing, because the same swallowed mouseup breaks a
+    double-click exactly as it breaks a single one), reading the cause out of
+    tao/wry's source (inconclusive: the relevant handler is ours, not theirs),
+    or instrumenting the running window to see which DOM events actually
+    arrive. The third is what found it, after the first two were guesses.
+  - For the toy: a bigger CSS circle, an emoji, or pixels from the same
+    palette everything else in the window is drawn from.
+- Why: the first two attempts at the click were reasoned from the outside and
+  both were wrong, in the same way: a plausible cause (the window manager
+  eating a lone click against an always-on-top undecorated surface) that
+  nothing had actually measured. A temporary readout of every pointer event
+  reaching the page answered it in one click, and the answer was our own code.
+  The lesson is in the fix's comment so the next person does not re-derive it:
+  when a gesture does not arrive, look at what the page received before
+  theorising about the compositor.
+- Result: `argos/ui/argos.js` and `argos/ui/index.html`. Verified by driving
+  the real page over CDP: the ball canvas paints, he walks to the toy, and the
+  held frame puts it at his mouth (12px across, 44px down inside the sprite,
+  which is the muzzle) rather than beside him. Full suite 590 green,
+  `cargo build --release` clean, and the rebuilt binary run live against the
+  Quickstart.
+
+## D-104: A documentation site at site/, with Argos walking the reader down it (2026-08-03)
+- Decided by: Ghassen Naouar (asked for a landing page documenting what ships to
+  a user, with the pixel character moving and explaining between sections, in a
+  warm autumn palette of black, brown and orange)
+- Decision: Three static files at `site/` (index.html, style.css,
+  argos-guide.js), served from the repository root. It documents the shipped
+  surface end to end: install and extras, quickstart, `inventory`, `link`,
+  `scan` and the five checks, `gate` and the action, `watch`, the Python API,
+  JSON output, the MCP server, Argos, Docker, configuration, and the security
+  model. Between sections, Argos walks in on a canvas, drops into a pose and
+  speaks one line in a pixel bubble.
+- Options considered: (a) a documentation generator (mkdocs, Docusaurus), which
+  brings a build step, a node or python toolchain and a theme to fight, for a
+  single page; (b) a hand-written page that copies the sprite art into its own
+  file, which is one file fewer to serve but two copies of the art; (c) this:
+  hand-written, reading the one copy of the art over `fetch`; (d) an HTML bubble
+  in a pixel web font, which is a font file to ship and still not the dog's own
+  pixel grid.
+- Why: The page is one page, and a generator's cost is all up front. Sharing the
+  art is the whole reason the window, the icon and the README animation already
+  read one file (D-098, D-103), and a fourth consumer changes nothing about
+  that. The trade the sharing buys is that the page needs a server rather than a
+  double-click, which is already true of `argos/ui/` and is one command. The
+  bubble font is a glyph table drawn as rects: M and W get four columns because
+  at three a W reads as an H, verified on screen rather than assumed.
+- Result: `site/` plus `tests/test_site.py`, five tests: every frame a pose names
+  exists in the art, every pose the page asks for is defined, every character the
+  dog says has a glyph, every glyph is five rows tall, and the page still reads
+  the one copy of the art rather than a vendored one. Rendered and read back
+  over CDP at 1280px and 380px. The palette is Argos's own coat, saddle and
+  outline, which is what makes "warm autumn" and the character the same decision.
+
+## D-103: The README opens with the dog, generated not drawn (2026-08-03)
+- Decided by: Ghassen Naouar (asked for an `assets/` directory, a GIF of the dog
+  in several states, and for it to sit at the head of the README).
+- Decision: `assets/argos.gif`, a 38-frame tour (patrol, blink, walk, sniff,
+  bark, scribble, wag, sleep) written by `assets/make_demo.py` from the same
+  `argos/ui/sprites/argos.txt` the window and the icon read. It reuses
+  `argos/icons/make_icon.py` for the palette and the PNG writer and shells out
+  to ImageMagick's `convert` for the GIF itself.
+- Options considered:
+  - Recording the real window in headless Chrome over CDP: truest, but the
+    generator would then need Chrome, a local web server and a CDP client to
+    reproduce one image.
+  - Hand-rolling an animated GIF in the standard library, as `make_icon.py`
+    hand-rolls a PNG: that means writing an LZW encoder, which is a lot of
+    surface for an asset, and `convert` is already installed.
+  - Committing a GIF made by hand with no generator: rejected on the rule the
+    art already follows, that a hand-made copy goes stale on the next redraw.
+- Why: it regenerates in one command after a redraw, so the README cannot drift
+  from the window. Two things the flat art does not get for free are put back
+  because leaving them out would misrepresent the product: the rim (GitHub
+  renders a README on white or on near-black, and on the dark one the saddle,
+  the ears and the outline vanish into the page) and the red collar on the bark
+  frames (the renderer paints it from a live finding, and the bark *is* the
+  finding). The top-down light and the shadow stay out: both need partial alpha,
+  and GIF has one transparent index and nothing in between.
+- Result: `assets/make_demo.py`, `assets/argos.gif` (63KB, 200x200, loops), the
+  README's first block, `assets/` added to the repository map here and in the
+  README's layout, and the README's stale "16x16 pixel watchdog" corrected to
+  32x32 (it has been 32 since D-101).
+
+## D-102: The two poses a viewer holds longest, and a toy to throw him (2026-08-03)
+- Decided by: Ghassen Naouar (asked for a better sleeping and alert pose, no red
+  on the muzzle, an Ace Attorney style intervention, and something to throw).
+- Decision: four changes to the window, none of them touching the event contract.
+  1. **No red anywhere in the art.** The bark's open mouth is drawn with the
+     outline colour. Red is state, and the renderer is now the only thing that
+     paints it, on *both* rows of the collar rather than the lit row alone.
+  2. **Asleep is its own pose**, not the standing rig dropped three rows: a
+     lying mound, head laid on outstretched forepaws, tail curled on the ground,
+     one row of ribcage rising between the two frames for the breath.
+  3. **The bark jumps, and shouts punctuation.** A timeline entry may carry a
+     third number, the lift in sprite pixels for that frame; the second bark
+     frame tucks its legs and rides 3.4px off the floor while the shadow shrinks
+     under it. A `!` slams in over his shoulder on a bark and a `?` on a check
+     that could not run, restarting on every event.
+  4. **Click the floor and he fetches.** The toy lands where the click was, he
+     trots over, grabs it, is pleased about it for a second and resumes.
+- Options considered:
+  - For the fetch: a right-click menu entry (discoverable but more menu), the
+    floor click (chosen: undiscoverable but it is a toy, not a control), or both.
+  - For its reach: inside the pet window's strip (chosen), moving the Tauri
+    window across the whole desktop, or drawing the chase in the full-screen
+    overlay the blast-radius walk already uses.
+  - For the jump: a sine on the wall clock (drifts out of step with the frames)
+    against a lift attached to the frame itself (chosen).
+- Why: red on the muzzle read as an injured dog at 32 pixels, and it spent the
+  one colour that is supposed to mean "a finding is live" on decoration. The
+  sleeping pose is the one held for minutes at a time and the bark is the one
+  that must land in peripheral vision, so they are the two worth redrawing. The
+  fetch is gated on the states that already roam, which is the same rule the
+  patrol obeys: a dog that trotted off to play mid-finding would be the sprite
+  contradicting the event. Screen-wide fetch was rejected for now because it
+  means repositioning the window every animation frame, which `src/main.rs`
+  already records as jank some window managers rate-limit.
+- Result: `argos/ui/sprites/make_sprites.py` (new sleeping parts, a tucked leg
+  cluster, a dark mouth, `sleep_pose`, `compose` loses its unused `drop`),
+  `argos/ui/argos.js` (frame lift, shout, fetch), `argos/ui/index.html` (the
+  mark and the toy), `argos/ui/sprites.js` (both collar rows), regenerated
+  `argos.txt` and `icons/icon.png`, and `tests/test_argos.py` now asserts that
+  *no* frame carries red. Verified by driving the page in headless Chrome:
+  the throw, the walk to the toy, the pickup at the exact target, the airborne
+  frame with its shrunken shadow, and the mark over the shoulder.
+
+## D-101: Argos redrawn as a German Shepherd; roam, mirror, and a fixed bubble (2026-08-03)
+- Decided by: Ahmed Saad (asked for the character to be "a lot more alive",
+  named a specific breed, and separately flagged that the speech bubble
+  rendered detached above the window), built by Claude.
+- Decision:
+  1. The character is a German Shepherd now, not a generic dog: erect ears, a
+     black saddle over a tan coat, a low bushy tail. Redrawn at 32x32 (from
+     24x24) because the breed's features (a longer muzzle, the saddle marking)
+     needed the room D-099's size did not have.
+  2. The sprite file is generated, not hand-typed. `argos/ui/sprites/
+     make_sprites.py` composes each of the 24 frames from a head, a torso, a
+     tail and a pair of leg clusters, and computes the outline from the
+     resulting silhouette. Edit the parts, re-run the script; the committed
+     `argos.txt` is its output, the same relationship `icons/make_icon.py` has
+     to `icon.png`.
+  3. The window gained roaming, mirroring, and a top-down light. While
+     patrolling (and only then; every other state stands still, per the design
+     law in section 3) the dog paces a strip inside the window, turns to face
+     its cursor, and can be picked up and pet. Facing left is the same art
+     mirrored via a canvas transform, not a second set of frames.
+  4. The speech bubble's layout is fixed. It was pinned to the top of the
+     window with a fixed height; in a transparent, undecorated window with
+     nothing to anchor it to, it read as floating in empty space, and a title
+     over two lines was silently clipped. It is now laid out in a bottom-up
+     flex column so it always sits directly above the head and is always
+     exactly as tall as its own text, and its tail tracks the dog horizontally
+     instead of staying fixed at 50%.
+- Options considered:
+  - For the breed: (a) keep the generic dog and only fix the bubble, (b) redraw
+    as a named breed. (b) was the ask, and the earlier generic character was
+    itself already a second attempt (D-099) at "look distinctive"; a breed a
+    viewer can name is a stronger version of the same goal, not a new one.
+  - For authoring: (a) keep hand-typing 24 frames, (b) generate them from
+    parts. Two iterations under (a) during this session put a stray pixel two
+    rows below the tail and read it back as a floating fragment, twice, in two
+    different poses (the sit haunch, then the sleep paw) because nothing
+    checked that a hand-added shape actually touched what it was next to. (b)
+    makes that class of mistake structurally harder: a leg is a rigid block
+    stamped at a column, not a hand-aimed diagonal of individual characters.
+  - For the bubble: (a) patch the existing fixed-position rule with a
+    computed offset, (b) put it back in document flow. (a) would still need to
+    know the dog's current height and position to compute the offset, which is
+    exactly what flex layout already tracks for free; (b) is the same fix with
+    less code and no offset to keep in sync as the roam position changes.
+- Why: the previous character was correctly implemented against its own
+  design (D-098, D-099) but was not, on Ahmed Saad's read, distinctive or alive
+  enough to leave running, and the bubble bug was a real defect: a finding's
+  title is the one piece of information this surface exists to show, and
+  clipping or detaching it defeats the surface. Both are fixed together because
+  the redraw touched the same files (`ui/index.html`, `ui/sprites.js`) the
+  bubble fix needed.
+- Result: `argos/ui/sprites/make_sprites.py` (new), `argos/ui/sprites/argos.txt`
+  regenerated (32x32, 24 frames), `argos/ui/sprites.js` (palette, `PIXELS`,
+  mirroring via `flip`, per-pixel top-down lighting), `argos/ui/argos.js` (the
+  roam/pet/pointer-follow state machine), `argos/ui/index.html` (bubble
+  back in flow, 128px floor), `argos/tauri.conf.json` (window grows to fit),
+  `argos/icons/make_icon.py` (palette). `tests/test_argos.py`'s `SPRITE`
+  constant moves to 32; all 585 tests pass. `cargo build --release` clean.
+  Verified against the live stack this session's D-100 fix was also tested on:
+  `modelguard watch --table loans_raw --pet` renders the new character with no
+  errors in the log across repeated polls.
+
+## D-100: Model discovery stops losing older versions to DataHub's search (2026-08-03)
+- Decided by: Ahmed Saad (asked for the product to be run end to end as an
+  ordinary user would, which is what surfaced this), fixed by Claude.
+- Decision: every model-discovery path goes through the new
+  `modelguard/discovery.py`, which issues its own `scrollAcrossEntities` with
+  `SearchFlags.filterNonLatestVersions: false` rather than calling
+  `DataHubClient.search`. Older versions of a versioned model are in scope for
+  `inventory`, `scan --all-models`, `link --all`, and `--model <name>`.
+- Options considered: (a) leave it, and document that only the latest version is
+  checked; (b) include every version, through the search flag that turns the
+  hiding off; (c) keep search for discovering new work and add a second path for
+  reconciliation only.
+- Why: found by running the real-project example end to end. Registering a second
+  MLflow model version makes DataHub stamp the first entity `isLatest: false`,
+  and GMS then drops it from every search result while the entity itself stays
+  perfectly alive: not soft-deleted, all aspects intact, ModelGuard's own
+  structured properties and open incident still on it. The consequences are not
+  cosmetic. `link --all` reported "No model carries a recorded link" for a model
+  whose recorded link was sitting right there, which defeats the exact command
+  D-074 added to survive ingestion churn; and an incident raised on that version
+  could never be resolved, because nothing reaches the model to notice the
+  finding stopped reproducing. That is the D-067 and D-069 failure mode arriving
+  through a new door, and this project's rule is that a finding must always be
+  closable. (a) leaves an un-closable incident. (c) is more precise about noise
+  but needs two discovery paths that must not drift, for a noise problem that is
+  bounded anyway: an unlinked old version reports itself unchecked and writes
+  nothing, so writes still only happen for a model a human linked on purpose.
+- Result: `modelguard/discovery.py` with `search_model_urns`, called from
+  `cli._model_urns`, `cli.resolve_model` and `writeback.link.models_with_recorded_link`.
+  Verified against the live stack the bug was found on: `inventory` went from 2
+  models to 3, `link --all` from "no model carries a recorded link" to replaying
+  the 6 features it had recorded, and `scan --model telco_churn_1` resolves by
+  name again instead of answering "no model named". Falls back to plain search
+  when GMS is too old to know the flag. tests/test_discovery.py covers it,
+  mutation-checked per tests/CLAUDE.md rule 6 by flipping the flag back to true.
+  One existing test changed with it: a dry run asserted that *no* GraphQL was
+  sent, using it as a proxy for "no mutation" that only held while the incident
+  mutation was the sole GraphQL ModelGuard issued; it now asserts no mutation.
+
+## D-099: Argos redrawn, three more states, and a live run that found a lie (2026-08-03)
+- Decided by: Ghassen Naouar (asked for the design to be improved a lot and for
+  the whole thing to be tested against a live DataHub), built by Claude.
+- Decision: the character moves to 24x24 and 24 frames, the window becomes
+  something worth leaving on screen, and three states join the nine.
+  1. **24x24, not 16x16.** Sixteen pixels could not carry a snout, an eye with a
+     highlight, or a four-frame walk. The frames are authored by filling
+     silhouettes and auto-outlining them, so a variant is a small edit rather
+     than 24 retyped rows, and the text file stays the artifact.
+  2. **Three new states, each with a real event behind it**, which is the rule
+     this surface lives by: `recovered` (a finding that was open stopped
+     reproducing, a transition only the watch loop knows), `unchecked`
+     (detect/coverage.py found a check it could not run, and a check that could
+     not run must not be drawn like one that passed), and `muted` (the user
+     muted, and the dog says so rather than going quiet in a way that reads as
+     health).
+  3. **Animation is a timeline of frame-and-hold, not a frame rate.** A
+     two-second hold and a 130ms blink is a dog; four frames at 3fps is a
+     flipbook.
+  4. **The sprite carries a light rim** outside its own dark outline. DataHub's
+     near-black vanishes against a dark wallpaper and takes the silhouette with
+     it. A desktop pet cannot choose its background.
+- Options considered: for the trust meter's colour, re-deriving the band from
+  the score in JavaScript (what the first build did) against sending the band
+  the detector decided. The live run settled it: the seeded model scores 70,
+  which is at the healthy floor, but its band is WATCH because a critical
+  finding caps it (D-067), so the meter painted an at-risk model healthy-blue
+  while the catalogue called it watch. The band now rides on the event and the
+  renderer applies no thresholds of its own.
+- Why: the surface only earns its place if it is worth looking at, and an
+  ambient display that disagrees with the catalogue it reports on is worse than
+  no display.
+- Result: 24 frames, 12 states, a bubble with a pointer, a severity chip, an
+  auto-hide and a trust meter, a contact shadow, an entry squash, a bark shake,
+  and a walk overlay with a dashed trail and a banner. Verified against a
+  running Quickstart: `watch --pet` on the seeded graph raised the leakage
+  finding and barked it; `companion` swept an owned table and reported an open
+  incident, a failing assertion run and a deprecation in one poll, ranked
+  incident first. That run closes both of D-098's live-GMS `[confirm]` items:
+  the `owners` filter field name and the assertion `filter_criteria_map`.
+
+## D-098: Argos, the desktop companion, and the stdio protocol behind it (2026-08-03)
+- Decided by: Ghassen Naouar (four choices settled through the planning
+  session), built by Claude on `feat/argos-companion`.
+- Decision: ModelGuard gains a second surface. A pixel watchdog named **Argos**
+  renders the state of the ML supply chain on the desktop, driven by a
+  versioned JSON event stream.
+  1. **Name: Argos.** Odysseus's dog, who waited and still recognised his
+     master, and Argus the hundred-eyed watchman. Rejected: *Cerb* (menacing
+     unless drawn as a puppy) and *Scout* (warmest, least distinctive).
+  2. **Shell: Tauri v2**, reversing draft 1's rejection of it. Rejected:
+     `pywebview` (same GTK layer, worse window control) and Electron (too
+     heavy). The Rust toolchain is a build-machine cost that no user meets.
+     `app.withGlobalTauri` is what keeps npm out of the build and
+     `app.macOSPrivateApi` is what makes the window transparent on macOS, at
+     the price of Mac App Store eligibility we do not want.
+  3. **Transport: stdio.** The producer spawns the window and writes
+     newline-delimited JSON to its stdin; commands come back on its stdout.
+     Rejected: a localhost HTTP server with SSE, which costs a bound port, a
+     shared secret, a CORS policy and an auth path to review. stdio binds
+     nothing, cannot be reached by another process, dies with its parent, and
+     keeps the GMS token out of the process that draws. Its one real hazard is
+     written into the code: the parent must drain the child's stdout on a
+     thread or both processes deadlock.
+  4. **Scope: a general DataHub companion, from day one.** `modelguard
+     companion` polls the assets one owner owns for open incidents, failing
+     assertion runs and deprecations, and emits the same events. ModelGuard is
+     one producer among several rather than the whole point. DataHub has no
+     desktop presence today, and that gap is the give-back.
+  5. **Distribution: pip-first.** maturin builds the binary into platform
+     wheels, so `pip install "modelguard-datahub[pet]"` works on macOS and
+     Windows. Linux carries a platform marker instead of a wheel: the binary
+     links system webkit2gtk, which no manylinux tag permits, so PyPI cannot
+     accept it and the `.deb` and `.AppImage` from the release are that route.
+- Options considered: also, for the four mid-scan states nothing returns
+  (lineage walk, narration, a write landing, an approval waiting), a progress
+  callback threaded through detect/ and writeback/ against five structured log
+  lines plus a `logging.Handler`. The log won: no rendering concern reaches a
+  detector's signature, and the lines are worth having for an operator anyway.
+  The constraint came with it, that log lines carry no prose, so the speech
+  bubble's sentence comes from the finding's title.
+- Why: the detection work is differentiated and the surface was not. Everything
+  ModelGuard produced landed in a terminal, a CI summary, or a DataHub page
+  somebody had to remember to open. The design law is root CLAUDE.md rule 4
+  applied to pixels: no animation exists without a real event behind it, and
+  the state a disconnected poll shows is a ghost, because a cheerful pet on a
+  broken watch is the lie that gets ambient displays switched off.
+- Result: `argos/` (Tauri v2 crate, static frontend, 11 text sprite frames, a
+  generated icon), `modelguard/argos/` (protocol, events, window, terminal
+  fallback, log handler, producer), `modelguard/companion.py`, `watch --pet`
+  and `modelguard companion`, a `pet` extra, and `.github/workflows/build-argos.yml`.
+  44 tests, each mutation-checked. Three claims in the plan doc were corrected
+  by building it: the sprite format is one file per character rather than one
+  per frame, the terminal fallback is a status line rather than pixel art (the
+  art does not ship in the Python wheel), and a dropped file triggers a poll
+  rather than a `link --infer`, because inference works from the model in the
+  graph and not from a script on disk. Unverified and named as such: the wheel
+  build (maturin is not installed here), macOS, and whether a Windows
+  GUI-subsystem build reads the stdin its parent hands it.
+
 ## D-097: F1 fixed, a truncated lineage walk is never read as clean (2026-08-02)
 - Decided by: Ahmed Saad (working through docs/plan/07's important findings one
   by one), applied by Claude. Numbered D-097 rather than continuing after

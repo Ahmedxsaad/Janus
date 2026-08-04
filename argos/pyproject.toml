@@ -1,0 +1,47 @@
+# The Argos window as a Python wheel.
+#
+# maturin builds the Rust binary here into a platform wheel that installs
+# `modelguard-argos` onto PATH, which is how `pip install
+# "modelguard-datahub[pet]"` puts a desktop window on somebody's machine
+# without them ever meeting a Rust toolchain.
+#
+# This is a *separate distribution* from modelguard-datahub on purpose. That one
+# is a pure wheel, one file for every platform; this one is a different file per
+# platform and cannot be. Keeping them apart is what lets the Python package
+# stay pure and the window ship as a binary.
+#
+# Linux is published on GitHub Releases rather than PyPI, and that is policy,
+# not effort: the binary links the system webkit2gtk, which no manylinux tag
+# permits, so PyPI will not accept the wheel. `cargo tauri build` produces the
+# .deb and .AppImage for that route (docs/plan/08 section 6b).
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "modelguard-argos"
+description = "Argos, the DataHub watchdog: the desktop window for modelguard-datahub"
+readme = "../docs/plan/08-watchdog-mascot.md"
+license = "Apache-2.0"
+authors = [{ name = "ModelGuard Contributors" }]
+keywords = ["datahub", "desktop", "mascot", "observability"]
+requires-python = ">=3.11"
+# The version lives in Cargo.toml, which is what actually builds. Two places to
+# bump would be one place to forget.
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications",
+    "Intended Audience :: Developers",
+    "Programming Language :: Rust",
+    "Topic :: Desktop Environment",
+]
+
+[project.urls]
+Homepage = "https://github.com/Ahmedxsaad/DataHub"
+
+[tool.maturin]
+# A plain binary, no Python extension module: the wheel's only job is to put an
+# executable on PATH for modelguard/argos/window.py to spawn.
+bindings = "bin"
+strip = true
