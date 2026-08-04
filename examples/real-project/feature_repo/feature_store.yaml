@@ -1,0 +1,21 @@
+# The repo's own configuration. `modelguard link --from feast` never reads it:
+# the adapter parses churn.py and nothing else, offline (modelguard/adapters).
+# It is here because a Feast repo has one, and because a reader should be able to
+# see that this repo points at the same warehouse the rest of the example does.
+#
+# Credentials come from the environment, never from this file: it is committed.
+project: telco_churn
+registry: registry.db
+provider: local
+offline_store:
+    type: postgres
+    host: ${WAREHOUSE_HOST}
+    port: ${WAREHOUSE_PORT}
+    database: ${WAREHOUSE_DB}
+    db_schema: analytics
+    user: ${WAREHOUSE_USER}
+    password: ${WAREHOUSE_PASSWORD}
+online_store:
+    type: sqlite
+    path: online_store.db
+entity_key_serialization_version: 3
