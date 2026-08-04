@@ -16,6 +16,34 @@ Entry template:
 
 ---
 
+## D-124: The mutation section grew a newline per run (2026-08-05)
+- Decided by: Ahmed Saad.
+- Decision: `_splice` normalizes both sides of the section instead of reusing
+  the whitespace it found, so writing the same section twice is a fixed point.
+- Why: the advisory mutation job on main went red on the merge of PR #53, on a
+  one-character diff: a blank line after `<!-- MUTATION:END -->`. D-122 had
+  stopped `run_bench` from deleting the section, which is what finally let the
+  two writers be compared, and the comparison found this. `render_mutation_section`
+  ends its output with a newline, and `_splice` then re-attached the newline
+  that had followed the old `END_MARKER`, so the file gained one blank line on
+  every invocation. The append branch had the mirror-image bug: it added `\n\n`
+  to text already ending in `\n`, leaving three newlines where the replace
+  branch leaves two, so the first run after a section existed never matched the
+  run before it.
+- Why it survived the tests already covering `_splice`: the existing replace
+  test put content *after* the section, so the tail was never the end of the
+  file, and it asserted on what the output contains, never on its shape.
+  RESULTS.md has nothing after that section, which is the one case not covered.
+- Result: two tests, both confirmed red against the pre-fix function per
+  tests/CLAUDE.md rule 6. One asserts the property CI actually depends on, that
+  splicing twice changes nothing; the other pins the shape for the file's real
+  layout. Verified against the committed RESULTS.md by replaying exactly what
+  the job does: the regenerated file is byte-identical, so the diff is empty.
+  The job's own content was never wrong; both defects were whitespace, which is
+  the kind of red a team learns to wave through, and this one was on main.
+
+---
+
 ## D-123: Phase 5's two commands existed and were undiscoverable (2026-08-05)
 - Decided by: Ahmed Saad.
 - Decision: `model-card` and `evidence-pack` are documented in the README and on
