@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from modelguard.adapters import AdapterError, read_declaration
-from modelguard.adapters.feast import read_repo
+from modelguard.adapters.feast import _source_table, read_repo
 
 EXAMPLE_REPO = Path(__file__).resolve().parents[2] / "examples" / "feature-repo" / "feature_repo"
 
@@ -79,3 +79,36 @@ def test_a_repo_whose_python_raises_is_reported_with_its_own_error(tmp_path: Pat
         read_repo(tmp_path)
 
     assert "the repo is mid-edit" in str(caught.value)
+
+
+class _RelationOnlySource:
+    """A source that exposes its table only through ``get_table_query_string``.
+
+    Feast's SQL contrib sources (postgres and the ones built on the same options
+    object) are shaped like this: no ``table`` attribute, no ``path``, the
+    relation reachable only through that method. Verified against feast 0.65's
+    PostgreSQLSource on the ingested real project (T-14); it is stubbed here
+    because the class cannot be imported without a postgres driver, which is not
+    a dependency of this project or of its dev extra.
+    """
+
+    def __init__(self, name: str, relation: str) -> None:
+        self.name = name
+        self._relation = relation
+
+    def get_table_query_string(self) -> str:
+        return self._relation
+
+
+def test_a_source_that_names_its_relation_only_through_a_method_is_read():
+    """Otherwise a postgres-backed repo declares a table name no catalog holds."""
+    source = _RelationOnlySource("customer_features_source", "analytics.customer_features")
+
+    assert _source_table(source) == "analytics.customer_features"
+
+
+def test_a_source_declared_on_a_query_falls_back_to_its_name():
+    """A parenthesised SELECT is not a table, and must never be resolved as one."""
+    source = _RelationOnlySource("customer_query_source", "(select 1 from x)")
+
+    assert _source_table(source) == "customer_query_source"

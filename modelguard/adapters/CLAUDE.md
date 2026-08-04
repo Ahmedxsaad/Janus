@@ -44,3 +44,4 @@ maintains into the arguments `modelguard link` otherwise asks a human to type
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-04 | Claude (for Ghassen Naouar) | Initial version: the adapter framework, the Feast reader and the dbt semantic-model reader, with the read-only/offline rule that defines the package (D-112, T-05/T-06) |
+| 2026-08-04 | Claude (for Ghassen Naouar) | Rule 4's every-fact-carries-its-source rule met a source that carries it privately: Feast's SQL contrib sources keep the table in an options object and expose it only through `get_table_query_string()`, so a postgres-backed repo declared its source table as the source's Feast name. Asked second, and taken only when the answer is a bare relation, so a query-backed source still falls back to its name (D-115, T-14) |
