@@ -74,6 +74,7 @@ from datahub.metadata.schema_classes import (
 from datahub.metadata.urns import DatasetUrn, MlModelUrn, SchemaFieldUrn
 from datahub.sdk.search_filters import FilterDsl as F
 
+from modelguard.adapters import DeclaredLink, excluded_columns, missing_columns
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.column_marks import ColumnMarkIndex, marked_ancestor
@@ -498,6 +499,89 @@ def _excluded_columns(
         f"excluded columns: {', '.join(sorted(excluded))}, from the schema's own "
         "key declarations (primaryKeys, isPartOfKey, isPartitioningKey) and the "
         "label itself; pass --exclude for any join key the warehouse never declared"
+    )
+
+
+def declared_proposal(
+    conn: DataHubConnection,
+    model_urn: str,
+    declaration: DeclaredLink,
+    *,
+    feature_dataset_urn: str,
+    label_dataset_urn: str | None,
+) -> LinkProposal:
+    """Turn an adapter's declaration into the same proposal ``--infer`` produces.
+
+    The two routes to a proposal are different in kind and identical in shape.
+    ``--infer`` reads the graph and reasons about it; an adapter reads a file the
+    team maintains and reasons about nothing. Both end in a command a human
+    confirms, so both produce a :class:`LinkProposal` and everything downstream of
+    the confirmation is one code path.
+
+    The declaration names the features positively; ``link`` takes the complement,
+    because a feature table is the unit and the join key is the exception. That
+    join happens here, against the table's real schema, which is the one fact the
+    declaration cannot hold.
+
+    Args:
+        conn: An open connection. Read from, never written to.
+        model_urn: The model being linked.
+        declaration: What the adapter read.
+        feature_dataset_urn: The declaration's source table, already resolved
+            against the catalog by the caller (only the CLI knows how a user's
+            ``--features`` overrides it).
+        label_dataset_urn: The table the declared label lives in, resolved the
+            same way. None when the declaration names no label.
+
+    Returns:
+        The proposal, carrying the adapter's own reason lines followed by the
+        two decisions made here: which columns are excluded, and why.
+
+    Raises:
+        LinkError: The declaration names a column the resolved table does not
+            have. That is a disagreement between the declaration and the
+            catalog, and it is fatal rather than filtered: linking the
+            intersection would leave the undeclared columns unchecked while
+            reporting a successful link.
+    """
+    schema = _schema(conn, feature_dataset_urn)
+    columns = [field.fieldPath for field in schema.fields]
+    declared = declaration.source_columns
+
+    missing = missing_columns(declared, columns)
+    if missing:
+        table = DatasetUrn.from_string(feature_dataset_urn).name
+        raise LinkError(
+            f"{declaration.adapter} declares {len(missing)} column(s) that {table} "
+            f"does not have: {', '.join(missing)}. The declaration and the catalog "
+            "disagree about this table, so nothing was proposed: re-ingest the "
+            "table, or pass --features to name the table the declaration means."
+        )
+
+    excluded = excluded_columns(declared, columns)
+    label_column_urn = (
+        str(SchemaFieldUrn(label_dataset_urn, declaration.label_column))
+        if declaration.label_column is not None and label_dataset_urn is not None
+        else None
+    )
+    reasons = [
+        *declaration.reasons,
+        (
+            f"excluded columns: {', '.join(sorted(excluded))}. Every column of the "
+            f"table that {declaration.name!r} does not declare as a feature"
+        )
+        if excluded
+        else (
+            f"excluded columns: none. {declaration.name!r} declares every column of "
+            "the table as a feature"
+        ),
+    ]
+    return LinkProposal(
+        model_urn=model_urn,
+        feature_dataset_urn=feature_dataset_urn,
+        label_column_urn=label_column_urn,
+        exclude=excluded,
+        reasons=tuple(reasons),
     )
 
 

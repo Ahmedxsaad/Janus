@@ -27,6 +27,7 @@ from datahub.sdk.search_filters import FilterDsl as F
 from rich.console import Console
 
 from modelguard import companion as companion_module
+from modelguard.adapters import ADAPTERS, AdapterError, DeclaredLink, read_declaration
 from modelguard.agent.pipeline import FindingWrites, ScanReport, run_scan
 from modelguard.argos import events as argos_events
 from modelguard.argos.producer import ArgosProducer
@@ -69,7 +70,7 @@ from modelguard.writeback.link import (
     models_with_recorded_link,
     recorded_link,
 )
-from modelguard.writeback.link_infer import LinkProposal, infer_link
+from modelguard.writeback.link_infer import LinkProposal, declared_proposal, infer_link
 
 app = typer.Typer(
     add_completion=False,
@@ -1507,6 +1508,89 @@ def _print_proposal(proposal: LinkProposal) -> None:
     console.print(proposal.command())
 
 
+def _print_declaration(declaration: DeclaredLink) -> None:
+    """Show what an adapter read, line by line, before anything is proposed.
+
+    Every feature carries the declaration it came from, because that is the whole
+    difference between importing a mapping and guessing one: a reviewer checks
+    these lines against a file they already maintain, in one pass, without
+    opening DataHub.
+    """
+    console.print(f"[bold]Read from the {declaration.adapter} declaration:[/bold]")
+    for reason in declaration.reasons:
+        colour = "yellow" if "not read" in reason or "pass --label-column" in reason else "dim"
+        console.print(f"  [{colour}]{reason}[/{colour}]")
+    console.print(f"\n[bold]Features {declaration.name!r} declares:[/bold]")
+    for feature in declaration.features:
+        # The arrow is the interesting half: a feature whose name differs from
+        # its column is exactly what a hand-typed link gets wrong.
+        console.print(
+            f"  {feature.name} <- {feature.source_column}  [dim]({feature.declared_in})[/dim]"
+        )
+    console.print("")
+
+
+def _declared_link(
+    conn: DataHubConnection,
+    model_urn: str,
+    *,
+    adapter: str,
+    repo: Path,
+    select: str | None,
+    features: str | None,
+    label_table: str | None,
+) -> LinkProposal:
+    """Read a declaration and turn it into a proposal for the human to confirm.
+
+    Args:
+        conn: An open connection.
+        model_urn: The model being linked.
+        adapter: The ``--from`` value.
+        repo: The declaration root.
+        select: Which declaration inside it, when there is more than one.
+        features: A ``--features`` the user typed, which always wins over the
+            table the declaration names: the declaration knows the warehouse, the
+            user knows their catalog, and only one of those two can be checked
+            here.
+        label_table: A ``--label-table`` the user typed, same precedence.
+
+    Returns:
+        The proposal.
+
+    Raises:
+        AdapterError: The declaration could not be read.
+        TableResolutionError: The table it names is not in the catalog.
+        LinkError: The declaration and the catalog disagree about the columns.
+    """
+    declaration = read_declaration(adapter, repo, select)
+    _print_declaration(declaration)
+
+    feature_urn = resolve_table(conn, features or declaration.source_table)
+
+    label_dataset_urn: str | None = None
+    if declaration.label_column is not None:
+        wanted = label_table or declaration.label_table
+        try:
+            label_dataset_urn = resolve_table(conn, wanted) if wanted else feature_urn
+        except TableResolutionError as exc:
+            # Not fatal: the features are the hard part and they resolved. The
+            # label is one argument a human can supply, and saying so beats
+            # discarding a proposal that is otherwise complete.
+            console.print(
+                f"[yellow]the declared label table did not resolve ({exc}), so the "
+                "label was not taken from the declaration; pass --label-column "
+                "(and --label-table).[/yellow]"
+            )
+
+    return declared_proposal(
+        conn,
+        model_urn,
+        declaration,
+        feature_dataset_urn=feature_urn,
+        label_dataset_urn=label_dataset_urn,
+    )
+
+
 def _link_all(*, dry_run: bool, named: tuple[object, ...]) -> None:
     """Re-apply every link the graph already records, for the post-ingestion step.
 
@@ -1622,6 +1706,30 @@ def link(
             help="Work the arguments out from the graph and show them for confirmation.",
         ),
     ] = False,
+    from_: Annotated[
+        str | None,
+        typer.Option(
+            "--from",
+            help="Read the link from a declaration instead of typing it: "
+            f"{', '.join(ADAPTERS)}. Needs --repo.",
+        ),
+    ] = None,
+    repo: Annotated[
+        Path | None,
+        typer.Option(
+            "--repo",
+            help="Where the declaration lives: a Feast feature repo, or a dbt "
+            "project (or its manifest.json). Read offline, never connected to.",
+        ),
+    ] = None,
+    select: Annotated[
+        str | None,
+        typer.Option(
+            "--select",
+            help="Which declaration to read, when the repo holds more than one "
+            "(a Feast feature service, a dbt semantic model).",
+        ),
+    ] = None,
     yes: Annotated[
         bool,
         typer.Option("--yes", help="Accept an inferred proposal without prompting."),
@@ -1642,6 +1750,12 @@ def link(
     This is the join, made from facts the training script already has: the table
     it read, the columns it used, and the column it predicted.
 
+    Where those facts are already declared somewhere, do not type them twice:
+    ``--from feast --repo ./feature_repo`` (or ``--from dbt --repo ./dbt_project``)
+    reads the declaration your team already maintains and proposes the link from
+    it, printing which declaration every line came from and writing nothing until
+    you say yes.
+
     Run it again after every ingestion of the model. DataHub's mlflow source
     upserts the whole ``mlModelProperties`` aspect, which drops the features this
     command attached (verified live, D-074), and a later scan will say so rather
@@ -1650,16 +1764,21 @@ def link(
     replay is just ``modelguard link --model <name>``.
     """
     if all_models:
-        if infer:
+        if infer or from_ is not None:
             # --all replays what link already recorded, which is a fact. --infer
-            # proposes something for a human to check. Combining them would mean
-            # writing an unreviewed guess to every model in the catalog at once.
+            # and --from each propose something for a human to check. Combining
+            # them would mean writing an unreviewed proposal to every model in
+            # the catalog at once, and one declaration cannot describe them all.
             console.print(
-                "[red]--all and --infer are incompatible: --all replays recorded "
-                "links, --infer proposes new ones for you to confirm.[/red]"
+                "[red]--all is incompatible with --infer and --from: --all replays "
+                "recorded links, the other two propose new ones for you to "
+                "confirm, one model at a time.[/red]"
             )
             raise typer.Exit(code=2)
-        _link_all(dry_run=dry_run, named=(model, features, label_table, label_column, exclude))
+        _link_all(
+            dry_run=dry_run,
+            named=(model, features, label_table, label_column, exclude, repo, select),
+        )
         return
 
     if model is None:
@@ -1686,16 +1805,51 @@ def link(
     # link is replayed regularly. Replaying it must not mean retyping it.
     previous = recorded_link(conn, model_urn)
 
+    if from_ is None and (repo is not None or select is not None):
+        console.print(
+            "[red]--repo and --select say where to read a declaration; --from says "
+            f"which reader. Add --from ({'|'.join(ADAPTERS)}).[/red]"
+        )
+        raise typer.Exit(code=2)
+
+    if infer and from_ is not None:
+        # Both propose, from different evidence. Running them together would mean
+        # deciding which one wins per field, which is a decision the user is
+        # better placed to make by running the one they trust.
+        console.print(
+            "[red]--infer and --from are incompatible: --infer reads the graph, "
+            "--from reads a declaration. Run whichever you trust for this model.[/red]"
+        )
+        raise typer.Exit(code=2)
+
     proposal: LinkProposal | None = None
-    if infer:
+    if from_ is not None:
+        if repo is None:
+            console.print(f"[red]--from {from_} needs --repo <path to the declaration>.[/red]")
+            raise typer.Exit(code=2)
+        try:
+            proposal = _declared_link(
+                conn,
+                model_urn,
+                adapter=from_,
+                repo=repo,
+                select=select,
+                features=features,
+                label_table=label_table,
+            )
+        except (AdapterError, TableResolutionError, LinkError) as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=2) from exc
+    elif infer:
         try:
             proposal = infer_link(conn, config, model_urn)
         except LinkError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(code=2) from exc
 
+    if proposal is not None:
         _print_proposal(proposal)
-        # An explicitly typed flag always wins: --infer proposes, it never
+        # An explicitly typed flag always wins: a proposal proposes, it never
         # overrules somebody who already knows the answer.
         features = features or proposal.feature_dataset_urn
         feature_urn = feature_urn or proposal.feature_dataset_urn
@@ -1711,9 +1865,14 @@ def link(
             raise typer.Exit(code=2)
 
         if label_column is None and proposal.label_column_urn is None:
+            source = (
+                f"The {from_} declaration names no label column"
+                if from_ is not None
+                else "Nothing in the graph names this model's label"
+            )
             console.print(
-                "[red]Nothing in the graph names this model's label, so the "
-                "proposal is incomplete. Rerun with --label-column <column>.[/red]"
+                f"[red]{source}, so the proposal is incomplete. Rerun with "
+                "--label-column <column>.[/red]"
             )
             raise typer.Exit(code=2)
 

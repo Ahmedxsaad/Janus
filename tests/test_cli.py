@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from datahub.metadata.schema_classes import (
@@ -25,6 +26,7 @@ from modelguard.cli import (
     WATCH_FAILURE_ESCALATION_THRESHOLD,
     TableResolutionError,
     WatchState,
+    _declared_link,
     _print_proposal,
     _watch_failure_message,
     _watch_once,
@@ -34,6 +36,7 @@ from modelguard.cli import (
 )
 from modelguard.client import ENV_GMS_TOKEN, DataHubConnection
 from modelguard.config import ScanConfig
+from modelguard.writeback.link import LinkError
 from modelguard.writeback.link_infer import LinkProposal
 from tests.conftest import (
     DEPLOYMENT_URN,
@@ -45,6 +48,7 @@ from tests.conftest import (
     emitted_about_the_graph,
     lineage_result,
     make_connection,
+    schema_metadata,
 )
 
 OTHER_TABLE = "urn:li:dataset:(urn:li:dataPlatform:bigquery,analytics.public.loans_raw,PROD)"
@@ -507,3 +511,114 @@ def test_the_crosswalk_prints_without_a_connection():
     assert result.exit_code == 0
     assert "not a conformity claim" in result.output
     assert "Target leakage" in result.output
+
+
+class TestLinkFromADeclaration:
+    """`link --from`: the arguments read out of a file the team already keeps.
+
+    The claim being tested is the one docs/plan/10 states as done-when: importing
+    the example Feast repo produces the link a human would have typed. So the
+    assertion is on the rendered command, character for character, rather than on
+    the fields it was assembled from.
+    """
+
+    FEATURES = (
+        "urn:li:dataset:(urn:li:dataPlatform:bigquery,warehouse.analytics.customer_features,PROD)"
+    )
+    LABELS = (
+        "urn:li:dataset:(urn:li:dataPlatform:bigquery,warehouse.analytics.customer_labels,PROD)"
+    )
+    REPO = Path(__file__).resolve().parent.parent / "examples" / "feature-repo" / "feature_repo"
+
+    def _conn(self, *, feature_columns: dict[str, str] | None = None) -> DataHubConnection:
+        graph = FakeGraph()
+        graph.set_aspect(
+            self.FEATURES,
+            schema_metadata(
+                feature_columns
+                or {
+                    "customer_id": "VARCHAR",
+                    "tenure_months": "INT",
+                    "monthly_charges": "FLOAT",
+                    "support_calls": "INT",
+                    "event_timestamp": "TIMESTAMP",
+                }
+            ),
+        )
+        graph.set_aspect(self.LABELS, schema_metadata({"customer_id": "VARCHAR", "churned": "INT"}))
+        return make_connection(graph, FakeClient(search_urns=[self.FEATURES, self.LABELS]))
+
+    def _read(self, conn: DataHubConnection) -> LinkProposal:
+        return _declared_link(
+            conn,
+            MODEL_URN,
+            adapter="feast",
+            repo=self.REPO,
+            select=None,
+            features=None,
+            label_table=None,
+        )
+
+    def test_the_repo_produces_the_command_a_human_would_have_typed(self):
+        command = self._read(self._conn()).command()
+
+        assert command == (
+            "modelguard link \\\n"
+            "  --model credit_risk_v3 \\\n"
+            "  --features warehouse.analytics.customer_features \\\n"
+            "  --label-table warehouse.analytics.customer_labels \\\n"
+            "  --label-column churned \\\n"
+            "  --exclude customer_id \\\n"
+            "  --exclude event_timestamp"
+        )
+
+    def test_a_column_the_declaration_lost_track_of_stops_the_link(self):
+        """The declaration and the catalog disagreeing is fatal, not filtered.
+
+        Here the warehouse renamed tenure_months. Proposing the rest would leave
+        that feature undeclared and the next scan would call the model clean
+        without ever having looked at it.
+        """
+        conn = self._conn(
+            feature_columns={
+                "customer_id": "VARCHAR",
+                "tenure": "INT",
+                "monthly_charges": "FLOAT",
+                "support_calls": "INT",
+            }
+        )
+
+        with pytest.raises(LinkError) as caught:
+            self._read(conn)
+
+        assert "tenure_months" in str(caught.value)
+
+
+def test_from_without_repo_says_which_argument_is_missing():
+    result = _invoke("link", "--model", "credit_risk_v3", "--from", "feast")
+
+    assert result.exit_code == 2
+    assert "--repo" in result.output
+
+
+def test_repo_without_from_names_the_readers_that_exist():
+    result = _invoke("link", "--model", "credit_risk_v3", "--repo", ".")
+
+    assert result.exit_code == 2
+    assert "feast" in result.output
+
+
+def test_infer_and_from_are_refused_rather_than_merged():
+    result = _invoke(
+        "link", "--model", "credit_risk_v3", "--from", "feast", "--repo", ".", "--infer"
+    )
+
+    assert result.exit_code == 2
+    assert "incompatible" in result.output
+
+
+def test_all_refuses_a_declaration_it_could_only_apply_to_one_model():
+    result = _invoke("link", "--all", "--from", "feast", "--repo", ".")
+
+    assert result.exit_code == 2
+    assert "--all" in result.output

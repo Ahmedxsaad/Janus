@@ -123,10 +123,24 @@ mcp = [
 pet = [
     "modelguard-argos==0.1.0; platform_system != 'Linux'",
 ]
+# `modelguard link --from feast`: reading the join out of a Feast feature repo
+# (modelguard/adapters/feast.py). The adapter parses the repo's own declarations
+# through feast itself, offline, so feast has to be importable; it is an extra
+# because nothing else in the product needs it, and the dbt adapter beside it
+# needs no dependency at all (a manifest is JSON).
+#
+# The floor is the version the adapter was verified against, not the oldest that
+# might work: label views, which are the only place a Feast repo names the column
+# a model predicts, are recent. Below it the adapter still reads features and
+# reports that it found no label.
+feast = [
+    "feast>=0.65,<1",
+]
 dev = [
     # The strict mypy hook scans every package module, including the optional
     # approval agent and MCP server. Keep the dev environment complete so a
     # clean clone does not silently skip its tests or fail type checking.
+    "feast>=0.65,<1",
     "langgraph==1.2.9",
     "mcp==1.28.1",
     "mypy==2.2.0",
