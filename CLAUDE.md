@@ -15,7 +15,7 @@ Source of truth for what we build:
 
 | Path | What it is |
 |---|---|
-| modelguard/ | The Python package: seed/, detect/, writeback/, agent/, argos/, client, CLI |
+| modelguard/ | The Python package: seed/, detect/, writeback/, agent/, adapters/, argos/, client, CLI |
 | argos/ | The desktop window: a Tauri v2 binary and its text sprite art, driven by the event stream modelguard/argos/ writes to its stdin |
 | skill/ | OSS contribution: the datahub-ml-guard skill |
 | mcp_ext/ | OSS contribution (stretch): MCP raise_incident mutation tool |
@@ -130,3 +130,4 @@ Source of truth for what we build:
 | 2026-08-03 | Claude (for Ghassen Naouar) | assets/ joins the repository map: the README's animation, generated from the same sprite file the window and the icon read (D-103) |
 | 2026-08-03 | Claude (for Ghassen Naouar) | site/ joins the repository map: the static documentation page for the shipped product (D-104) |
 | 2026-08-03 | Claude (for Ghassen Naouar) | argos/ joins the repository map: the Tauri v2 desktop window (Argos) and its sprite art, driven by the JSON event stream modelguard/argos/ produces (D-098) |
+| 2026-08-04 | Claude (for Ghassen Naouar) | modelguard/adapters/ joins the repository map: read-only, offline readers that import the model-to-column join out of a Feast repo or a dbt semantic model, behind `link --from` (D-112, T-05/T-06) |

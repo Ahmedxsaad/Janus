@@ -257,6 +257,47 @@ the same line that keeps the link alive (see below):
 mlflow.log_param("modelguard_features", "analytics.customer_features")
 ```
 
+### If your stack already declares the mapping, do not type it twice
+
+A Feast repo and a dbt semantic model already say which column each feature is
+read from, in a file your training pipeline reads and your team keeps correct.
+`link` imports it instead of asking:
+
+```bash
+modelguard link --model churn_model --from feast --repo ./feature_repo
+modelguard link --model churn_model --from dbt   --repo ./churn_analytics
+```
+
+The readers are offline and read-only: they parse the declaration on disk and
+never connect to Feast, to dbt, or to a warehouse. Feast needs the package
+(`pip install "modelguard-datahub[feast]"`); dbt needs nothing at all, because a
+manifest is JSON, so this works against a `manifest.json` somebody sent you.
+
+The output is the same proposal `--infer` prints, with the declaration each line
+came from, and it writes nothing until you answer:
+
+```
+Read from the feast declaration:
+  read 'churn_model_v1' from the Feast repo at ./feature_repo
+  feature table: warehouse.analytics.customer_features, the batch source of 'customer_features'
+  features: 3 declared, of which 1 name a warehouse column different from the feature (from the source's field_mapping)
+  label: churned of warehouse.analytics.customer_labels, from label view 'churn_label'
+  not features: customer_id, event_timestamp (entity join keys and event timestamps), so they are excluded from the link
+
+Features 'churn_model_v1' declares:
+  tenure <- tenure_months  (feature view 'customer_features')
+  monthly_charges <- monthly_charges  (feature view 'customer_features')
+  support_calls <- support_calls  (feature view 'customer_features')
+```
+
+That first line is the case a name match gets wrong: the feature is `tenure` and
+the column is `tenure_months`, and only the declaration knows. Where a
+declaration is silent it says so rather than guessing (a dbt semantic model
+names no label, so `--label-column` stays yours to give), and where it names a
+column the table does not have, the import stops instead of linking the rest:
+a half-declared model is one whose unchecked columns nobody would ever hear
+about. `--select` picks between several declarations in one repo.
+
 Prefer to type it, or the graph is too quiet to infer from? It is one call from
 the script that trains the model:
 
@@ -305,6 +346,28 @@ check, the missing metadata, and how to supply it:
 
 Already have a glossary term for labels? Point `MODELGUARD_LABEL_TERM_URN` at it
 in `.env` and the detector honors yours instead of creating one.
+
+### Before you link anything: the table-level answer
+
+Until a model is linked, none of the column-level checks can run on it. Rather
+than only listing what it could not do, a scan says what it *can* see about the
+tables that model is recorded as training on: whether one is past its freshness
+SLA, marked deprecated by its owners, or holds a column your organization
+classified. It is a distinct finding type, it never outranks a column-level
+finding, and it says out loud what it cannot see:
+
+> Checked at table level only (churn_model declares no features): the table this
+> model trains on is past its freshness SLA. Which of the model's features carry
+> the stale values is not knowable without a column-level link. Asked which
+> feature carries it, table-level reasoning scores a measured precision of 0.25
+> (benchmarks/RESULTS.md, table-level baseline), which is why this finding names
+> the table and not a feature. Run `modelguard link` to get the column-level
+> answer instead.
+
+That 0.25 is measured, not asserted: it is the table-level baseline scored in
+[benchmarks/RESULTS.md](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md),
+and the benchmark checks the figure the tool quotes against the one it measures
+on every run.
 
 ### The two checks that read the governance graph
 

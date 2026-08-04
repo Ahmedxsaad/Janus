@@ -16,6 +16,125 @@ Entry template:
 
 ---
 
+## D-113: A model nobody linked gets the weaker answer, labelled as weaker (2026-08-04)
+- Decided by: Ghassen Naouar (asked for phase 3 of the depth plan), implemented by
+  Claude. Closes T-07.
+- Decision: a scan of a model that declares no usable feature link now runs one more
+  detector, `detect/degraded.py`, which reports what is knowable about the *tables*
+  that model trains on: stale, deprecated, or holding a column the organization
+  classified. It is its own `FindingType.TABLE_LEVEL_RISK`, its severity is capped at
+  MEDIUM, it contributes nothing to the trust score, and every surface it reaches
+  prints the mode, its limitation, and the mode's measured precision.
+- Options considered:
+  1. Leave the silence. It is honest: `coverage.py` already says which checks could
+     not run and why. Rejected because it is also worth nothing on the first day
+     somebody points this at their own catalog, which is where adoption is decided
+     (09 section 1.0: every new detector multiplies a coverage number near zero).
+  2. Run the table-level check for every model, alongside the column-level ones.
+     Rejected, and this is the failure the benchmark's negative trial now guards:
+     a maybe printed beside a proof gives the reader no way to tell them apart, so
+     the whole report inherits the weaker mode's false-positive rate.
+  3. Report table-level *features* as candidates, the way `benchmarks/baselines.py`
+     does when it is scored as an opposing approach. Rejected: without a link, the
+     model's features are not known at all, so the candidate list would be the
+     table's columns dressed up as the model's inputs.
+- Why: the two states a stranger's catalog is in are "never linked" and "an ingest
+  dropped the link" (D-074), and in both of them the tables are still readable. The
+  product can say something true about those tables without pretending it can name
+  the feature, and saying it with the mode attached is the difference between an
+  honest weaker answer and a false alarm.
+- Result:
+  - `modelguard/detect/degraded.py`, gated on `has_column_link`: features alone are
+    not a link, since a feature carrying no source column is one the column-level
+    walk skips. Tables come from the training runs' recorded inputs and from
+    dataset-to-model lineage, unioned rather than ranked: nothing here has to pick
+    one table.
+  - `TableLevelRiskFinding` in `models.py`, with a per-risk limitation rather than
+    one blanket caveat. A deprecation *is* exact at table level (the deadline is on
+    the table); a stale table's reach into the model is not. Saying the same thing
+    about both would understate one and overstate the other.
+  - The precision the user reads is quoted with the question it answers attached.
+    09's illustrative wording ("this mode found 4 candidate features ... three of
+    those four are expected to be wrong") does not fit a finding that names no
+    feature, so the sentence says instead that table-level reasoning *asked which
+    feature carries it* scores 0.25, which is why this finding names the table. The
+    plan is corrected in place per docs/CLAUDE.md rule 1.
+  - `config.TABLE_LEVEL_PRECISION`, not overridable from the environment (it is a
+    fact about the code, like `SCORING_VERSION`), and `run_bench` now compares it
+    against the table-level baseline it measures on every run and prints both in
+    RESULTS.md. A product quoting its own accuracy should not be able to drift from
+    the measurement without the measurement saying so.
+  - It never reaches the trust score. `trust_inputs_from_findings` skips it
+    explicitly, asserted on the inputs and not only on the total: the finding's
+    severity sits below the band cap today, so a version that did roll it in would
+    score identically and start capping bands the moment somebody raised the ceiling.
+  - `inventory` still counts such a model as unlinked and still prints the link
+    advice, which the plain "has findings" branch would otherwise have swallowed.
+  - Benchmark: a positive and a negative trial, both boundary trials, differing only
+    in whether the model is linked. `plant_delinked_model` reproduces what an mlflow
+    ingest does rather than inventing a fault. One ordering correction came out of
+    the first run: those two trials are the only ones that rewrite
+    `mlModelProperties.mlFeatures`, which is the last edge of the blast-radius
+    traversal measured straight after the matrix, and run last they left that walk
+    reading a stale index and reporting 0 of 1 models. Waiting for the model to
+    reappear would have been waiting for the answer (rule 7), so the family moved
+    into the middle of the matrix instead. Reads per model went 49 to 51, flat
+    across the scale sweep as before.
+  - Live run: 25 trials, all correct; the degraded row scores 1.00/1.00 with 2
+    boundary trials; three integration tests pass, including the idempotency rerun.
+
+## D-112: Import the link from the file that already declares it (2026-08-04)
+- Decided by: Ghassen Naouar (asked for phase 3 of the depth plan), implemented by
+  Claude. Closes T-05 and T-06.
+- Decision: a new read-only, offline package `modelguard/adapters/` reads the
+  feature-to-column join out of declarations teams already maintain, and
+  `modelguard link --from feast|dbt --repo <path>` proposes it exactly the way
+  `--infer` proposes: reasons first, the declaration each line came from, and
+  nothing written until a human answers.
+- Options considered:
+  1. Keep asking for the four arguments. Rejected: F10/F11 rate the typing step the
+     adoption cliff, and on the stacks in scope the mapping already exists, is
+     already correct, and is already maintained.
+  2. Have the adapters write the link themselves. Rejected: an import is still a
+     proposal about somebody else's catalog. The confirmation step is the product.
+  3. One adapter reading both formats. Rejected: they share nothing but the output
+     type, and one of them needs an optional dependency while the other needs none.
+- Why: a declaration a team's own training pipeline reads is better evidence than
+  anything this project can infer, and importing it costs a file parse. It also
+  fixes the case a name match gets wrong: Feast's `field_mapping` and dbt's `expr`
+  both exist precisely because the feature and the column have different names.
+- Result:
+  - `adapters/__init__.py` holds the shared type (`DeclaredLink`, with a
+    `DeclaredFeature` per line carrying where it was declared) and the two pure
+    functions that join a declaration to a real schema: `excluded_columns` and
+    `missing_columns`. `link_infer.declared_proposal` does the graph half and returns
+    the same `LinkProposal` `--infer` returns, so everything downstream of the
+    confirmation is one code path.
+  - A declared column the resolved table does not have is fatal, never filtered.
+    Linking the intersection would leave the undeclared columns unchecked while
+    reporting success, which is the silent half-link this whole feature exists to
+    remove.
+  - Feast (`feast>=0.65,<1`, a new extra, also in `dev`): `parse_repo` reads the
+    repo's own declarations with no registry and no store. Three things the build
+    corrected: `parse_repo` derives module names relative to the working directory,
+    so a repo anywhere else fails twice over and the adapter runs it inside the repo
+    the way Feast's own CLI does; a `FeatureService` is what names the set one model
+    trains on, so it is the unit of selection; and a Feast repo *can* declare the
+    label, through a label view, which is the one argument no inference reaches.
+  - dbt: no dependency at all. `target/manifest.json` is JSON, so the adapter reads
+    it with the standard library and works against a manifest somebody sent you.
+    `[confirm]` resolved by parsing a project with dbt-core 1.12.0 (manifest schema
+    v12) and reading the artifact: `semantic_models` keyed by unique id, each with
+    `node_relation`, `entities`, `dimensions`, `measures`. A measure whose `expr` is
+    an expression rather than a column is reported as unread rather than parsed.
+  - Neither format declares everything. Feast without a label view, and dbt at all,
+    name no label; both say so in a reason line and `--label-column` stays required.
+    An adapter never invents the argument it could not read.
+  - `examples/feature-repo/` is the fixture and the demo, and the test asserts the
+    claim the plan asks for: importing it produces the command a human would have
+    typed, character for character, including the two `--exclude` flags that follow
+    from the entity key and the event timestamp not being features.
+
 ## D-111: A scan is an entity in the graph it guards, not only a log line (2026-08-04)
 - Decided by: Ghassen Naouar (asked for phase 2 of the depth plan), implemented by
   Claude. Closes T-04, and the half of F4 that let a mid-scan failure be silent.

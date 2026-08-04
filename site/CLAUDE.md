@@ -34,3 +34,4 @@ the art out of `../argos/`, and `fetch` is blocked under `file://`.
 |---|---|---|
 | 2026-08-03 | Claude (for Ghassen Naouar) | Initial version: the documentation page, its beats, and the rule against a second copy of the art (D-104) |
 | 2026-08-04 | Claude (for Ghassen Naouar) | The NIST AI RMF crosswalk section lands. The page holds the only hand-written copy of a table the code generates, so tests/test_site.py asserts it carries a row for every detector: a check added to ModelGuard cannot go missing here (D-109, T-02) |
+| 2026-08-04 | Claude (for Ghassen Naouar) | The crosswalk table gains the degraded mode's row, which the page cannot generate and a test asserts it carries: a detector that exists in the CLI's generated crosswalk and not on the page is the gap the test was written for (D-113, T-07) |
