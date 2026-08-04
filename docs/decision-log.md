@@ -16,6 +16,41 @@ Entry template:
 
 ---
 
+## D-107: The depth axes get a task-numbered build order, not just a doc (2026-08-04)
+- Decided by: Ghassen Naouar (asked for the implementation plan as a checklist),
+  written by Claude.
+- Decision: `docs/plan/10-depth-implementation.md`, 21 tasks (T-01 to T-21) across
+  eight phases, each task carrying the files it touches and a done-when. Ordered
+  by dependency rather than by axis, so an axis is split wherever its pieces
+  unblock each other.
+- Options considered:
+  - A checklist inside 09 itself. Rejected: 09 is the argument (what earns a place
+    and what does not), and a build order edited on every landed task would churn
+    the doc that has to stay stable to be cited.
+  - One checklist per axis. Rejected for the same reason the axes were not split
+    in 09: the real order interleaves them. The evidence work (T-08) has to precede
+    the negative trials (T-09) because the mutation survivors *are* the list of
+    missing trials, and proxy detection (T-11) reuses the common-ancestor scenario
+    T-09 builds. An axis-ordered checklist would have hidden both.
+  - Effort estimates per task. Kept only in 09; repeating them here would let the
+    two drift.
+- Why: three things needed to be written down once rather than thirty times. The
+  standing definition of done collects the obligations every task inherits from
+  the repo's own rules (mutation-check per tests rule 6, `.env` parity per root
+  rule 6e, regenerated benchmark numbers per benchmarks rule 4, a decision-log
+  entry, a CLAUDE.md row), because those are what actually make a task done and
+  they are spread across five files. The phase gates stop a half-finished phase
+  from being carried into the next one. The cross-cutting section maps five open
+  F-numbers from 07 onto the tasks that close them, with the instruction to update
+  07 in place when they do: a finding that is fixed but still listed as open is
+  the plan rotting, which docs/CLAUDE.md rule 1 exists to prevent.
+- Result: `docs/plan/10-depth-implementation.md`. Two deviations from 09's
+  suggested order, both recorded in the file: narrative faithfulness (09 section
+  2.4) moves into the evidence phase because it is benchmark work and belongs with
+  the other evidence items, and continuous reconciliation (09 section 1.2) is
+  marked blocked on the MCL consumer rather than sequenced as if it were free.
+  Nothing is built by this entry.
+
 ## D-106: The depth axes get a plan doc before any of them get code (2026-08-04)
 - Decided by: Ghassen Naouar (asked how the solution generalizes and what to add
   on evaluation, observability, xAI and AI governance, deeply rather than
