@@ -28,7 +28,11 @@ from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import freshness_signal
 from modelguard.detect.column_marks import WalkResult, marked_ancestor
-from modelguard.detect.governance import model_input_datasets, sensitive_index
+from modelguard.detect.governance import (
+    model_input_datasets,
+    protected_attribute_index,
+    sensitive_index,
+)
 from modelguard.detect.leakage import feature_source_column, label_index
 from modelguard.detect.schema_drift import schema_drift_candidate_resources
 from modelguard.models import (
@@ -36,6 +40,7 @@ from modelguard.models import (
     Finding,
     FreshnessFinding,
     LeakageFinding,
+    ProxyCandidateFinding,
     SchemaDriftFinding,
     SensitiveSourceFinding,
 )
@@ -317,6 +322,49 @@ def _sensitive_gap(
     return None
 
 
+def _proxy_gap(
+    conn: DataHubConnection,
+    config: ScanConfig,
+    model_urn: str,
+    properties: MLModelPropertiesClass | None,
+) -> Unevaluated | None:
+    """Whether the proxy check had a protected-attribute classification to look for.
+
+    Unset is the common case and it is reported, never passed over: a model
+    nobody checked for proxying reads exactly like one that was checked and
+    found clean, and of the two only the second is worth anything (T-11, and
+    the same posture the sensitive-source gap takes).
+    """
+
+    def gap(reason: str, remedy: str) -> Unevaluated:
+        return Unevaluated(
+            check="proxy candidate", target_urn=model_urn, reason=reason, remedy=remedy
+        )
+
+    if not protected_attribute_index(conn, config).configured:
+        return gap(
+            "no protected attribute is configured, so no column in this catalog counts "
+            "as one and there is nothing for the check to compare a feature against",
+            "Set MODELGUARD_PROTECTED_ATTRIBUTE_TERM_URNS or "
+            "MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS to the terms or tags your "
+            "organization already marks protected attributes with (comma-separated "
+            "URNs). Either one alone is enough.",
+        )
+
+    if properties is None or not properties.mlFeatures:
+        if was_linked(conn, model_urn):
+            return gap(*_DELINKED)
+        return gap(
+            "the model declares no features (mlModelProperties.mlFeatures is empty), "
+            "so there is no feature whose ancestry could be compared against a "
+            "protected attribute's",
+            "Declare them with `modelguard link --model ... --features <table> "
+            "--label-column <column>`, from the script that trains the model.",
+        )
+
+    return None
+
+
 def _deprecated_input_gap(
     conn: DataHubConnection,
     model_urn: str,
@@ -391,9 +439,10 @@ def coverage_gaps(
         needs_drift = SchemaDriftFinding not in found
         needs_sensitive = SensitiveSourceFinding not in found
         needs_deprecation = DeprecatedInputFinding not in found
+        needs_proxy = ProxyCandidateFinding not in found
         properties = (
             conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
-            if needs_leakage or needs_drift or needs_sensitive or needs_deprecation
+            if needs_leakage or needs_drift or needs_sensitive or needs_deprecation or needs_proxy
             else None
         )
         if needs_leakage:
@@ -404,5 +453,7 @@ def coverage_gaps(
             gaps.append(_sensitive_gap(conn, config, model_urn, properties))
         if needs_deprecation:
             gaps.append(_deprecated_input_gap(conn, model_urn, properties))
+        if needs_proxy:
+            gaps.append(_proxy_gap(conn, config, model_urn, properties))
 
     return tuple(gap for gap in gaps if gap is not None)

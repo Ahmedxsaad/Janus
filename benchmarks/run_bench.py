@@ -49,6 +49,7 @@ from benchmarks.counterfactuals import (
     measure_counterfactuals,
     measure_multi_path,
 )
+from benchmarks.faithfulness import FaithfulnessReport, check_template_narratives
 from benchmarks.inject import (
     Trial,
     await_precondition,
@@ -494,6 +495,89 @@ def _degraded_precision_lines(approaches: Sequence[ApproachScore]) -> list[str]:
     return lines
 
 
+def measure_faithfulness(
+    conn: DataHubConnection,
+    config: ScanConfig,
+    trials: Sequence[Trial],
+) -> FaithfulnessReport:
+    """Narrate what the graph currently holds, and check the prose against it (T-10).
+
+    Findings come from the live graph rather than a fixture, like every other
+    measurement here (benchmarks/CLAUDE.md rule 6): the point is prose about
+    facts a real GMS served. Read-only, and it plants nothing: whatever state
+    the trials above left behind is a fine subject, because the check is about
+    the relationship between a finding and its prose, not about which finding.
+
+    Only the template narrator is exercised unless an LLM is configured, and
+    that is stated in the report rather than papered over. The template is the
+    path every offline test and every CI run takes, and it is the stricter half
+    to fail: its prose is written in this repo, so a violation is this project
+    quoting a figure it never measured.
+    """
+    now_ms = int(time.time() * 1000)
+    families = {trial.family for trial in trials}
+    findings = [
+        finding
+        for family in sorted(families, key=str)
+        for finding in findings_for(conn, config, family, now_ms)
+    ]
+    return check_template_narratives(findings, resolves=conn.graph.exists)
+
+
+def _faithfulness_lines(faithfulness: FaithfulnessReport | None) -> list[str]:
+    """Report whether the generated prose said only what the facts support (T-10).
+
+    Distinct from quality, which is still not scored and should not be: a rubric
+    is soft evidence that varies by provider (09 section 2.4). This is a
+    property, checked the same way for every provider and for the template.
+    """
+    if faithfulness is None or faithfulness.rate is None:
+        return []
+
+    per_provider = faithfulness.by_provider()
+    lines = [
+        "",
+        "## Narrative faithfulness (T-10)",
+        "",
+        "Not narrative *quality*, which stays unscored: a readability rubric is soft",
+        "evidence that varies by provider, and it would sit badly beside a project whose",
+        "decisions are deterministic. This is the property that is actually checkable.",
+        "Every figure in generated prose must appear in the facts the narrator was shown,",
+        "and every URN in it must resolve in the graph. A model that divides a 30-hour lag",
+        'by a 6-hour SLA and writes "five times" has produced a figure nobody measured,',
+        "and a reader cannot tell it from one that was.",
+        "",
+        f"- Narratives checked: {len(faithfulness.checks)}",
+        f"- Figures checked: {faithfulness.numbers_checked}",
+        f"- URNs checked: {faithfulness.urns_checked}",
+        f"- Faithful: **{metrics.format_rate(faithfulness.rate)}**",
+        "",
+        "| Wrote the prose | Narratives | Figures | URNs | Faithful |",
+        "|---|---|---|---|---|",
+    ]
+    for provider, checks in per_provider.items():
+        rate = sum(1 for check in checks if check.faithful) / len(checks)
+        label = "template (no LLM)" if provider == "none" else provider
+        lines.append(
+            f"| {label} | {len(checks)} | {sum(c.numbers_checked for c in checks)} | "
+            f"{sum(c.urns_checked for c in checks)} | {metrics.format_rate(rate)} |"
+        )
+
+    if faithfulness.violations:
+        lines += ["", "Every unsupported claim this run produced:", ""]
+        lines += [f"- {violation.why}" for violation in faithfulness.violations]
+    else:
+        lines += [
+            "",
+            "A rate of 1.00 is worth reading only beside the figure count above: prose",
+            "quoting no number at all is faithful by this measure and says nothing.",
+            "`tests/benchmarks/test_faithfulness.py` holds the check that the checker",
+            "itself rejects invented, derived and rounded figures, so a green row here",
+            "is a measurement rather than a check that cannot fail.",
+        ]
+    return lines
+
+
 def render_results(
     outcomes: Sequence[TrialOutcome],
     blast: BlastRadiusCheck | None,
@@ -505,6 +589,7 @@ def render_results(
     scale: Sequence[ScaleMeasurement] = (),
     counterfactuals: Sequence[CounterfactualCheck] = (),
     multi_path: MultiPathCheck | None = None,
+    faithfulness: FaithfulnessReport | None = None,
 ) -> str:
     """Render RESULTS.md. Pure: every number comes from the arguments."""
     grouped = _by_family(outcomes)
@@ -649,6 +734,8 @@ def render_results(
         ]
         lines += _degraded_precision_lines(approaches)
 
+    lines += _faithfulness_lines(faithfulness)
+
     lines += [
         "",
         "## Latency",
@@ -754,8 +841,14 @@ def render_results(
         "- No Great Expectations, Deequ, Evidently or NannyML *process* was run. The",
         "  approaches compared above are implementations written here, so the table",
         "  measures what an approach can see, never a named product's behaviour.",
-        "- Narrative quality is not scored. Detection is LLM-free by design, so these",
-        "  numbers are unchanged with or without a model configured.",
+        "- Narrative *quality* is not scored, deliberately (09 section 2.4). Narrative",
+        "  *faithfulness* is, in its own section above: whether the prose quotes only",
+        "  figures the narrator was actually shown. Detection is LLM-free by design, so",
+        "  the detection numbers are unchanged with or without a model configured.",
+        "- The faithfulness section measures the providers this run could reach. With no",
+        "  API key configured, that is the template narrator alone, which is the path",
+        "  every offline test and every CI run takes. A provider row appears only when a",
+        "  credential for it was present, and its absence is not a passing grade.",
         "",
     ]
     return "\n".join(lines)
@@ -804,6 +897,9 @@ def main() -> None:
     print("The multi-path case: cutting one derivation of two...")
     multi_path = measure_multi_path(conn, config, trials)
 
+    print("Narrative faithfulness: does the prose quote only measured figures...")
+    faithfulness = measure_faithfulness(conn, config, trials)
+
     # Scale goes last, and the reason is a measured one rather than a preference.
     # It creates and then hard-deletes fifty models, and the index churn behind
     # that pushed the counterfactual measurement's wait for a refreshed table past
@@ -827,6 +923,7 @@ def main() -> None:
         scale=scale,
         counterfactuals=counterfactuals,
         multi_path=multi_path,
+        faithfulness=faithfulness,
     )
     args.out.write_text(report)
     print(f"\nWrote {args.out}")

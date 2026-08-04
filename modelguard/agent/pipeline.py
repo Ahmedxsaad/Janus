@@ -58,6 +58,7 @@ from modelguard.detect.degraded import table_level_findings
 from modelguard.detect.governance import (
     deprecated_input_findings,
     model_input_datasets,
+    proxy_candidate_findings,
     sensitive_index,
     sensitive_source_findings,
 )
@@ -522,6 +523,7 @@ def _detect(
         findings.extend(leakage_findings(conn, model_urn, config))
         findings.extend(schema_drift_findings(conn, model_urn, config))
         findings.extend(sensitive_source_findings(conn, model_urn, config))
+        findings.extend(proxy_candidate_findings(conn, model_urn, config))
         findings.extend(deprecated_input_findings(conn, model_urn, config))
         # Last, and it returns nothing at all unless the four above had no column
         # link to read. The degraded mode is what a scan can say instead of

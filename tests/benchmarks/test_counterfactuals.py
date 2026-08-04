@@ -17,6 +17,7 @@ from tests.conftest import (
     make_deprecated_input_finding,
     make_finding,
     make_leakage_finding,
+    make_proxy_candidate_finding,
     make_schema_drift_finding,
     make_sensitive_source_finding,
     make_table_level_finding,
@@ -32,6 +33,7 @@ _FINDINGS: dict[FindingType, Finding] = {
     FindingType.INPUT_SCHEMA_DRIFT: make_schema_drift_finding(),
     FindingType.SENSITIVE_SOURCE: make_sensitive_source_finding(),
     FindingType.DEPRECATED_INPUT: make_deprecated_input_finding(),
+    FindingType.PROXY_CANDIDATE: make_proxy_candidate_finding(),
     FindingType.TABLE_LEVEL_RISK: make_table_level_finding(),
 }
 

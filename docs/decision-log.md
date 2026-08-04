@@ -16,6 +16,82 @@ Entry template:
 
 ---
 
+## D-117: T-11, proxy attributes as candidates rather than accusations (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: a sixth detector, `proxy_candidate_findings`, looks for a **fork**
+  rather than a chain: a model feature and a column classified a protected
+  attribute both descending from one ancestor within `proxy_max_hops`, with
+  neither descending from the other. Configured by
+  `MODELGUARD_PROTECTED_ATTRIBUTE_TERM_URNS` / `..._TAG_URNS`, no default and
+  no fallback (root rule 6a); unset reports not-evaluated, never clean.
+- Options considered:
+  1. Extend the existing sensitive-source detector to cover it. Rejected: the
+     two make claims of different strength. P5 proves a derivation and quotes
+     the column path; this establishes a structural coincidence. Merging them
+     would let the weaker claim inherit the stronger one's credibility, and a
+     single config key for both would report every PII column as a proxy
+     candidate.
+  2. Reuse `leakage_max_hops` for the walk. Rejected, and the asymmetry is the
+     point: a leak four joins back is still a leak, but a *shared ancestor*
+     four joins back is most of a warehouse, because everything descends from
+     the same few raw tables eventually. `proxy_max_hops` defaults to 3.
+- Why: 09 section 5.1 calls this the most novel item in the plan, and the
+  structural claim is the moat: fairness tooling needs the data and the
+  predictions, this needs neither and runs before the model is trained.
+- Result: what the finding is *allowed to say* was the design, not an
+  afterthought. Every surface says candidate for human review and never proxy,
+  bias, or discrimination; severity is capped at MEDIUM and does **not**
+  escalate for a live model, which is unique among the detectors here (a maybe
+  that outranks a proof sends triage to the wrong finding); it contributes
+  nothing to the trust score, by the T-07 precedent; and its first remedy is
+  `RemedyKind.REVIEW`, which has deliberately no benchmark applier, because a
+  tool that could mechanically perform "decide this is not a proxy" would be
+  making the decision. Barocas and Selbst (2016) added to resources.md with
+  what it changed. Verified live: the fork fires at MEDIUM, both negatives
+  (direct descent read as P5's finding, and the hop cap at 0) stay silent, and
+  cutting the shared ancestry clears it while the classified column and its tag
+  stay in place. Rule 6 earned its keep twice here: the first
+  direct-descent test passed against a detector with the exclusion deleted
+  (it never reached the guard), and the first nearest-ancestor test passed
+  against keep-first because the fixture's alphabetically-first ancestor was
+  also the nearest. Both rewritten until the mutation failed them.
+
+## D-118: T-10, faithfulness is measurable where quality is not (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: `benchmarks/faithfulness.py` checks generated prose against the
+  facts its narrator was shown: every figure in the prose must appear in those
+  facts, and every URN must resolve in the graph. Reported in RESULTS.md as a
+  rate beside the count of figures actually checked.
+- Options considered:
+  1. Ground against `Finding.evidence`, which is what 10's task text says.
+     **Corrected in place per docs/CLAUDE.md rule 1**: the prompt shows
+     `evidence` *plus* `_evidence_detail` (a model's hop count, how many of its
+     features are at risk), so a checker grounded on the mapping alone reports a
+     correctly-quoted hop count as a hallucination. `narrate.grounding_facts`
+     is now the one source of truth for "what the model was allowed to speak
+     from", used by the prompt and the checker, so the two cannot drift.
+  2. An LLM-as-judge readability rubric. Kept out of the primary slot, per 09
+     section 7: soft evidence that varies by provider sits badly beside a
+     project whose decisions are deterministic. Quality stays unscored and
+     RESULTS.md says so.
+- Why: "narrative quality is not scored" was doing double duty as a disclosure
+  and as an excuse. Faithfulness is a property rather than a judgement, and
+  agent/CLAUDE.md rule 5 has claimed this self-check since Phase 1 without
+  anything measuring it.
+- Result: the check is numeric rather than textual, which matters: the evidence
+  renders a lag as `30.0` and prose writing "30 hours" has quoted it exactly,
+  where a substring match would also accept `3`. Identifiers are excluded on
+  both sides by the same rule, so `credit_risk_v3` yields no figure and a model
+  whose version is in its own name is not flagged forever. All six template
+  narrators pass at 1.00 over 6 figures; the checker is shown to reject
+  invented, derived ("five times the SLA"), and rounded figures, and an
+  unresolvable URN, so the green rate is a measurement and not a check that
+  cannot fail. **The plan's "runs against every provider in CI" is not what
+  shipped and RESULTS.md says so**: CI has no API key, so the template
+  narrator is what is always measured, a provider row appears only when a
+  credential for it was present, and its absence is explicitly not a passing
+  grade.
+
 ## D-116: T-09, the confusable negatives (2026-08-04)
 - Decided by: Ahmed Saad.
 - Decision: four hard negatives for target leakage, per 09 section 2.2's own

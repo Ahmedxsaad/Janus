@@ -38,6 +38,9 @@ __all__ = [
     "ENV_LEAKAGE_MAX_HOPS",
     "ENV_LINEAGE_RESULT_CAP",
     "ENV_MAX_HOPS",
+    "ENV_PROTECTED_ATTRIBUTE_TAG_URNS",
+    "ENV_PROTECTED_ATTRIBUTE_TERM_URNS",
+    "ENV_PROXY_MAX_HOPS",
     "ENV_SENSITIVE_TAG_URNS",
     "ENV_SENSITIVE_TERM_URNS",
     "SCORE_PROVENANCE",
@@ -96,10 +99,13 @@ ENV_FRESHNESS_SLA_HOURS = "MODELGUARD_FRESHNESS_SLA_HOURS"
 ENV_MAX_HOPS = "MODELGUARD_MAX_HOPS"
 ENV_LINEAGE_RESULT_CAP = "MODELGUARD_LINEAGE_RESULT_CAP"
 ENV_LEAKAGE_MAX_HOPS = "MODELGUARD_LEAKAGE_MAX_HOPS"
+ENV_PROXY_MAX_HOPS = "MODELGUARD_PROXY_MAX_HOPS"
 ENV_LABEL_TERM_URN = "MODELGUARD_LABEL_TERM_URN"
 ENV_LABEL_COLUMN_NAMES = "MODELGUARD_LABEL_COLUMN_NAMES"
 ENV_SENSITIVE_TERM_URNS = "MODELGUARD_SENSITIVE_TERM_URNS"
 ENV_SENSITIVE_TAG_URNS = "MODELGUARD_SENSITIVE_TAG_URNS"
+ENV_PROTECTED_ATTRIBUTE_TERM_URNS = "MODELGUARD_PROTECTED_ATTRIBUTE_TERM_URNS"
+ENV_PROTECTED_ATTRIBUTE_TAG_URNS = "MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS"
 ENV_COMPANION_ENTITY_CAP = "MODELGUARD_COMPANION_ENTITY_CAP"
 
 
@@ -195,6 +201,38 @@ class ScanConfig:
     detector does not run.
     """
 
+    protected_attribute_term_urns: tuple[str, ...] = ()
+    """Glossary terms marking a column as a protected attribute (T-11).
+
+    Separate from :attr:`sensitive_term_urns` on purpose, and not a synonym for
+    it. "Restricted" is a handling rule: do not learn from this. "Protected
+    attribute" is a legal category: race, sex, age, disability. A catalog often
+    classifies the two with different taxonomies, and merging them would mean
+    reporting every PII column as a proxy candidate, which is noise, or missing
+    a protected attribute nobody marked restricted, which is the finding.
+
+    Empty by default and no fallback, for the reason
+    :attr:`sensitive_term_urns` has none, but more so: a guessed URN here would
+    invent a claim about discrimination out of a catalog that never made one.
+    Unset means the check reports itself not evaluated, never clean.
+    """
+
+    protected_attribute_tag_urns: tuple[str, ...] = ()
+    """Tags marking a column as a protected attribute. See the terms above."""
+
+    proxy_max_hops: int = 3
+    """How far to look for the ancestor a feature and a protected attribute share.
+
+    Lower than :attr:`leakage_max_hops`, and the asymmetry is the point. A leak
+    four joins back is still a leak: the label's information is present in the
+    feature either way. A *shared ancestor* four joins back is most of a
+    warehouse, because everything descends from the same handful of raw tables
+    eventually, and a proxy candidate that names half the catalog is worse than
+    silence. Three hops keeps the claim to columns a human would recognise as
+    related. An algorithm parameter rather than an identity, so it has a
+    documented default (root rule 6b).
+    """
+
     training_schema_property: str = "modelguard.training_schema"
     """The custom property on a training run holding the input schema fingerprint.
 
@@ -287,6 +325,9 @@ class ScanConfig:
             # itself as not evaluated.
             sensitive_term_urns=optional_list(ENV_SENSITIVE_TERM_URNS),
             sensitive_tag_urns=optional_list(ENV_SENSITIVE_TAG_URNS),
+            protected_attribute_term_urns=optional_list(ENV_PROTECTED_ATTRIBUTE_TERM_URNS),
+            protected_attribute_tag_urns=optional_list(ENV_PROTECTED_ATTRIBUTE_TAG_URNS),
+            proxy_max_hops=optional_int(ENV_PROXY_MAX_HOPS, defaults.proxy_max_hops),
             label_column_names=optional_list(ENV_LABEL_COLUMN_NAMES) or defaults.label_column_names,
             companion_entity_cap=optional_int(
                 ENV_COMPANION_ENTITY_CAP, defaults.companion_entity_cap

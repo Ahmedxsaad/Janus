@@ -339,6 +339,10 @@ AI_RMF_SUBCATEGORIES: dict[str, str] = {
         "technology was developed are documented."
     ),
     "MEASURE 2.10": "Privacy risk of the AI system is examined and documented.",
+    "MEASURE 2.11": (
+        "Fairness and bias, as identified in the MAP function, are evaluated and "
+        "results are documented."
+    ),
     "MANAGE 2.2": (
         "Mechanisms are in place and applied to sustain the value of deployed AI systems."
     ),
@@ -417,6 +421,17 @@ CROSSWALK: dict[FindingType, CrosswalkRow] = {
         ),
         map_id="MAP 4.1",
         measure_id="MEASURE 2.10",
+        manage_id="MANAGE 2.3",
+    ),
+    FindingType.PROXY_CANDIDATE: CrosswalkRow(
+        detector="Proxy candidate (for human review)",
+        evidence=(
+            "A field incident naming the column a feature and a classified protected "
+            "attribute both descend from, raised as a question for a human rather "
+            "than as a determination that the feature proxies for the attribute"
+        ),
+        map_id="MAP 2.3",
+        measure_id="MEASURE 2.11",
         manage_id="MANAGE 2.3",
     ),
     FindingType.DEPRECATED_INPUT: CrosswalkRow(

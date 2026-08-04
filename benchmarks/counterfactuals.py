@@ -72,6 +72,17 @@ APPLIERS: dict[tuple[FindingType, RemedyKind], Callable[[DataHubConnection], obj
     # somebody links the model, rather than adding a second opinion beside the
     # detector that can prove things.
     (FindingType.TABLE_LEVEL_RISK, RemedyKind.DECLARE_LINK): scenarios.revert_delinked_model,
+    # The proxy candidate's *first* remedy is REVIEW, and it deliberately has no
+    # applier: it asks a human to decide, and a benchmark that could perform that
+    # decision would be making it (T-11). What is mechanically checkable is the
+    # second remedy, cutting the shared ancestry, and this applier performs
+    # exactly that: the classified column and its tag stay, only the derivation
+    # the two shared is removed. A finding that clears afterwards clears because
+    # the ancestry changed rather than because the evidence was deleted.
+    (
+        FindingType.PROXY_CANDIDATE,
+        RemedyKind.CUT_LINEAGE,
+    ): scenarios.cut_proxy_shared_ancestor,
 }
 
 

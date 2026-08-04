@@ -24,6 +24,7 @@
 | 8 | [security] OWASP Top 10 for LLM Apps (2025) | Our exact threat model (LLM01, LLM06). |
 | 9 | [book] *Reliable Machine Learning* (O'Reilly) | "SRE for the ML supply chain" framing. |
 | 10 | [standard] OpenLineage / SQLGlot | The column-lineage substrate we traverse. |
+| 11 | [paper] Barocas and Selbst 2016, *Big Data's Disparate Impact* | Proxy variables as the mechanism behind T-11. |
 
 ---
 
@@ -316,6 +317,33 @@ https://arxiv.org/abs/2102.07750
 **SLSA** - https://slsa.dev/ · **Sigstore model signing** - https://github.com/sigstore/model-transparency
 - **Read:** SLSA **Levels** + **Provenance**; the model-transparency README (sign/verify model files).
 - **Maps to:** conceptual pairing - our trust score is the *governance* companion to *cryptographic* provenance (PH §D, `01-strategy §3 P4`).
+
+**Barocas and Selbst - Big Data's Disparate Impact (California Law Review 104:671, 2016)** - https://www.californialawreview.org/print/2-big-datas-disparate-impact
+- **Read:** Part II on how data mining produces discriminatory outcomes without
+  discriminatory intent, and specifically the treatment of **proxy variables**:
+  a facially neutral feature that correlates with a protected class because both
+  are produced by the same underlying process.
+- **Maps to:** the argument for detecting proxies structurally rather than
+  statistically (`09-depth-axes §5.1`).
+- **What it changed here (T-11, D-117):** the shape
+  `detect/governance.py:proxy_candidate_findings` looks for, and, more
+  importantly, what it is allowed to say. The paper's point is that proxying is
+  usually *unintentional*: nobody puts race into a model, they put in postcode,
+  and the two share a common cause rather than deriving from one another. That
+  is why the detector looks for a **fork** (two columns descending from one
+  ancestor, neither descending from the other) rather than the chain the
+  sensitive-source detector proves, and why direct descent is excluded here and
+  left to P5.
+
+  It is also why every surface this finding reaches says *candidate for human
+  review* and never *proxy*, *bias*, or *discrimination*. Barocas and Selbst are
+  explicit that whether a proxy is unlawful turns on questions of justification
+  and business necessity that are legal judgements about a whole practice. A
+  lineage walk establishes a structural coincidence and nothing else; asserting
+  discrimination from it would be both wrong and, given who reads incident
+  reports, harmful. The severity is capped at MEDIUM for the same reason, and
+  the finding contributes nothing to the trust score: an unanswered question must
+  not move a number people compare release over release.
 
 **NIST AI Risk Management Framework** - https://www.nist.gov/itl/ai-risk-management-framework
 - **Read:** the four functions **Govern / Map / Measure / Manage** + the Playbook

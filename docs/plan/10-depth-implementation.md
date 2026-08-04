@@ -383,47 +383,76 @@ being chased: the sensitive-source trial's own precondition checked a tag's
 presence but never lineage reachability, the same gap `_leakage_visible` was
 built to avoid.
 
-### T-10 Narrative faithfulness, deterministically (09 section 2.4)
+### T-10 Narrative faithfulness, deterministically (09 section 2.4) [done, D-118]
 
 Moved into this phase from 09's "everything remaining": it is S, it is benchmark
 work, and it belongs with the other evidence items.
 
-- [ ] Every URN in generated prose resolves in the graph. Zero hallucinated entities.
-- [ ] Every number in generated prose appears in that finding's `evidence`
-      (`Finding.evidence`, `Mapping[str, str]` `[verified]`).
-- [ ] **No number appears in prose that is absent from `evidence`.** The interesting
-      one: a hallucination detector for figures.
-- [ ] Runs against every provider in `SUPPORTED_PROVIDERS`, and against the template
-      fallback, in CI.
-- [ ] Reported in `RESULTS.md` as a faithfulness rate.
+- [x] Every URN in generated prose resolves in the graph. Zero hallucinated entities.
+- [x] Every number in generated prose appears in ~~that finding's `evidence`~~ **the
+      facts the narrator was shown**, corrected in place per docs/CLAUDE.md rule 1.
+      The prompt carries `Finding.evidence` *plus* the per-type detail (a model's
+      hop count, its features at risk), so grounding on the mapping alone reports a
+      correctly-quoted hop count as a hallucination. `narrate.grounding_facts` is now
+      the single source of both, so prompt and checker cannot drift.
+- [x] **No number appears in prose that is absent from those facts.** The interesting
+      one: a hallucination detector for figures. Numeric rather than textual
+      comparison, so `30.0` and "30 hours" agree and `3` is not a substring match
+      for `30`; identifiers are excluded on both sides, so `credit_risk_v3` yields
+      no figure.
+- [x] ~~Runs against every provider in `SUPPORTED_PROVIDERS`~~, and against the
+      template fallback, in CI. **Not what shipped, and RESULTS.md says so**: CI has
+      no API key, so the template narrator is what is always measured. A provider row
+      appears only when a credential for it was present, and its absence is stated as
+      not a passing grade rather than left to look like one.
+- [x] Reported in `RESULTS.md` as a faithfulness rate, beside the count of figures
+      actually checked: prose quoting no number is faithful by this measure and says
+      nothing.
 - [ ] An LLM-as-judge readability rubric may sit on top afterwards, clearly labelled
       as the soft secondary metric (09 section 7 keeps it out of the primary slot).
+      Deliberately not built: 09 section 7 keeps it out of the primary slot, and
+      nothing yet needs the secondary one.
 
 ---
 
 ## Phase 5: governance depth
 
-### T-11 Proxy-attribute detection (09 section 5.1)
+### T-11 Proxy-attribute detection (09 section 5.1) [done, D-117]
 
 Reuses T-09's common-ancestor scenario, read for the opposite purpose.
 
-- [ ] The walk: feature X and protected attribute A share a common ancestor within
-      k hops, and X does not descend from A.
-- [ ] `MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS` and `..._TERM_URNS`. **No default**,
+- [x] The walk: feature X and protected attribute A share a common ancestor within
+      k hops, and X does not descend from A. `column_marks.related_columns` is the
+      new primitive: the unmarked sibling of `marked_ancestor`, answering what a
+      column touches rather than what it descends from, in either direction.
+- [x] `MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS` and `..._TERM_URNS`. **No default**,
       exactly as P5 has none (root rule 6a, and 09's argument: a guessed
       classification URN is the worst kind to be wrong about). All-or-nothing group
       (rule 6c). Both keys added to `.env` and `.env.example` in the same order
-      (rule 6e).
-- [ ] Unset means the check reports **not evaluated**, never clean
-      (`detect/coverage.py` handles this already).
-- [ ] Reported as a **proxy candidate for human review**, never as discrimination.
-      This is the whole feature and it is built in from the first commit.
-- [ ] Severity caps at `medium`, for P6's reason: it is a prompt to look, not a defect.
-- [ ] Must not double-report what P5 already reports (direct descent).
-- [ ] Add Barocas and Selbst, *Big Data's Disparate Impact* (2016) to
+      (rule 6e), checked by diffing the two key lists.
+- [x] Unset means the check reports **not evaluated**, never clean. `coverage.py`
+      gains `_proxy_gap` rather than relying on the existing ones.
+- [x] Reported as a **proxy candidate for human review**, never as discrimination.
+      This is the whole feature and it is built in from the first commit: the finding
+      type, the title, the evidence mapping's own `finding_is` key, the narrator's
+      brief (which forbids asserting proxying, bias or unlawfulness), the impact
+      report's first heading ("This is a question, not a finding"), and the first
+      remedy, which asks a human rather than changing the graph.
+- [x] Severity caps at `medium`, for P6's reason: it is a prompt to look, not a
+      defect. Stronger than P6 in fact: it does not escalate for a live model at all,
+      which is unique here, because a maybe that outranks a proof sends triage to
+      the wrong finding. It contributes nothing to the trust score either, by T-07's
+      precedent.
+- [x] Must not double-report what P5 already reports (direct descent). Excluded
+      explicitly, and the test that proves it had to be rewritten once: the first
+      version never reached the guard.
+- [x] Add Barocas and Selbst, *Big Data's Disparate Impact* (2016) to
       `docs/plan/resources.md` with what it changed here, per the existing convention.
-- [ ] Trials: one positive, plus the two negatives that matter (direct descent, and
-      an unrelated common ancestor beyond k hops).
+- [x] Trials: one positive, plus the two negatives that matter (direct descent, and
+      an unrelated common ancestor beyond k hops). Four in total, and a fourth
+      `proxy-reverted`. Verified live: the fork fires at MEDIUM, both negatives stay
+      silent, and cutting the shared ancestry clears it with the classified column
+      and its tag left in place.
 
 Files: `modelguard/detect/governance.py`, `modelguard/detect/column_marks.py`,
 `modelguard/models.py`, `modelguard/config.py`, `.env`, `.env.example`.

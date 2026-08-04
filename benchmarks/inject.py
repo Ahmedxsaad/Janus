@@ -44,6 +44,7 @@ from enum import StrEnum
 
 from datahub.metadata.schema_classes import (
     DeprecationClass,
+    GlobalTagsClass,
     MLModelPropertiesClass,
     SchemaMetadataClass,
 )
@@ -57,12 +58,15 @@ from modelguard.seed import graph_spec as spec
 from modelguard.seed.scenarios import (
     BACKUP_LABEL_COLUMN,
     LOOKALIKE_COLUMN,
+    PROTECTED_TAG_URN,
+    PROXY_PROTECTED_COLUMN,
     SENSITIVE_SOURCE_COLUMN,
     plant_common_ancestor_label,
     plant_delinked_model,
     plant_deprecated_input,
     plant_label_lookalike,
     plant_leakage,
+    plant_proxy_attribute,
     plant_schema_drift,
     plant_second_leak_path,
     plant_sensitive_source,
@@ -72,6 +76,7 @@ from modelguard.seed.scenarios import (
     revert_deprecated_input,
     revert_label_lookalike,
     revert_leakage,
+    revert_proxy_attribute,
     revert_schema_drift,
     revert_second_leak_path,
     revert_sensitive_source,
@@ -482,6 +487,75 @@ def _deprecation_trials() -> tuple[Trial, ...]:
     )
 
 
+def _plant_proxy(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
+    """Plant or revert the proxy fork (T-11)."""
+    plant_proxy_attribute(conn) if trial.graph_state else revert_proxy_attribute(conn)
+
+
+def _proxy_trials() -> tuple[Trial, ...]:
+    """The fork, and the two ways it is not one (T-11, 09 section 5.1).
+
+    The negatives are the whole point of this family. A detector that reported
+    every feature sharing any ancestor with any classified column would pass a
+    positive-only suite and be useless on a real catalog, because in a
+    warehouse everything shares an ancestor with everything eventually.
+    """
+    return (
+        Trial(
+            name="proxy-planted",
+            family=FindingType.PROXY_CANDIDATE,
+            target=Target.MODEL,
+            expected=True,
+            detail=(
+                "a model feature and a column classified a protected attribute both "
+                "derive from income; neither descends from the other"
+            ),
+            plant=_plant_proxy,
+            boundary=True,
+        ),
+        Trial(
+            name="proxy-reverted",
+            family=FindingType.PROXY_CANDIDATE,
+            target=Target.MODEL,
+            expected=False,
+            detail="the same graph with the protected attribute withdrawn",
+            plant=_plant_proxy,
+        ),
+        Trial(
+            name="proxy-direct-descent-is-not-a-candidate",
+            family=FindingType.PROXY_CANDIDATE,
+            target=Target.MODEL,
+            expected=False,
+            planted=True,
+            detail=(
+                "the classified column is the feature's own ancestor rather than its "
+                "sibling: proved descent, which the sensitive-source detector reports "
+                "and this one must not report a second time"
+            ),
+            plant=_plant_proxy,
+            overrides=(
+                ("protected_attribute_tag_urns", ()),
+                ("sensitive_tag_urns", (PROTECTED_TAG_URN,)),
+            ),
+            boundary=True,
+        ),
+        Trial(
+            name="proxy-beyond-the-hop-cap",
+            family=FindingType.PROXY_CANDIDATE,
+            target=Target.MODEL,
+            expected=False,
+            planted=True,
+            detail=(
+                "the same fork with the proxy hop cap at 0: the shared ancestor is out "
+                "of reach, not absent, and everything shares one eventually"
+            ),
+            plant=_plant_proxy,
+            overrides=(("proxy_max_hops", 0),),
+            boundary=True,
+        ),
+    )
+
+
 def _plant_degraded(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
     """Deprecate the training input, then take the model's features away or give them back.
 
@@ -555,6 +629,7 @@ def build_trials(config: ScanConfig) -> tuple[Trial, ...]:
         + _degraded_trials()
         + _drift_trials()
         + _sensitive_trials()
+        + _proxy_trials()
         + _deprecation_trials()
     )
 
@@ -688,6 +763,30 @@ def _deprecation_visible(
     return deprecated == trial.expected
 
 
+def _proxy_visible(conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int) -> bool:
+    """Whether the fork this trial planted is readable, tag and lineage both.
+
+    Both halves are checked because both are planted, and they land through
+    different paths: the tag on the schemaField is served synchronously, the
+    derivation from ``income`` is indexed asynchronously. Waiting on the tag
+    alone would let a trial ask the detector its question before the ancestry
+    the answer depends on had arrived, which is the bug that broke the
+    sensitive-source precondition (D-116).
+    """
+    column_urn = str(spec.feature_column_urn(PROXY_PROTECTED_COLUMN.name))
+    tags = conn.graph.get_aspect(column_urn, GlobalTagsClass)
+    tagged = bool(tags and any(tag.tag == PROTECTED_TAG_URN for tag in tags.tags))
+
+    results = conn.client.lineage.get_lineage(
+        source_urn=str(spec.feature_table_dataset_urn()),
+        source_column=PROXY_PROTECTED_COLUMN.name,
+        direction="upstream",
+        max_hops=1,
+    )
+    reached = {step.column_name for result in results for step in (result.paths or [])}
+    return (tagged and "income" in reached) == trial.graph_state
+
+
 def _degraded_visible(
     conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int
 ) -> bool:
@@ -709,6 +808,7 @@ _VISIBILITY: dict[FindingType, Callable[[DataHubConnection, Trial, ScanConfig, i
     FindingType.INPUT_SCHEMA_DRIFT: _drift_visible,
     FindingType.SENSITIVE_SOURCE: _sensitive_visible,
     FindingType.DEPRECATED_INPUT: _deprecation_visible,
+    FindingType.PROXY_CANDIDATE: _proxy_visible,
     FindingType.TABLE_LEVEL_RISK: _degraded_visible,
 }
 
@@ -753,6 +853,7 @@ def restore_baseline(conn: DataHubConnection, *, now_ms: int | None = None) -> N
     # above touches, so they revert independently of the leak above.
     revert_common_ancestor_label(conn)
     revert_label_lookalike(conn)
+    revert_proxy_attribute(conn)
     revert_schema_drift(conn)
     # The governance declarations are anomalies planted on top of the seed, not
     # part of it, so the baseline is the withdrawn state for both. The leak above

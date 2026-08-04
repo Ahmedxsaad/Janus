@@ -41,6 +41,7 @@ from modelguard.models import (
     FreshnessFinding,
     LeakageFinding,
     ModelRef,
+    ProxyCandidateFinding,
     SchemaDriftFinding,
     SensitiveSourceFinding,
     Severity,
@@ -154,6 +155,13 @@ def trust_inputs_from_findings(
     causes: dict[str, str] = {}
 
     for finding in findings:
+        if isinstance(finding, ProxyCandidateFinding):
+            # Unscored for the same reason the degraded mode below is, and more
+            # so: this one does not claim the model is affected at all, only
+            # that a human should check whether it is (T-11). A question that
+            # moved a trust score would let a tool that cannot answer it decide
+            # how much a model is trusted.
+            continue
         if isinstance(finding, TableLevelRiskFinding):
             # Deliberately unscored, and this is the one place it has to be said.
             # The degraded mode cannot show that this model consumes the affected
