@@ -36,7 +36,7 @@ def _pose_frames() -> dict[str, list[str]]:
         name: re.findall(r'"([a-z_]+)"', frames)
         for name, frames in re.findall(r"(\w+): \[(.*?)\],", block.group(1))
     }
-    walk = re.search(r'const WALK = \[(.*?)\];', GUIDE, re.S)
+    walk = re.search(r"const WALK = \[(.*?)\];", GUIDE, re.S)
     assert walk, "the walk cycle moved"
     poses["walk"] = re.findall(r'"([a-z_]+)"', walk.group(1))
     return poses
