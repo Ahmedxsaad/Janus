@@ -71,6 +71,14 @@ TARGET_LEAKAGE = "target-leakage"
 #: only ever has one edge to cut.
 SECOND_LEAK_PATH = "second-leak-path"
 
+#: The confusable-negative scenarios (T-09, 09 section 2.2): precision of 1.00
+#: is close to vacuous while the negative trials are absent positives rather
+#: than hard negatives. Each of these plants a graph shape that looks like it
+#: could leak and must not fire, which is the case an "always no" detector
+#: would also pass and only a correct one distinguishes.
+COMMON_ANCESTOR = "common-ancestor-label"
+LABEL_LOOKALIKE = "label-lookalike"
+
 #: The governance scenarios. A classified column upstream of a feature, and a
 #: training input its owners have marked deprecated. Both are facts an
 #: organization records about its own data and that nothing today joins back to
@@ -530,6 +538,125 @@ def revert_second_leak_path(conn: DataHubConnection) -> LeakageResult:
         feature_column=spec.LEAKAGE_FEATURE,
         upstream_columns=(spec.LABEL_SOURCE_COLUMN,),
         leaking=True,
+    )
+
+
+#: The seeded lineage with the flagship leak's own edge removed: the baseline
+#: T-09's two confusable-negative scenarios build on. Spreading
+#: ``spec.COLUMN_LINEAGE`` directly, as :func:`plant_leakage` does, would
+#: silently reintroduce the flagship leak into a graph shape that is supposed
+#: to be about a completely different column, because ``_set_column_lineage``
+#: replaces the whole mapping rather than merging into it. Built the same way
+#: :func:`revert_leakage` builds its own ``clean`` dict.
+_LEAK_FREE_COLUMN_LINEAGE: dict[str, list[str]] = {
+    column: upstreams
+    for column, upstreams in spec.COLUMN_LINEAGE.items()
+    if column != spec.LEAKAGE_FEATURE
+}
+
+#: The common-ancestor scenario's column: a second declared label on the
+#: feature table, deriving from ``income``, the same source column the model's
+#: own ``applicant_income`` feature already derives from. Neither this column
+#: nor ``applicant_income`` descends from the other; both are the ancestor's
+#: children, which an upstream-only walk must never confuse with an ancestor
+#: relationship (T-09).
+COMMON_ANCESTOR_LABEL = spec.Column(
+    "income_verified_label",
+    "BOOLEAN",
+    "Declared a label for this scenario only. Derives from income, the same "
+    "column applicant_income derives from; neither descends from the other.",
+)
+
+
+def plant_common_ancestor_label(conn: DataHubConnection) -> LeakageResult:
+    """Give a declared label the same upstream column a clean feature has.
+
+    Proves the walk is upstream-only and never mistakes a shared ancestor for
+    a derivation between siblings: on a real catalog, a feature and a label
+    both computed from one raw column is common and is not leakage, and
+    nothing before this scenario tested that a walk agrees (09 section 2.2).
+
+    The flagship leak is cut in the same write: this scenario is about
+    applicant_income, and a model whose prior_default_flag still derives from
+    the label would still legitimately be flagged, which is not what this
+    scenario means to test.
+    """
+    _emit_feature_schema(
+        conn, (*spec.FEATURE_COLUMNS, COMMON_ANCESTOR_LABEL), scenario=COMMON_ANCESTOR
+    )
+    ensure_term(conn, spec.LABEL_TERM_URN, spec.LABEL_TERM_NAME, spec.LABEL_TERM_DEFINITION)
+    add_term(conn, str(spec.feature_column_urn(COMMON_ANCESTOR_LABEL.name)), spec.LABEL_TERM_URN)
+    _set_column_lineage(conn, {**_LEAK_FREE_COLUMN_LINEAGE, COMMON_ANCESTOR_LABEL.name: ["income"]})
+    return LeakageResult(
+        name=COMMON_ANCESTOR,
+        dataset_urn=str(spec.feature_table_dataset_urn()),
+        feature_column=COMMON_ANCESTOR_LABEL.name,
+        upstream_columns=("income",),
+        leaking=False,
+    )
+
+
+def revert_common_ancestor_label(conn: DataHubConnection) -> LeakageResult:
+    """Undeclare and drop the sibling label, in that order (see revert_second_leak_path)."""
+    remove_term(conn, str(spec.feature_column_urn(COMMON_ANCESTOR_LABEL.name)), spec.LABEL_TERM_URN)
+    _emit_feature_schema(conn, spec.FEATURE_COLUMNS, scenario=None)
+    _set_column_lineage(conn, dict(spec.COLUMN_LINEAGE))
+    return LeakageResult(
+        name=COMMON_ANCESTOR,
+        dataset_urn=str(spec.feature_table_dataset_urn()),
+        feature_column=COMMON_ANCESTOR_LABEL.name,
+        upstream_columns=(),
+        leaking=False,
+    )
+
+
+#: The label-lookalike scenario's column: named the way a hasty detector might
+#: match on, declared a label nowhere. It feeds ``applicant_income`` in place
+#: of ``income``, so the only thing that changed from the clean baseline is
+#: the upstream column's name (T-09).
+LOOKALIKE_COLUMN = spec.Column(
+    "target_indicator",
+    "BOOLEAN",
+    "Named like a label. Not declared one anywhere: no glossary term, no tag. "
+    "Proves detection matches the declared term, never the column's name.",
+)
+
+
+def plant_label_lookalike(conn: DataHubConnection) -> LeakageResult:
+    """Feed a feature from a suggestively named column that carries no term.
+
+    Proves detection keys on the declared glossary term, not on a name a
+    heuristic might key on instead: a detector doing the latter would flag
+    ``applicant_income`` here, and nothing before this scenario tested that it
+    does not (09 section 2.2).
+
+    The flagship leak is cut in the same write, for the same reason
+    :func:`plant_common_ancestor_label` cuts it: this scenario is about
+    applicant_income, not about prior_default_flag still legitimately leaking.
+    """
+    _emit_source_schema(conn, (*spec.SOURCE_COLUMNS, LOOKALIKE_COLUMN), scenario=LABEL_LOOKALIKE)
+    _set_column_lineage(
+        conn, {**_LEAK_FREE_COLUMN_LINEAGE, "applicant_income": [LOOKALIKE_COLUMN.name]}
+    )
+    return LeakageResult(
+        name=LABEL_LOOKALIKE,
+        dataset_urn=str(spec.feature_table_dataset_urn()),
+        feature_column="applicant_income",
+        upstream_columns=(LOOKALIKE_COLUMN.name,),
+        leaking=False,
+    )
+
+
+def revert_label_lookalike(conn: DataHubConnection) -> LeakageResult:
+    """Restore applicant_income's derivation from income and drop the lookalike column."""
+    _emit_source_schema(conn, spec.SOURCE_COLUMNS, scenario=None)
+    _set_column_lineage(conn, dict(spec.COLUMN_LINEAGE))
+    return LeakageResult(
+        name=LABEL_LOOKALIKE,
+        dataset_urn=str(spec.feature_table_dataset_urn()),
+        feature_column="applicant_income",
+        upstream_columns=("income",),
+        leaking=False,
     )
 
 

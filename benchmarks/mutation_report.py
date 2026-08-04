@@ -98,10 +98,20 @@ VERDICTS: tuple[Verdict, ...] = (
     Verdict(
         "modelguard.detect.column_marks.x_marked_ancestor",
         "gap",
-        "`max_hops=config.leakage_max_hops` swapped for `None` survives: no "
-        "boundary trial here distinguishes the configured cap from an "
-        "unbounded walk (T-09 already plans exactly this trial, at the cap "
-        "and at cap+1).",
+        "T-09 (D-115) killed two of the original six survivors here: the "
+        "boundary trial this group already named (the `>` in `result.hops "
+        "> config.leakage_max_hops` mutated to `>=`), and, once a second "
+        "test ordered its hop-capped fixture result before the real hit "
+        "instead of after, the `continue` in that same branch mutated to "
+        "`break` -- a `break` there would have skipped the hit entirely, "
+        "which is a stronger kill than the single-item-fixture blind spot "
+        "T-08 named this pattern for elsewhere. Four remain, all the same "
+        "class: `get_lineage`'s own `max_hops`/`count` keyword arguments "
+        "swap for `None` or drop entirely and survive, because the fixture "
+        "answers a column-level query with a canned result regardless of "
+        "which arguments reached it. Live-GMS-only to close: the server "
+        "does its own hop-cap search past two hops per D-020, so only a "
+        "real GMS call could tell a wrong argument from a right one here.",
     ),
     Verdict(
         "modelguard.detect.column_marks.xǁColumnMarkIndexǁ_editable_marks",
@@ -168,6 +178,18 @@ VERDICTS: tuple[Verdict, ...] = (
         "`None` too: no trial has exactly one `needs_*` flag true while the "
         "others are false, so the four-way `or` and a four-way `and` answer "
         "identically on every fixture used today.",
+    ),
+    Verdict(
+        "modelguard.detect.coverage.x__cap_reason",
+        "gap",
+        "T-09's own helper (D-115), landed after the run T-08's verdicts were "
+        "written against. Two patterns: prose content in the reason/remedy "
+        "sentences it builds, the same class as the `_gap` functions above; "
+        "and the feature counts themselves are unasserted (`sum(1 ...)` "
+        "mutated to `sum(2 ...)` survives), along with the joiner and "
+        "capitalization of the assembled remedy string. Every test that "
+        "reaches this function checks which knob is named, never the exact "
+        "count or casing.",
     ),
     # --- degraded.py -----------------------------------------------------
     Verdict(

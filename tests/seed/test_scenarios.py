@@ -15,13 +15,19 @@ from datahub.metadata.urns import SchemaFieldUrn
 from modelguard.seed import graph_spec as spec
 from modelguard.seed.scenarios import (
     BACKUP_LABEL_COLUMN,
+    COMMON_ANCESTOR_LABEL,
+    LOOKALIKE_COLUMN,
     SCENARIO_PROPERTY,
     SCHEMA_DRIFT,
     STALE_SOURCE,
+    plant_common_ancestor_label,
+    plant_label_lookalike,
     plant_leakage,
     plant_schema_drift,
     plant_second_leak_path,
     plant_stale_source,
+    revert_common_ancestor_label,
+    revert_label_lookalike,
     revert_leakage,
     revert_schema_drift,
     revert_second_leak_path,
@@ -351,3 +357,128 @@ def test_reverting_the_second_path_restores_the_seeded_single_path_leak():
 
     assert _sent_column_lineage(client)[spec.LEAKAGE_FEATURE] == [spec.LABEL_SOURCE_COLUMN]
     assert result.leaking is True
+
+
+# --------------------------------------------------------------------------
+# The confusable-negative scenarios (T-09, 09 section 2.2)
+# --------------------------------------------------------------------------
+
+
+def test_the_common_ancestor_label_derives_from_the_same_column_as_a_clean_feature():
+    """Both children of one ancestor, neither descending from the other."""
+    client = FakeClient()
+    result = plant_common_ancestor_label(make_connection(FakeGraph(), client))
+
+    edges = _sent_column_lineage(client)
+    assert edges[COMMON_ANCESTOR_LABEL.name] == ["income"]
+    assert edges["applicant_income"] == ["income"]
+    assert result.upstream_columns == ("income",)
+    assert result.leaking is False
+
+
+def test_planting_the_common_ancestor_label_also_cuts_the_flagship_leak():
+    """This scenario is about applicant_income, not a second unrelated leak.
+
+    _set_column_lineage replaces the whole mapping rather than merging into
+    it, so spreading the raw seeded mapping here would silently reintroduce
+    prior_default_flag's own derivation from the label alongside this one.
+    """
+    client = FakeClient()
+    plant_common_ancestor_label(make_connection(FakeGraph(), client))
+
+    assert spec.LEAKAGE_FEATURE not in _sent_column_lineage(client)
+
+
+def test_the_common_ancestor_label_is_declared_with_the_term_the_seeder_uses():
+    graph = FakeGraph()
+    plant_common_ancestor_label(make_connection(graph, FakeClient()))
+
+    labeled_column = str(spec.feature_column_urn(COMMON_ANCESTOR_LABEL.name))
+    declared = [
+        mcp
+        for mcp in graph.emitted
+        if mcp.entityUrn == labeled_column and isinstance(mcp.aspect, GlossaryTermsClass)
+    ]
+    assert declared, "the common-ancestor column must be declared a label"
+    assert [term.urn for term in declared[-1].aspect.terms] == [spec.LABEL_TERM_URN]
+
+
+def test_reverting_the_common_ancestor_label_undeclares_it_before_dropping_it():
+    graph = FakeGraph(
+        aspects={
+            (
+                str(spec.feature_column_urn(COMMON_ANCESTOR_LABEL.name)),
+                GlossaryTermsClass,
+            ): GlossaryTermsClass(
+                terms=[GlossaryTermAssociationClass(urn=spec.LABEL_TERM_URN)], auditStamp=None
+            )
+        }  # type: ignore[arg-type]
+    )
+    client = FakeClient()
+
+    revert_common_ancestor_label(make_connection(graph, client))
+
+    labeled_column = str(spec.feature_column_urn(COMMON_ANCESTOR_LABEL.name))
+    terms = [
+        mcp.aspect
+        for mcp in graph.emitted
+        if mcp.entityUrn == labeled_column and isinstance(mcp.aspect, GlossaryTermsClass)
+    ]
+    assert terms and terms[-1].terms == []
+    schema = _schema_of(_upserted_dataset(client))
+    assert COMMON_ANCESTOR_LABEL.name not in schema
+
+
+def test_reverting_the_common_ancestor_label_restores_the_seeded_single_path_leak():
+    client = FakeClient()
+    result = revert_common_ancestor_label(make_connection(FakeGraph(), client))
+
+    assert _sent_column_lineage(client)[spec.LEAKAGE_FEATURE] == [spec.LABEL_SOURCE_COLUMN]
+    assert COMMON_ANCESTOR_LABEL.name not in _sent_column_lineage(client)
+    assert result.leaking is False
+
+
+def test_the_lookalike_column_feeds_the_feature_and_carries_no_term():
+    """Only the upstream column's name changed from the clean baseline."""
+    graph = FakeGraph()
+    client = FakeClient()
+    result = plant_label_lookalike(make_connection(graph, client))
+
+    assert _sent_column_lineage(client)["applicant_income"] == [LOOKALIKE_COLUMN.name]
+    assert result.upstream_columns == (LOOKALIKE_COLUMN.name,)
+    assert result.leaking is False
+    lookalike_column = str(spec.source_column_urn(LOOKALIKE_COLUMN.name))
+    assert not any(
+        mcp.entityUrn == lookalike_column and isinstance(mcp.aspect, GlossaryTermsClass)
+        for mcp in graph.emitted
+    )
+
+
+def test_planting_the_lookalike_also_cuts_the_flagship_leak():
+    """prior_default_flag's own unrelated leak must not ride along.
+
+    Same reasoning as the common-ancestor scenario: one column changes.
+    """
+    client = FakeClient()
+    plant_label_lookalike(make_connection(FakeGraph(), client))
+
+    assert spec.LEAKAGE_FEATURE not in _sent_column_lineage(client)
+
+
+def test_the_lookalike_column_is_added_to_the_source_tables_schema():
+    client = FakeClient()
+    plant_label_lookalike(make_connection(FakeGraph(), client))
+
+    schema = _schema_of(_upserted_dataset(client))
+    assert LOOKALIKE_COLUMN.name in schema
+    assert schema[LOOKALIKE_COLUMN.name] == LOOKALIKE_COLUMN.native_type
+
+
+def test_reverting_the_lookalike_restores_the_seeded_single_path_leak():
+    client = FakeClient()
+    result = revert_label_lookalike(make_connection(FakeGraph(), client))
+
+    assert _sent_column_lineage(client)["applicant_income"] == ["income"]
+    schema = _schema_of(_upserted_dataset(client))
+    assert LOOKALIKE_COLUMN.name not in schema
+    assert result.leaking is False

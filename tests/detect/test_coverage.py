@@ -230,3 +230,84 @@ def test_a_truncated_sensitive_source_walk_is_reported_as_a_gap_not_clean():
         "sensitive source" in line and "cap" in line and "may not have" in line
         for line in described
     )
+
+
+def _leaking_model_graph() -> FakeGraph:
+    return FakeGraph(
+        aspects={
+            (MODEL_URN, MLModelPropertiesClass): MLModelPropertiesClass(
+                mlFeatures=[LEAK_FEATURE_URN]
+            ),
+            (LEAK_FEATURE_URN, MLFeaturePropertiesClass): MLFeaturePropertiesClass(
+                customProperties={SOURCE_COLUMN_PROPERTY: LEAK_COLUMN_URN}
+            ),
+        },
+        exists=True,
+    )
+
+
+def test_a_hop_capped_leakage_walk_is_reported_with_the_hop_cap_remedy_not_the_result_cap_one():
+    """A reader who raises the wrong cap gets no closer to seeing the leak.
+
+    The two caps' remedies must not blur (T-09, F1).
+    """
+    client = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=CONFIG.leakage_max_hops + 1,
+                    direction="upstream",
+                    paths=column_path(),
+                )
+            ]
+        }
+    )
+    described = _gaps(_leaking_model_graph(), model_urn=MODEL_URN, client=client)
+    line = next(line for line in described if "target leakage" in line)
+    assert "MODELGUARD_LEAKAGE_MAX_HOPS" in line
+    assert "MODELGUARD_LINEAGE_RESULT_CAP" not in line
+
+
+def test_a_hop_capped_sensitive_source_walk_is_reported_with_the_hop_cap_remedy():
+    capped = replace(CONFIG, sensitive_tag_urns=("urn:li:tag:modelguard.sensitive",))
+    client = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=CONFIG.leakage_max_hops + 1,
+                    direction="upstream",
+                    paths=column_path(),
+                )
+            ]
+        }
+    )
+    described = _gaps(_leaking_model_graph(), model_urn=MODEL_URN, client=client, config=capped)
+    line = next(line for line in described if "sensitive source" in line)
+    assert "MODELGUARD_LEAKAGE_MAX_HOPS" in line
+    assert "MODELGUARD_LINEAGE_RESULT_CAP" not in line
+
+
+def test_a_walk_hitting_both_caps_names_both_remedies():
+    """Neither raise alone would be the whole fix, so the gap must not pick one.
+
+    One feature short of the result cap, one beyond the hop cap.
+    """
+    capped = replace(CONFIG, lineage_result_cap=1)
+    client = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=capped.leakage_max_hops + 1,
+                    direction="upstream",
+                    paths=column_path(),
+                )
+            ]
+        }
+    )
+    described = _gaps(_leaking_model_graph(), model_urn=MODEL_URN, client=client, config=capped)
+    line = next(line for line in described if "target leakage" in line)
+    assert "MODELGUARD_LEAKAGE_MAX_HOPS" in line
+    assert "MODELGUARD_LINEAGE_RESULT_CAP" in line

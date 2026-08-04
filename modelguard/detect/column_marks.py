@@ -80,6 +80,14 @@ class WalkResult:
     beyond it may exist and was never checked. Equality, not >=: the cap is a
     hard limit, so exactly-the-cap is the only observable signature that more
     might exist. One result short is a complete answer."""
+    hop_capped: bool
+    """True when GMS handed back a result the walk chose not to look at because
+    it lay beyond ``config.leakage_max_hops``. Distinct from ``truncated``: that
+    flag means the walk may not have *seen* everything (raise
+    ``MODELGUARD_LINEAGE_RESULT_CAP``); this one means it *saw* an ancestor and
+    declined it on distance alone (raise ``MODELGUARD_LEAKAGE_MAX_HOPS``), which
+    is a different knob and a different sentence for a coverage gap to print
+    (T-09, F1)."""
 
     @property
     def hit(self) -> Match | None:
@@ -276,7 +284,9 @@ def marked_ancestor(
         reached, and its ``hit`` is the one a finding quotes, or None when the
         cone (as far as the walk could see) reaches nothing marked.
         ``truncated`` says whether "as far as the walk could see" might be short
-        of the column's whole upstream cone.
+        of the column's whole upstream cone. ``hop_capped`` says whether GMS
+        offered an ancestor further away than ``config.leakage_max_hops`` that
+        the walk declined on distance alone.
     """
     field = SchemaFieldUrn.from_string(source_column_urn)
 
@@ -289,7 +299,9 @@ def marked_ancestor(
     direct = index.marker(source_column_urn)
     if direct is not None:
         return WalkResult(
-            matches=((source_column_urn, direct, (field.field_path,)),), truncated=False
+            matches=((source_column_urn, direct, (field.field_path,)),),
+            truncated=False,
+            hop_capped=False,
         )
 
     results = conn.client.lineage.get_lineage(
@@ -304,10 +316,15 @@ def marked_ancestor(
     truncated = len(results) == config.lineage_result_cap
 
     matches: list[Match] = []
+    hop_capped = False
     for result in results:
         # Above two hops DataHub switches to a full-graph search and returns
-        # entities beyond the cap, so the cap is enforced here (D-020).
+        # entities beyond the cap, so the cap is enforced here (D-020). GMS
+        # handed this one back; the walk saw it and declined it on distance
+        # alone, which is worth telling a reader (T-09, F1) and is not the
+        # same fact as `truncated` above.
         if result.hops > config.leakage_max_hops:
+            hop_capped = True
             continue
 
         for path in split_paths(result.paths or [], source_column_urn):
@@ -325,4 +342,4 @@ def marked_ancestor(
                     matches.append((step.urn, marker, columns))
                     break
 
-    return WalkResult(matches=tuple(matches), truncated=truncated)
+    return WalkResult(matches=tuple(matches), truncated=truncated, hop_capped=hop_capped)

@@ -16,6 +16,66 @@ Entry template:
 
 ---
 
+## D-116: T-09, the confusable negatives (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: four hard negatives for target leakage, per 09 section 2.2's own
+  list, plus one code change T-08's survivor list pointed at:
+  1. **Common ancestor** (new scenario `plant_common_ancestor_label`):
+     `applicant_income` and a sibling declared label both derive from
+     `income`; neither descends from the other. Must not fire, and now does
+     not, live.
+  2. **Label lookalike** (new scenario `plant_label_lookalike`):
+     `applicant_income` derives from `target_indicator`, named like a label,
+     carrying no term. Must not fire, and now does not, live.
+  3. **Diamond, stably**: `leakage-two-paths` already existed (D-110, T-03);
+     T-09 adds the live check that five repeated calls quote the identical
+     chain, since `WalkResult.hit`'s tie-break is a pure function of the
+     match set but GMS's own full-graph search order above two hops is not
+     provably deterministic without asking it.
+  4. **Hop cap says why**: `WalkResult` gains `hop_capped`, distinct from
+     `truncated` (different knob, different remedy:
+     `MODELGUARD_LEAKAGE_MAX_HOPS` vs `MODELGUARD_LINEAGE_RESULT_CAP`).
+     `coverage.py`'s `_leakage_gap`/`_sensitive_gap` now name whichever cap
+     actually bound, or both. Closes the silent half of F1 D-097 left open:
+     a walk declining an ancestor on distance alone previously said nothing.
+- Options considered: none of the four scenarios had a real alternative
+  construction once the seeded graph's shape was fixed; the tie-break
+  question for (3) was whether to test it as a live check or trust
+  `WalkResult.hit`'s determinism as a pure function (chosen: both, since the
+  server's own answer set is what a unit test cannot exercise).
+- Why: 09 section 2.2's point stands or falls on whether these four cases
+  were ever asked. Precision of 1.00 against only absent positives is close
+  to vacuous; T-08's mutation run already showed the flagship leak's own
+  hop-cap trial only proved fire/no-fire, never that a scan says which knob
+  to raise.
+- Result: two real bugs found live, neither in the four scenarios' own logic.
+  First, `plant_common_ancestor_label` and `plant_label_lookalike` each built
+  their column-lineage mapping by spreading `spec.COLUMN_LINEAGE` directly,
+  which still carries the flagship leak's own edge; `_set_column_lineage`
+  replaces the whole mapping rather than merging, so this silently
+  reintroduced `prior_default_flag`'s leak alongside each scenario's own
+  shape. Fixed with a shared `_LEAK_FREE_COLUMN_LINEAGE` baseline, caught by
+  a live benchmark run before it caught a test (the offline suite's fakes
+  never modeled `_set_column_lineage`'s replace-not-merge behavior against
+  the seeded default; two new unit tests assert the flagship leak's absence
+  directly, both mutation-checked). Second, `_leakage_trials()`'s two new
+  trials had to be ordered lookalike-before-common-ancestor: nothing in the
+  benchmark's trial matrix reverts a trial's plant before the next one runs
+  (`restore_baseline` runs once, at the very end), and common-ancestor's own
+  write happens to restore `applicant_income` to baseline as a side effect,
+  which the reverse order does not. Third, unrelated to leakage:
+  `_sensitive_visible`'s own precondition checked only the tag's presence,
+  never lineage reachability, the same gap `_leakage_visible` was built to
+  avoid; found because fixing it correctly (checking both) is what first
+  exposed the ordering bug above through a previously-silent interaction.
+  T-08 re-run after: two of `x_marked_ancestor`'s six original survivors are
+  now killed (the boundary trial itself, and a reordered fixture that lets
+  `continue` mutated to `break` actually cost the hit); the new
+  `x__cap_reason` helper contributes 18 more, verdicted in
+  `mutation_report.py`. Final score 1184/1532 (0.77). Full benchmark: 27/27
+  trials pass live, target leakage now 9 trials (7 boundary), recall 1.00
+  across every detector.
+
 ## D-115: T-08, mutation score for the detectors (2026-08-04)
 - Decided by: Ahmed Saad.
 - Decision: `modelguard/detect/` is now mutation-tested with mutmut 3.7.0

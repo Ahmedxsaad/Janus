@@ -27,7 +27,7 @@ from datahub.metadata.schema_classes import MLModelPropertiesClass
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import freshness_signal
-from modelguard.detect.column_marks import marked_ancestor
+from modelguard.detect.column_marks import WalkResult, marked_ancestor
 from modelguard.detect.governance import model_input_datasets, sensitive_index
 from modelguard.detect.leakage import feature_source_column, label_index
 from modelguard.detect.schema_drift import schema_drift_candidate_resources
@@ -162,23 +162,58 @@ def _leakage_gap(
     # leakage_findings() already walked every one of these and found no leak,
     # which is why this function is being asked at all (module docstring): a
     # finding is proof the check ran. What it cannot tell on its own is whether
-    # that "no leak" was a real answer or the lineage cap cutting a walk short
-    # before it reached a label (F1, docs/plan/07). Re-walking here is bounded
-    # by this one model's own feature count, not the catalog, and only happens
-    # on the already-uncommon path where a scan found nothing to report.
+    # that "no leak" was a real answer or a cap cutting a walk short before it
+    # reached a label (F1, docs/plan/07). Re-walking here is bounded by this
+    # one model's own feature count, not the catalog, and only happens on the
+    # already-uncommon path where a scan found nothing to report. Walked once
+    # per column, not twice, so the two caps below share the same read.
     labels = label_index(conn, config)
-    truncated = sum(
-        1 for column in source_columns if marked_ancestor(conn, column, labels, config).truncated
-    )
-    if truncated:
-        return gap(
-            f"{truncated} of {len(source_columns)} feature(s)' upstream lineage returned "
-            f"the full {config.lineage_result_cap}-result cap, so the traversal may not "
-            "have reached every ancestor and a leak beyond the cap would be missed",
-            "Raise MODELGUARD_LINEAGE_RESULT_CAP, or narrow the scan to this model.",
-        )
+    walks = [marked_ancestor(conn, column, labels, config) for column in source_columns]
+    cap = _cap_reason(walks, config, len(source_columns), noun="a leak")
+    if cap is not None:
+        return gap(*cap)
 
     return None
+
+
+def _cap_reason(
+    walks: list[WalkResult], config: ScanConfig, feature_count: int, *, noun: str
+) -> tuple[str, str] | None:
+    """(reason, remedy) if a re-walk of a clean model's features saw either cap bind.
+
+    The two caps have different remedies (T-09, F1): ``truncated`` means the
+    walk may not have *seen* everything past ``MODELGUARD_LINEAGE_RESULT_CAP``
+    results, ``hop_capped`` means it *saw* an ancestor and declined it for
+    lying beyond ``MODELGUARD_LEAKAGE_MAX_HOPS`` hops. A model that hit both
+    caps on different features names both, because either raise on its own
+    is a specific, false claim that it was the only gap.
+    """
+    truncated = sum(1 for w in walks if w.truncated)
+    hop_capped = sum(1 for w in walks if w.hop_capped)
+    if not truncated and not hop_capped:
+        return None
+
+    reasons = []
+    remedies = []
+    if truncated:
+        reasons.append(
+            f"{truncated} of {feature_count} feature(s)' upstream lineage returned the "
+            f"full {config.lineage_result_cap}-result cap, so the traversal may not have "
+            "reached every ancestor"
+        )
+        remedies.append("raise MODELGUARD_LINEAGE_RESULT_CAP")
+    if hop_capped:
+        reasons.append(
+            f"{hop_capped} of {feature_count} feature(s)' upstream lineage reached an "
+            f"ancestor beyond the {config.leakage_max_hops}-hop cap, which the walk saw "
+            "and excluded on distance alone"
+        )
+        remedies.append("raise MODELGUARD_LEAKAGE_MAX_HOPS")
+    remedies.append("or narrow the scan to this model.")
+
+    reason = f"{'; and '.join(reasons)}, so {noun} beyond either cap would be missed"
+    remedy = ", ".join(remedies)
+    return reason, remedy[0].upper() + remedy[1:]
 
 
 def _drift_gap(
@@ -271,20 +306,13 @@ def _sensitive_gap(
 
     # Same reasoning as _leakage_gap above: sensitive_source_findings() already
     # walked every one of these, and "no exposure found" cannot be told apart
-    # from "the exposed ancestor was past the cap" without re-checking
-    # WalkResult.truncated (F1, docs/plan/07).
+    # from "the exposed ancestor was past a cap" without re-checking WalkResult
+    # (F1, docs/plan/07). Walked once per column, shared by both caps below.
     index = sensitive_index(conn, config)
-    truncated = sum(
-        1 for column in source_columns if marked_ancestor(conn, column, index, config).truncated
-    )
-    if truncated:
-        return gap(
-            f"{truncated} of {len(source_columns)} feature(s)' upstream lineage returned "
-            f"the full {config.lineage_result_cap}-result cap, so the traversal may not "
-            "have reached every classified ancestor and an exposure beyond the cap "
-            "would be missed",
-            "Raise MODELGUARD_LINEAGE_RESULT_CAP, or narrow the scan to this model.",
-        )
+    walks = [marked_ancestor(conn, column, index, config) for column in source_columns]
+    cap = _cap_reason(walks, config, len(source_columns), noun="an exposure")
+    if cap is not None:
+        return gap(*cap)
 
     return None
 

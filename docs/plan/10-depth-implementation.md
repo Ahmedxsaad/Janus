@@ -347,20 +347,41 @@ it crashes on this codebase over a `# type: ignore` comment a mutation shifts
 underneath (D-115). The class it would have filtered is instead named once, in
 `x_trust_inputs_from_findings`'s verdict, as provably equivalent.
 
-### T-09 Confusable negatives (09 section 2.2, closes F6 step 2)
+### T-09 Confusable negatives (09 section 2.2, closes F6 step 2) [done, D-116]
 
 One scenario in `seed/scenarios.py` plus one trial in `benchmarks/inject.py` each.
 
-- [ ] Common ancestor: feature and label share an ancestor, neither descends from the
+- [x] Common ancestor: feature and label share an ancestor, neither descends from the
       other. Must **not** fire. The most likely false positive on a real catalog and
-      untested today.
-- [ ] Diamond: two distinct paths to the label. Must fire, quoting the shortest,
-      stably across repeated walks.
-- [ ] Label-lookalike: a column named like the label carrying no label term. Must not
-      fire.
-- [ ] Exactly at `leakage_max_hops`, and at `+1`. Must fire, then not, and the scan
+      untested today. `plant_common_ancestor_label`: `applicant_income` and a sibling
+      label both derive from `income`. Verified live, does not fire.
+- [x] Diamond: two distinct paths to the label. Must fire, quoting the shortest,
+      stably across repeated walks. The scenario already existed (D-110, T-03,
+      `leakage-two-paths`); T-09 adds the live check that five repeated calls quote
+      the identical chain, since the server's own full-graph search order above two
+      hops is not provably deterministic without asking it.
+- [x] Label-lookalike: a column named like the label carrying no label term. Must not
+      fire. `plant_label_lookalike`: `applicant_income` derives from
+      `target_indicator`, named like a label, declared nowhere. Verified live.
+- [x] Exactly at `leakage_max_hops`, and at `+1`. Must fire, then not, and the scan
       must say the cap was reached (this also closes F1's silent truncation).
-- [ ] Re-run T-08 afterwards and confirm the survivor count dropped.
+      `WalkResult` gains `hop_capped`, distinct from `truncated`: different knob,
+      different remedy. `coverage.py`'s gaps name whichever cap actually bound, or
+      both.
+- [x] Re-run T-08 afterwards and confirm the survivor count dropped. Two of
+      `x_marked_ancestor`'s six original survivors killed; the new `x__cap_reason`
+      helper adds 18 more, verdicted. 1184/1532 (0.77).
+
+Two real bugs found live during this task, neither in the four scenarios' own
+detection logic (D-116): the two new scenarios each rebuilt the feature table's
+column lineage by spreading the seeded baseline directly, which still carries the
+flagship leak's own edge and silently reintroduced it; and the two new trials had
+to be ordered so the second one's write restores what the first one changed,
+because nothing in the benchmark's trial matrix reverts between trials. A third,
+pre-existing and unrelated to leakage, surfaced only once the second bug was
+being chased: the sensitive-source trial's own precondition checked a tag's
+presence but never lineage reachability, the same gap `_leakage_visible` was
+built to avoid.
 
 ### T-10 Narrative faithfulness, deterministically (09 section 2.4)
 
