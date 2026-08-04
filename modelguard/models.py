@@ -768,6 +768,25 @@ class TrustBand(StrEnum):
 
 
 @dataclass(frozen=True)
+class Deduction:
+    """One risk's cost to a model's trust score, and what caused it.
+
+    The cause is the actionable half. A reader told a model lost 20 points to
+    "leakage" still has to go and find which leak; a reader told it lost them to
+    "applicant_income derives from the label" is already looking at the fix. The
+    cause is drawn from the finding that triggered the deduction, so it names a
+    measured fact and never an LLM's sentence (modelguard/CLAUDE.md rule 5).
+    """
+
+    name: str
+    """The stable deduction name, one of the ``DEDUCTION_*`` constants."""
+    points: float
+    """What it subtracted from 100."""
+    cause: str
+    """The finding, or the state of the model, that triggered it."""
+
+
+@dataclass(frozen=True)
 class TrustScore:
     """A model's aggregate reliability, 0 (worst) to 100 (best), and why.
 
@@ -775,9 +794,47 @@ class TrustScore:
     human can act on, in the spirit of a model card (Mitchell et al. 2019). The
     number is deterministic: it is a fixed weighted sum of the findings, and the
     LLM never touches it (modelguard/CLAUDE.md rule 5).
+
+    The integer is the least informative part of this object and it is
+    deliberately not the part a renderer leads with (F7). The weights behind it
+    are a stated preference ordering, not a calibrated model, so 42 is only
+    meaningful next to another 42 computed under the same
+    :data:`~modelguard.config.SCORING_VERSION`. The deductions are what a reader
+    can act on, which is why :meth:`waterfall` puts them first.
     """
 
     value: int
     band: TrustBand
-    deductions: Mapping[str, float]
-    """What each risk subtracted, keyed by name, for the audit trail and report."""
+    deductions: tuple[Deduction, ...]
+    """What each risk subtracted and why, worst first, for the report and the
+    audit trail."""
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        """The deduction names alone, sorted, for a compact one-line summary."""
+        return tuple(sorted(deduction.name for deduction in self.deductions))
+
+    def waterfall(self) -> tuple[str, ...]:
+        """Render the score contrastively: 100, each deduction, then the total.
+
+        The shape F7 prescribes. A reader sees what went wrong and what it cost
+        before they see the number, so the number reads as a consequence rather
+        than as a measurement in units nobody defined.
+
+        Returns:
+            Aligned plain-text lines, no markup, safe in a terminal, a markdown
+            code block, and a JSON string alike.
+        """
+        rows = [("100", "starting")]
+        rows += [
+            (f"-{deduction.points:g}", f"{deduction.name}: {deduction.cause}")
+            for deduction in self.deductions
+        ]
+        rows.append((str(self.value), str(self.band)))
+
+        width = max(len(amount) for amount, _ in rows)
+        lines = [f"{amount:>{width}}  {label}" for amount, label in rows[:-1]]
+        lines.append("-" * width)
+        amount, label = rows[-1]
+        lines.append(f"{amount:>{width}}  {label}")
+        return tuple(lines)

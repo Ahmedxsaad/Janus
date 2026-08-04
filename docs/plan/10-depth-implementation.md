@@ -51,21 +51,34 @@ times.
 Both items implement fixes the project's own audit already prescribed. Nothing else
 depends on them, so they are first only because they are free.
 
-### T-01 Trust score as a waterfall (09 section 4.3, closes part of F7)
+### T-01 Trust score as a waterfall (09 section 4.3, closes part of F7) [done, D-108]
 
-- [ ] Expose the existing per-finding deductions from `detect/trust_score.py` on the
-      `TrustScore` model rather than only the total.
-- [ ] Render the waterfall in `render.py` (terminal and JSON), in the incident body,
-      and in the impact report: deductions first, integer last.
-- [ ] Each deduction names the finding that caused it.
-- [ ] Add `SCORING_VERSION` to `config.py`, stamped into every `trust_history` entry
-      and the structured property (F7 step 1).
-- [ ] CI check: a change to weights, band boundaries, or the contributing finding set
-      without a `SCORING_VERSION` bump fails.
-- [ ] Print a one-line warning when `--min-trust` is used without
-      `--block-at-or-above` (F7 step 3).
-- [ ] Add the provenance sentence to the report: the weights are a stated preference
-      ordering, not a calibrated model (F7 step 4).
+- [x] Expose the existing per-finding deductions from `detect/trust_score.py` on the
+      `TrustScore` model rather than only the total. Landed as
+      `deductions: tuple[Deduction, ...]`, worst first, over the previous
+      `Mapping[str, float]`: the ordering is information a mapping cannot carry.
+- [x] Render the waterfall in `render.py` (terminal and JSON), ~~in the incident
+      body,~~ and in the impact report: deductions first, integer last.
+      The incident body is deliberately not a waterfall surface: an incident is per
+      finding and a score is per model, so a freshness finding endangering five
+      models would render five waterfalls into one incident and duplicate a number
+      that belongs on the model (D-108).
+- [x] Each deduction names the finding that caused it. The freshness deduction names
+      the *worst*-lagging table's finding, because that is the one that set it.
+- [x] Add `SCORING_VERSION` to `config.py`, stamped into every `trust_history` entry
+      and the structured property (F7 step 1). A new `modelguard.scoring_version`
+      property; the history format gains a sixth field and still parses the five-field
+      entries an older release wrote, as unknown rather than dropping them.
+- [x] CI check: a change to weights, band boundaries, or the contributing finding set
+      without a `SCORING_VERSION` bump fails. A fingerprint test in
+      `tests/test_config.py` rather than a CI job, so it runs in the existing suite
+      and names its own fix.
+- [x] Print a one-line warning when `--min-trust` is used without
+      `--block-at-or-above` (F7 step 3). The judgement is `GatePolicy.advisory`, so it
+      is pure and testable offline; the CLI only prints it.
+- [x] Add the provenance sentence to the report: the weights are a stated preference
+      ordering, not a calibrated model (F7 step 4). `config.SCORE_PROVENANCE`, printed
+      by every surface that shows the number.
 
 Files: `modelguard/detect/trust_score.py`, `modelguard/models.py`,
 `modelguard/config.py`, `modelguard/render.py`, `modelguard/writeback/documents.py`,
@@ -74,15 +87,20 @@ Files: `modelguard/detect/trust_score.py`, `modelguard/models.py`,
 Done when: a scored model's report leads with what is wrong and the history shows a
 version change as a labelled discontinuity rather than a mystery drop.
 
-### T-02 NIST AI RMF crosswalk (09 section 5.4)
+### T-02 NIST AI RMF crosswalk (09 section 5.4) [done, D-109]
 
-- [ ] Generate a table mapping each detector to the MAP / MEASURE / MANAGE
-      subcategory it produces evidence for.
-- [ ] Generated from the detector registry, not typed by hand, so a new detector
-      cannot silently be absent from it.
-- [ ] Rendered into the docs site and available as a CLI output.
+- [x] Generate a table mapping each detector to the MAP / MEASURE / MANAGE
+      subcategory it produces evidence for. Subcategory text is quoted verbatim
+      from the AI RMF 1.0 Playbook, held in one dict keyed by id, not paraphrased.
+- [x] Generated from the detector registry, not typed by hand, so a new detector
+      cannot silently be absent from it. Keyed by `FindingType`.
+- [x] Rendered into the docs site and available as a CLI output
+      (`modelguard crosswalk`, which connects to nothing).
+- [x] Not in the original checklist and it is the load-bearing part: the artifact
+      states in its own first paragraph that it is a mapping and **not a conformity
+      claim**, on both surfaces, asserted by a test on each.
 
-Files: `modelguard/render.py`, `site/`, `docs/plan/resources.md`.
+Files: `modelguard/render.py`, `modelguard/cli.py`, `site/`, `docs/plan/resources.md`.
 
 Done when: adding a detector without a crosswalk row fails a test.
 

@@ -13,7 +13,7 @@ from modelguard.detect.trust_score import (
     trust_inputs_from_findings,
     trust_score,
 )
-from modelguard.models import ModelRef, TrustBand
+from modelguard.models import ModelRef, TrustBand, TrustScore
 from tests.conftest import (
     MODEL_URN,
     make_finding,
@@ -22,6 +22,11 @@ from tests.conftest import (
 )
 
 CONFIG = ScanConfig()
+
+
+def _points(score: TrustScore, name: str) -> float:
+    """The points one named deduction cost, for a test that asserts on a weight."""
+    return next(deduction.points for deduction in score.deductions if deduction.name == name)
 
 
 def _ref(*, has_owner: bool) -> ModelRef:
@@ -46,7 +51,7 @@ def test_every_risk_present_drives_the_score_to_zero():
 
     assert score.value == 0
     assert score.band == TrustBand.AT_RISK
-    assert set(score.deductions) == {
+    assert set(score.names) == {
         DEDUCTION_UPSTREAM_FAILURE,
         DEDUCTION_LEAKAGE,
         DEDUCTION_SCHEMA_DRIFT,
@@ -64,8 +69,8 @@ def test_leakage_and_drift_only_lands_on_watch():
     # 100 - 20 (leakage) - 15 (drift) - 10 (owner) = 55.
     assert score.value == 55
     assert score.band == TrustBand.WATCH
-    assert DEDUCTION_UPSTREAM_FAILURE not in score.deductions
-    assert DEDUCTION_FRESHNESS_LAG not in score.deductions
+    assert DEDUCTION_UPSTREAM_FAILURE not in score.names
+    assert DEDUCTION_FRESHNESS_LAG not in score.names
 
 
 def test_a_single_owned_leakage_finding_scores_high_but_bands_watch():
@@ -115,7 +120,7 @@ def test_freshness_deduction_scales_with_lag_over_sla():
     )
     # 100 - 40 (upstream failure) - 7.5 (half the freshness weight) = 52.5 -> 52.
     assert scaled.value == 52
-    assert scaled.deductions[DEDUCTION_FRESHNESS_LAG] == 7.5
+    assert _points(scaled, DEDUCTION_FRESHNESS_LAG) == 7.5
 
 
 def test_lag_ratio_is_capped_at_one():
@@ -151,4 +156,66 @@ def test_a_clean_owned_model_scores_one_hundred():
     )
     assert score.value == 100
     assert score.band == TrustBand.HEALTHY
-    assert score.deductions == {}
+    assert score.deductions == ()
+
+
+# --------------------------------------------------------------------------
+# The waterfall: what a reader sees before the integer (F7, T-01)
+# --------------------------------------------------------------------------
+
+
+def test_each_deduction_names_the_finding_that_caused_it():
+    """A deduction a reader cannot trace to a finding is not actionable."""
+    findings = [make_leakage_finding(live=True), make_schema_drift_finding(live=True)]
+    score = trust_score(trust_inputs_from_findings(findings, _ref(has_owner=False)), CONFIG)
+
+    causes = {deduction.name: deduction.cause for deduction in score.deductions}
+    assert causes[DEDUCTION_LEAKAGE] == findings[0].title
+    assert causes[DEDUCTION_SCHEMA_DRIFT] == findings[1].title
+    # Ownership is read off the model, not off a finding, so it names the model.
+    assert "Credit Risk v3" in causes[DEDUCTION_MISSING_OWNER]
+
+
+def test_the_freshness_deduction_names_the_worst_lagging_table():
+    """The deduction is set by the worst lag, so it must name that table's finding."""
+    # Both below the clamp, so the ratios actually differ: two saturated lags
+    # are equally bad and the first is then rightly the one named.
+    mild = make_finding(live=True, lag_hours=3.0, sla_hours=6.0, table_name="ecommerce.public.mild")
+    worst = make_finding(
+        live=True, lag_hours=5.0, sla_hours=6.0, table_name="ecommerce.public.worst"
+    )
+    score = trust_score(trust_inputs_from_findings([mild, worst], _ref(has_owner=True)), CONFIG)
+
+    causes = {deduction.name: deduction.cause for deduction in score.deductions}
+    assert causes[DEDUCTION_FRESHNESS_LAG] == worst.title
+
+
+def test_deductions_are_ordered_worst_first():
+    findings = [
+        make_finding(live=True, lag_hours=30.0, sla_hours=6.0),
+        make_leakage_finding(live=True),
+        make_schema_drift_finding(live=True),
+    ]
+    score = trust_score(trust_inputs_from_findings(findings, _ref(has_owner=False)), CONFIG)
+
+    points = [deduction.points for deduction in score.deductions]
+    assert points == sorted(points, reverse=True)
+
+
+def test_the_waterfall_leads_with_the_deductions_and_ends_with_the_total():
+    findings = [make_leakage_finding(live=True)]
+    score = trust_score(trust_inputs_from_findings(findings, _ref(has_owner=False)), CONFIG)
+
+    lines = score.waterfall()
+    assert lines[0].strip() == "100  starting"
+    assert lines[1].strip().startswith("-20  leakage:")
+    assert lines[2].strip().startswith("-10  missing_owner:")
+    assert set(lines[3].strip()) == {"-"}
+    assert lines[4].strip() == f"{score.value}  {score.band}"
+
+
+def test_a_clean_score_still_renders_a_waterfall_with_no_steps():
+    """No deductions is a real answer, not an empty render."""
+    score = trust_score(TrustInputs(False, False, False, 0.0, False), CONFIG)
+
+    assert score.waterfall() == ("100  starting", "---", "100  healthy")

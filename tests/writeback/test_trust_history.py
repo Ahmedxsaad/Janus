@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from modelguard.models import TrustBand, TrustScore
+from modelguard.config import SCORING_VERSION
+from modelguard.models import TrustScore
 from modelguard.writeback.properties import TRUST_HISTORY, assign_properties
 from modelguard.writeback.trust_history import (
     HISTORY_LIMIT,
@@ -25,17 +26,13 @@ from modelguard.writeback.trust_history import (
     project_history,
     read_history,
 )
-from tests.conftest import MODEL_URN, FakeGraph, make_connection
+from tests.conftest import MODEL_URN, FakeGraph, make_connection, make_trust_score
 
 WHEN = datetime(2026, 8, 2, 9, 30, tzinfo=UTC)
 
 
 def _score(value: int, *, deductions: dict[str, float] | None = None) -> TrustScore:
-    return TrustScore(
-        value=value,
-        band=TrustBand.HEALTHY if value >= 70 else TrustBand.AT_RISK,
-        deductions=deductions if deductions is not None else {"leakage": 20.0},
-    )
+    return make_trust_score(value, deductions=deductions)
 
 
 def _conn(graph: FakeGraph | None = None):  # noqa: ANN202 - a DataHubConnection
@@ -146,7 +143,8 @@ class TestAppend:
         )
 
         assert history[0].deductions == ("leakage", "missing_owner")
-        assert "20" not in history[0].render().rsplit("|", 1)[-1]
+        deductions_field = history[0].render().split("|")[4]
+        assert "20" not in deductions_field
 
     def test_a_model_never_scored_has_an_empty_history_not_a_perfect_one(self):
         """Empty means unmeasured. It is not the same as a model that scored well."""
@@ -170,3 +168,35 @@ class TestProjection:
         project_history(conn, MODEL_URN, _score(64), "scan-1", now=WHEN)
 
         assert read_history(conn, MODEL_URN) == ()
+
+
+class TestScoringVersion:
+    """A score is comparable only to one the same function produced (F7, T-01)."""
+
+    def test_a_new_entry_records_the_scoring_version(self):
+        conn = _conn()
+
+        history = append_entry(conn, MODEL_URN, _score(64), "scan-1", now=WHEN)
+
+        assert history[0].scoring_version == str(SCORING_VERSION)
+        assert history[0].render().endswith(f"|{SCORING_VERSION}")
+
+    def test_an_entry_written_before_versioning_still_parses(self):
+        """A graph scored by an older release is exactly where a step matters most.
+
+        Dropping those rows would leave the discontinuity invisible, which is the
+        one thing recording the version exists to prevent.
+        """
+        legacy = "2026-08-02T09:30:00Z|scan-old|64|watch|leakage"
+
+        parsed = parse_entry(legacy)
+
+        assert parsed is not None
+        assert parsed.score == 64
+        assert parsed.deductions == ("leakage",)
+        # Unknown, which is a different fact from "the same version as today".
+        assert parsed.scoring_version == ""
+
+    def test_a_line_with_neither_five_nor_six_fields_is_still_dropped(self):
+        assert parse_entry("2026-08-02T09:30:00Z|scan-old|64|watch") is None
+        assert parse_entry("a|b|c|d|e|f|g") is None

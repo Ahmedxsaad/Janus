@@ -16,15 +16,19 @@ import pytest
 from modelguard.agent.pipeline import FindingWrites, ScanReport, TrustWrite
 from modelguard.detect.coverage import Unevaluated
 from modelguard.gate import GatePolicy, evaluate
-from modelguard.models import Finding, Severity, TrustBand, TrustScore
+from modelguard.models import Finding, FindingType, Severity
 from modelguard.render import (
+    AI_RMF_SUBCATEGORIES,
+    CROSSWALK,
+    CROSSWALK_DISCLAIMER,
     ENV_STEP_SUMMARY,
+    crosswalk_markdown,
     job_summary_markdown,
     report_dict,
     report_json,
     write_job_summary,
 )
-from tests.conftest import MODEL_URN
+from tests.conftest import MODEL_URN, make_trust_score
 from tests.conftest import make_finding as _finding
 from tests.conftest import make_leakage_finding as _leakage_finding
 
@@ -59,11 +63,7 @@ def _trust(value: int) -> TrustWrite:
     return TrustWrite(
         model_urn=MODEL_URN,
         model_name="Credit Risk v3",
-        score=TrustScore(
-            value=value,
-            band=TrustBand.HEALTHY if value >= 70 else TrustBand.AT_RISK,
-            deductions={"leakage": 20.0},
-        ),
+        score=make_trust_score(value),
     )
 
 
@@ -187,3 +187,40 @@ def test_the_headline_never_claims_health_without_a_check(clean: bool):
         assert "some checks did not run" in headline
     else:
         assert "finding(s)" in headline
+
+
+class TestCrosswalk:
+    """The NIST AI RMF crosswalk is generated, so it cannot fall behind (T-02)."""
+
+    def test_every_detector_has_a_row(self):
+        """Adding a detector without a crosswalk row leaves a hole in a filed document."""
+        assert set(CROSSWALK) == set(FindingType)
+
+    def test_every_cited_subcategory_is_quoted(self):
+        """A row citing an id with no verbatim text is a citation a reader cannot check."""
+        cited = {sub_id for row in CROSSWALK.values() for sub_id in row.subcategory_ids}
+        assert cited <= set(AI_RMF_SUBCATEGORIES)
+
+    def test_every_quoted_subcategory_is_cited(self):
+        """Text nobody cites is dead weight in an artifact somebody has to read."""
+        cited = {sub_id for row in CROSSWALK.values() for sub_id in row.subcategory_ids}
+        assert set(AI_RMF_SUBCATEGORIES) <= cited
+
+    def test_each_row_cites_one_subcategory_per_function(self):
+        for finding_type, row in CROSSWALK.items():
+            assert row.map_id.startswith("MAP "), finding_type
+            assert row.measure_id.startswith("MEASURE "), finding_type
+            assert row.manage_id.startswith("MANAGE "), finding_type
+
+    def test_the_markdown_carries_one_row_per_detector_and_the_disclaimer(self):
+        markdown = crosswalk_markdown()
+
+        assert CROSSWALK_DISCLAIMER in markdown
+        for row in CROSSWALK.values():
+            assert f"| {row.detector} |" in markdown
+        for sub_id, text in AI_RMF_SUBCATEGORIES.items():
+            assert f"**{sub_id}**: {text}" in markdown
+
+    def test_the_markdown_is_not_a_conformity_claim(self):
+        """The whole artifact turns on this distinction; assert it rather than trust it."""
+        assert "not a conformity claim" in crosswalk_markdown()

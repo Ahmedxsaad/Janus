@@ -25,19 +25,29 @@ is a plain JSON type. Numbers a reader might act on (severities, trust scores,
 hop counts) come from a finding's own evidence mapping, never from prose: the
 narrator's assessment is carried under its own key, alongside the source that
 produced it, so a consumer can tell a measured fact from a drafted sentence.
+
+A third reader: a governance function
+-------------------------------------
+:func:`crosswalk_markdown` renders something that is not a scan at all: the map
+from each detector to the NIST AI RMF subcategory it produces evidence for. It
+lives here because it is the same kind of thing, a rendering with no judgement in
+it, and because it is derived from the detector registry rather than typed by
+hand, so a detector cannot be added without appearing in it.
 """
 
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from modelguard.agent.pipeline import FindingWrites, ScanReport
+from modelguard.config import SCORE_PROVENANCE, SCORING_VERSION
 from modelguard.env import optional_value
 from modelguard.gate import GateVerdict
-from modelguard.models import ModelRef
+from modelguard.models import FindingType, ModelRef
 
 
 class OutputFormat(StrEnum):
@@ -120,11 +130,23 @@ def report_dict(report: ScanReport, verdict: GateVerdict | None = None) -> dict[
                 "model_name": trust.model_name,
                 "score": trust.score.value,
                 "band": trust.score.band.value,
+                "scoring_version": SCORING_VERSION,
                 # Null, not the current score, when this model has never been
                 # scored before: "unchanged" and "never measured" are different
                 # facts and only one of them is reassuring.
                 "previous_score": trust.previous_score,
-                "deductions": dict(trust.score.deductions),
+                # An array and not an object, because the order is information:
+                # worst deduction first, which is the waterfall a human reads in
+                # the terminal (F7). A consumer that wants a lookup can build one;
+                # one that gets an object cannot recover the ordering.
+                "deductions": [
+                    {
+                        "name": deduction.name,
+                        "points": deduction.points,
+                        "cause": deduction.cause,
+                    }
+                    for deduction in trust.score.deductions
+                ],
             }
             for trust in report.trust
         ],
@@ -207,14 +229,27 @@ def job_summary_markdown(report: ScanReport, verdict: GateVerdict | None = None)
         lines.append("")
 
     if report.trust:
-        lines.append("| Model | Trust | Band | Deductions |")
+        # What is wrong before what it scored (F7). The band is a judgement about
+        # the model; the integer is a weighted sum whose units nobody defined, so
+        # it goes last and the reasons that a reader can act on go first.
+        lines.append("| Model | Band | What cost it | Score |")
         lines.append("|---|---|---|---|")
         for trust in report.trust:
-            reasons = ", ".join(sorted(trust.score.deductions)) or "none"
-            lines.append(
-                f"| {trust.model_name} | {trust.score.value}/100 "
-                f"| {trust.score.band.value} | {reasons} |"
+            reasons = (
+                ", ".join(
+                    f"{deduction.name} (-{deduction.points:g})"
+                    for deduction in trust.score.deductions
+                )
+                or "nothing"
             )
+            lines.append(
+                f"| {trust.model_name} | {trust.score.band.value} "
+                f"| {reasons} | {trust.score.value}/100 |"
+            )
+        lines.append("")
+        lines.append(
+            f"<sub>Scored under scoring version {SCORING_VERSION}. {SCORE_PROVENANCE}</sub>"
+        )
         lines.append("")
 
     # Printed whatever the outcome. A check that never ran is the thing a reader
@@ -249,3 +284,185 @@ def write_job_summary(markdown: str) -> Path | None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(markdown)
     return path
+
+
+# --------------------------------------------------------------------------
+# The NIST AI RMF crosswalk (T-02)
+# --------------------------------------------------------------------------
+
+#: The subcategories this crosswalk cites, quoted verbatim from the NIST AI RMF
+#: 1.0 Playbook (https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook), retrieved
+#: 2026-08-04. Held in one place and cited by id, so several detectors can point
+#: at the same subcategory without the text being retyped, and so a reader can
+#: check the quotation against the source in one pass.
+AI_RMF_SUBCATEGORIES: dict[str, str] = {
+    "MAP 2.3": (
+        "Scientific integrity and TEVV considerations are identified and documented, "
+        "including those related to experimental design, data collection and selection."
+    ),
+    "MAP 4.1": (
+        "Approaches for mapping AI technology and legal risks of its components, "
+        "including the use of third-party data or software, are in place, followed, "
+        "and documented."
+    ),
+    "MAP 4.2": (
+        "Internal risk controls for components of the AI system including third-party "
+        "AI technologies are identified and documented."
+    ),
+    "MEASURE 2.3": (
+        "AI system performance or assurance criteria are measured qualitatively or "
+        "quantitatively and demonstrated for conditions similar to deployment setting(s)."
+    ),
+    "MEASURE 2.4": (
+        "The functionality and behavior of the AI system and its components are "
+        "monitored when in production."
+    ),
+    "MEASURE 2.5": (
+        "The AI system to be deployed is demonstrated to be valid and reliable. "
+        "Limitations of the generalizability beyond the conditions under which the "
+        "technology was developed are documented."
+    ),
+    "MEASURE 2.10": "Privacy risk of the AI system is examined and documented.",
+    "MANAGE 2.2": (
+        "Mechanisms are in place and applied to sustain the value of deployed AI systems."
+    ),
+    "MANAGE 2.3": (
+        "Procedures are followed to respond to and recover from a previously unknown "
+        "risk when it is identified."
+    ),
+    "MANAGE 4.1": (
+        "Post-deployment AI system monitoring plans are implemented, including "
+        "mechanisms for capturing and evaluating input from users and other relevant "
+        "AI actors, appeal and override, decommissioning, incident response, recovery, "
+        "and change management."
+    ),
+}
+
+
+@dataclass(frozen=True)
+class CrosswalkRow:
+    """One detector, and the AI RMF subcategories its output is evidence for."""
+
+    detector: str
+    """The check as a reader of the docs knows it, not the enum value."""
+    evidence: str
+    """What this detector actually puts in the graph. The claim is only ever that
+    this artifact exists and is machine-checkable, never that the subcategory is
+    thereby satisfied."""
+    map_id: str
+    measure_id: str
+    manage_id: str
+
+    @property
+    def subcategory_ids(self) -> tuple[str, str, str]:
+        """The three cited subcategories, in function order."""
+        return (self.map_id, self.measure_id, self.manage_id)
+
+
+#: Every detector, keyed by the finding type it raises. Keyed by the enum rather
+#: than listed, so adding a detector without a row here is a failing test and not
+#: a quiet gap in a compliance artifact (T-02).
+CROSSWALK: dict[FindingType, CrosswalkRow] = {
+    FindingType.UPSTREAM_FRESHNESS: CrosswalkRow(
+        detector="Freshness and blast radius",
+        evidence=(
+            "A freshness incident on the failing table, a guarding assertion with its "
+            "measured run, and the named live models downstream of it"
+        ),
+        map_id="MAP 4.1",
+        measure_id="MEASURE 2.4",
+        manage_id="MANAGE 4.1",
+    ),
+    FindingType.TARGET_LEAKAGE: CrosswalkRow(
+        detector="Target leakage",
+        evidence=(
+            "A field incident on the offending column, quoting the derivation chain "
+            "from the feature to the label column, hop by hop"
+        ),
+        map_id="MAP 2.3",
+        measure_id="MEASURE 2.5",
+        manage_id="MANAGE 2.3",
+    ),
+    FindingType.INPUT_SCHEMA_DRIFT: CrosswalkRow(
+        detector="Input schema drift",
+        evidence=(
+            "A schema incident naming every column added, removed or retyped since the "
+            "training-time snapshot recorded on the training run"
+        ),
+        map_id="MAP 2.3",
+        measure_id="MEASURE 2.3",
+        manage_id="MANAGE 4.1",
+    ),
+    FindingType.SENSITIVE_SOURCE: CrosswalkRow(
+        detector="Sensitive source",
+        evidence=(
+            "A field incident naming the classification the organization applied and "
+            "the path from the classified column to the feature that carries it"
+        ),
+        map_id="MAP 4.1",
+        measure_id="MEASURE 2.10",
+        manage_id="MANAGE 2.3",
+    ),
+    FindingType.DEPRECATED_INPUT: CrosswalkRow(
+        detector="Deprecated input",
+        evidence=(
+            "An incident on the deprecated dataset, quoting its owners' own note and "
+            "decommission date, against the models still training on it"
+        ),
+        map_id="MAP 4.2",
+        measure_id="MEASURE 2.4",
+        manage_id="MANAGE 2.2",
+    ),
+}
+
+#: Printed above the table, and it is the load-bearing part of the artifact.
+#:
+#: A generated table that read as a conformity claim would be worse than no table:
+#: a crosswalk says which subcategory an artifact is evidence *for*, and evidence
+#: is not conformity. The distinction is the same one the sensitive-source
+#: detector already makes between "not evaluated" and "clean".
+CROSSWALK_DISCLAIMER = (
+    "This is a mapping, not a conformity claim. Each row says which NIST AI RMF "
+    "subcategory a detector's output is evidence for; whether that subcategory is "
+    "satisfied is a judgement about your organization's whole process, which no "
+    "tool reading a metadata graph can make. Subcategory text is quoted from the "
+    "NIST AI RMF 1.0 Playbook."
+)
+
+
+def crosswalk_markdown() -> str:
+    """Render the detector-to-AI-RMF crosswalk as markdown.
+
+    Generated from :data:`CROSSWALK`, which is keyed by
+    :class:`~modelguard.models.FindingType`, so the table cannot fall behind the
+    detectors: a new finding type with no row fails a test rather than quietly
+    leaving a hole in a document somebody files.
+
+    Returns:
+        The markdown document: the disclaimer, the table, and the verbatim text
+        of every subcategory the table cites.
+    """
+    lines = [
+        "# ModelGuard and the NIST AI RMF",
+        "",
+        CROSSWALK_DISCLAIMER,
+        "",
+        "| Detector | Evidence it writes into the graph | MAP | MEASURE | MANAGE |",
+        "|---|---|---|---|---|",
+    ]
+    # Ordered by the enum's declaration order, which is the order the detectors
+    # were built and the order the docs introduce them in.
+    rows = [(finding_type, CROSSWALK[finding_type]) for finding_type in FindingType]
+    lines += [
+        f"| {row.detector} | {row.evidence} | {row.map_id} | {row.measure_id} | {row.manage_id} |"
+        for _, row in rows
+    ]
+
+    cited = sorted(
+        {sub_id for _, row in rows for sub_id in row.subcategory_ids},
+        key=lambda sub_id: list(AI_RMF_SUBCATEGORIES).index(sub_id),
+    )
+    lines += ["", "## The subcategories cited above", ""]
+    lines += [f"- **{sub_id}**: {AI_RMF_SUBCATEGORIES[sub_id]}" for sub_id in cited]
+    lines.append("")
+    return "\n".join(lines)

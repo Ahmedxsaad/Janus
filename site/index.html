@@ -111,6 +111,7 @@
   <div class="group">Reference</div>
   <a href="#config">Configuration</a>
   <a href="#security">Security model</a>
+  <a href="#crosswalk">NIST AI RMF</a>
   <a href="#links">Everything else</a>
 </aside>
 
@@ -837,6 +838,40 @@ MODELGUARD_LABEL_TERM_URN=              # honor your existing label term
     <tr><td>A schema fixed at training time, against which serving data is continuously validated</td><td>Breck, Polyzotis, Roy, Whang and Zinkevich, <em>Data Validation for Machine Learning</em> (MLSys 2019)</td></tr>
     <tr><td>The prompt-injection and sensitive-disclosure threat model</td><td>OWASP Top 10 for LLM Applications (2025), LLM01 and LLM06</td></tr>
   </table>
+</section>
+
+<section id="crosswalk">
+  <h2>Where this fits a governance framework</h2>
+  <p>
+    This is a mapping, not a conformity claim. Each row says which NIST AI RMF subcategory a detector's output is evidence for; whether that subcategory is satisfied is a judgement about your organization's whole process, which no tool reading a metadata graph can make. Subcategory text is quoted from the NIST AI RMF 1.0 Playbook.
+  </p>
+  <p>
+    Generated from the detector registry rather than typed by hand, so a check
+    cannot be added to ModelGuard without appearing here. Run
+    <code>modelguard crosswalk</code> to print this table as markdown, straight
+    into whatever document you have to file.
+  </p>
+  <table>
+    <tr><th>Detector</th><th>Evidence it writes into the graph</th><th>MAP</th><th>MEASURE</th><th>MANAGE</th></tr>
+    <tr><td>Freshness and blast radius</td><td>A freshness incident on the failing table, a guarding assertion with its measured run, and the named live models downstream of it</td><td><code>MAP 4.1</code></td><td><code>MEASURE 2.4</code></td><td><code>MANAGE 4.1</code></td></tr>
+    <tr><td>Target leakage</td><td>A field incident on the offending column, quoting the derivation chain from the feature to the label column, hop by hop</td><td><code>MAP 2.3</code></td><td><code>MEASURE 2.5</code></td><td><code>MANAGE 2.3</code></td></tr>
+    <tr><td>Input schema drift</td><td>A schema incident naming every column added, removed or retyped since the training-time snapshot recorded on the training run</td><td><code>MAP 2.3</code></td><td><code>MEASURE 2.3</code></td><td><code>MANAGE 4.1</code></td></tr>
+    <tr><td>Sensitive source</td><td>A field incident naming the classification the organization applied and the path from the classified column to the feature that carries it</td><td><code>MAP 4.1</code></td><td><code>MEASURE 2.10</code></td><td><code>MANAGE 2.3</code></td></tr>
+    <tr><td>Deprecated input</td><td>An incident on the deprecated dataset, quoting its owners' own note and decommission date, against the models still training on it</td><td><code>MAP 4.2</code></td><td><code>MEASURE 2.4</code></td><td><code>MANAGE 2.2</code></td></tr>
+  </table>
+  <p>The subcategories cited above, quoted from the NIST AI RMF 1.0 Playbook:</p>
+  <ul>
+    <li><code>MAP 2.3</code> Scientific integrity and TEVV considerations are identified and documented, including those related to experimental design, data collection and selection.</li>
+    <li><code>MAP 4.1</code> Approaches for mapping AI technology and legal risks of its components, including the use of third-party data or software, are in place, followed, and documented.</li>
+    <li><code>MAP 4.2</code> Internal risk controls for components of the AI system including third-party AI technologies are identified and documented.</li>
+    <li><code>MEASURE 2.3</code> AI system performance or assurance criteria are measured qualitatively or quantitatively and demonstrated for conditions similar to deployment setting(s).</li>
+    <li><code>MEASURE 2.4</code> The functionality and behavior of the AI system and its components are monitored when in production.</li>
+    <li><code>MEASURE 2.5</code> The AI system to be deployed is demonstrated to be valid and reliable. Limitations of the generalizability beyond the conditions under which the technology was developed are documented.</li>
+    <li><code>MEASURE 2.10</code> Privacy risk of the AI system is examined and documented.</li>
+    <li><code>MANAGE 2.2</code> Mechanisms are in place and applied to sustain the value of deployed AI systems.</li>
+    <li><code>MANAGE 2.3</code> Procedures are followed to respond to and recover from a previously unknown risk when it is identified.</li>
+    <li><code>MANAGE 4.1</code> Post-deployment AI system monitoring plans are implemented, including mechanisms for capturing and evaluating input from users and other relevant AI actors, appeal and override, decommissioning, incident response, recovery, and change management.</li>
+  </ul>
 </section>
 
 <section id="links">

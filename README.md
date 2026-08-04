@@ -353,6 +353,12 @@ modelguard gate --model credit_risk_v3 --block-at-or-above high   # exit 1 if it
 modelguard gate --model credit_risk_v3 --min-trust 80             # exit 1 if trust < 80
 ```
 
+Prefer `--block-at-or-above`. A severity is a thing a detector decided; the trust
+score is a weighted sum whose weights are a stated preference ordering, not a
+calibrated model, so a team that sets `--min-trust 80` has calibrated nothing
+against a scale with no units. `--min-trust` used on its own prints a one-line
+caution saying exactly that. It still works, and it is the blunter of the two.
+
 Three exit codes, and the third is the point: `0` shippable, `1` the policy was
 violated, `2` the gate could not reach a verdict (DataHub unreachable, bad config).
 A gate that reported "I could not connect" as a policy violation would teach a team to
@@ -620,6 +626,22 @@ result rather than a heuristic somebody liked:
 
 Full reading list with what each one changed here:
 [docs/plan/resources.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/resources.md).
+
+## Show a governance function where this fits
+
+```bash
+modelguard crosswalk        # markdown on stdout, connects to nothing
+```
+
+One row per detector, mapping it to the NIST AI RMF subcategory its output is
+evidence for, with the subcategory text quoted from the AI RMF 1.0 Playbook
+rather than paraphrased. The table is generated from the detector registry, so a
+check cannot be added to ModelGuard without appearing in it.
+
+It is a mapping and not a conformity claim, and it says so in its own first
+paragraph. Which subcategory an artifact is evidence *for* is a fact about the
+artifact; whether the subcategory is *satisfied* is a judgement about your whole
+process, and nothing that reads a metadata graph is in a position to make it.
 
 ## OSS contributions
 

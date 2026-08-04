@@ -45,6 +45,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from modelguard.agent.pipeline import ScanReport
+from modelguard.config import SCORE_PROVENANCE
 from modelguard.models import Finding, Severity, severity_rank
 
 #: Exit code when the policy is satisfied.
@@ -76,6 +77,25 @@ class GatePolicy:
     def blocks_anything(self) -> bool:
         """Whether this policy can fail a build at all."""
         return self.block_at_or_above is not None or self.min_trust_score is not None
+
+    @property
+    def advisory(self) -> str:
+        """A caution about how this policy is written, or ``""`` when it is fine.
+
+        A trust threshold on its own gates on a composite score whose units
+        nobody defined: a team that picks 80 has calibrated nothing (F7 step 3).
+        A severity is a defined thing a detector decided, so the advice is to
+        gate on that and keep the score as the blunt secondary control it is.
+
+        A caution and not a refusal: the flag works, and a team that has read
+        this and still wants it is entitled to it.
+        """
+        if self.min_trust_score is None or self.block_at_or_above is not None:
+            return ""
+        return (
+            f"--min-trust alone gates on a composite score. {SCORE_PROVENANCE} "
+            "Prefer --block-at-or-above, which gates on a severity a detector decided."
+        )
 
 
 @dataclass(frozen=True)
@@ -154,7 +174,13 @@ def evaluate(report: ScanReport, policy: GatePolicy) -> GateVerdict:
     if policy.min_trust_score is not None:
         for trust in report.trust:
             if trust.score.value < policy.min_trust_score:
-                risks = ", ".join(sorted(trust.score.deductions)) or "no recorded risk"
+                # The causes, not the names: this line is what a developer with a
+                # red build reads, and "leakage" sends them looking while
+                # "applicant_income derives from the label" is already the fix.
+                risks = (
+                    "; ".join(deduction.cause for deduction in trust.score.deductions)
+                    or "no recorded risk"
+                )
                 violations.append(
                     Violation(
                         headline=(

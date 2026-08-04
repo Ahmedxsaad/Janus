@@ -40,9 +40,42 @@ __all__ = [
     "ENV_MAX_HOPS",
     "ENV_SENSITIVE_TAG_URNS",
     "ENV_SENSITIVE_TERM_URNS",
+    "SCORE_PROVENANCE",
+    "SCORING_VERSION",
     "ConfigError",
     "ScanConfig",
 ]
+
+#: The version of the scoring function, bumped whenever a trust weight, a band
+#: boundary, or the set of findings that contribute to the score changes.
+#:
+#: A trust score is only comparable to another score computed the same way, and
+#: this project has already broken that comparability once: D-079 added the two
+#: governance detectors, which changed what every previously-scored model would
+#: now score, and nothing recorded it. A trend that drops because a release added
+#: a detector looks exactly like a trend that drops because somebody shipped a
+#: bug. Stamped into every history entry so the first kind reads as a labelled
+#: discontinuity instead (F7 step 1).
+#:
+#: Not a ``ScanConfig`` field: it is a fact about the code, not a knob. Nobody
+#: overrides it from the environment, because a scan that lied about which
+#: function produced its number would corrupt the history it is appended to.
+#:
+#: History: v1 was the original five deductions; v2 added sensitive source and
+#: deprecated input (D-079).
+SCORING_VERSION = 2
+
+#: The sentence printed wherever a trust score is shown to a human (F7 step 4).
+#:
+#: A composite score with unjustified weights looks far more rigorous than it is,
+#: and this one's weights are the plan's illustrative values. Saying so where the
+#: number appears is the difference between a measurement and a ranking, and a
+#: reader who knows which one they are holding will not calibrate a policy
+#: against it.
+SCORE_PROVENANCE = (
+    "The weights behind this score are a stated preference ordering, not a "
+    "calibrated model. Compare scores to each other, not to a threshold."
+)
 
 ENV_FRESHNESS_SLA_HOURS = "MODELGUARD_FRESHNESS_SLA_HOURS"
 ENV_MAX_HOPS = "MODELGUARD_MAX_HOPS"

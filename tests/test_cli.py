@@ -497,3 +497,12 @@ def test_a_mute_defers_the_write_and_never_swallows_it():
         assert graph.graphql_calls, "the deferred write must land once the mute is over"
     finally:
         producer.close()
+
+
+def test_the_crosswalk_prints_without_a_connection():
+    """It is a fact about the detectors, not about a catalog, so it needs no token."""
+    result = _invoke("crosswalk")
+
+    assert result.exit_code == 0
+    assert "not a conformity claim" in result.output
+    assert "Target leakage" in result.output

@@ -16,6 +16,94 @@ Entry template:
 
 ---
 
+## D-109: The NIST AI RMF crosswalk is generated, and says it is not conformity (2026-08-04)
+- Decided by: Ghassen Naouar (asked for phase 0 of the depth plan), implemented by
+  Claude. Closes T-02.
+- Decision: `modelguard crosswalk` prints a markdown table mapping each detector to
+  one MAP, one MEASURE and one MANAGE subcategory of the NIST AI RMF, plus the
+  verbatim text of every subcategory it cites. The same table is a section on the
+  docs site. Three properties, in order of how much they matter:
+  1. **It is a mapping, not a conformity claim**, and the artifact says so in its
+     own first paragraph, on both surfaces, asserted by a test on each. A crosswalk
+     says which subcategory an artifact is evidence *for*; whether the subcategory
+     is satisfied is a judgement about a whole organization's process that no tool
+     reading a metadata graph can make. This is the same distinction
+     `detect/coverage.py` already draws between "not evaluated" and "clean".
+  2. **It is generated from the detector registry**, keyed by `FindingType`, so a
+     new detector with no crosswalk row fails a test rather than leaving a hole in
+     a document somebody files. The site's copy is HTML, so a second test asserts
+     the page carries a row and the cited ids for every detector.
+  3. **The subcategory text is quoted, not paraphrased.** Retrieved from the NIST
+     AI RMF 1.0 Playbook (airc.nist.gov) on 2026-08-04 and held in one dict keyed
+     by id, so several detectors cite the same subcategory without the text being
+     retyped and a reader can check every quotation in one pass.
+- Options considered:
+  - Where the table lives: (a) `render.py`, as 10-depth-implementation.md says,
+    (b) a new `modelguard/crosswalk.py`. (a) chosen: it is a rendering with no
+    judgement in it, which is exactly what that module holds, and one dict plus one
+    function does not earn a module. render.py's docstring gains a section saying
+    the third reader is a governance function rather than a program or a pull request.
+  - Assigning subcategories: paraphrasing the framework's language was rejected in
+    favour of quoting it. A paraphrase in a compliance artifact is a claim about
+    what the framework says, and getting it subtly wrong is worse than citing an id.
+- Why: D.6 of 03-production-hardening.md name-dropped the AI RMF and produced
+  nothing. A name-drop is a claim; a generated table a reader can check is an
+  artifact. It also costs almost nothing, because every fact in it already existed.
+- Result: 619 offline tests green. Mutation-checked (tests/CLAUDE.md rule 6):
+  adding a sixth `FindingType` fails, renaming a detector without updating the page
+  fails, and weakening the disclaimer fails on both the CLI and the markdown.
+  `docs/plan/resources.md` records what the framework changed here, per the
+  convention the other entries follow.
+
+## D-108: The trust score leads with its deductions, and is versioned (2026-08-04)
+- Decided by: Ghassen Naouar (chose the typed deduction and the surfaces),
+  implemented by Claude. Closes T-01, and F7 in 07-weaknesses-and-remedies.md.
+- Decision: Five changes, all of them about making the score honest about what it
+  is rather than about changing what it computes. No score's value moves.
+  1. `TrustScore.deductions` becomes `tuple[Deduction, ...]`, worst first, where
+     each `Deduction` carries `name`, `points`, and the `cause` that triggered it
+     (the finding's own title, or the model's name for a missing owner).
+  2. `TrustScore.waterfall()` renders the score contrastively: 100, each
+     deduction, then the total. Used by the terminal, the CI job summary, and a
+     new "Trust score" section in the impact report. The integer goes last
+     everywhere it appears.
+  3. `SCORING_VERSION` (config.py, currently 2) is stamped into every
+     `modelguard.trust_history` entry and written as a new `modelguard.scoring_version`
+     structured property. The trend table renders a version change as a labelled
+     discontinuity, saying in the document that the step is a release and not a
+     regression.
+  4. `SCORE_PROVENANCE`, one sentence, printed wherever the number is: the weights
+     are a stated preference ordering, not a calibrated model.
+  5. `GatePolicy.advisory` cautions when `--min-trust` is used without
+     `--block-at-or-above`, and `modelguard gate` prints it.
+- Options considered:
+  - Deductions shape: (a) the typed `Deduction` tuple, (b) keeping the existing
+     `Mapping[str, float]` and adding a parallel `causes` map. (b) was the smaller
+     diff and was rejected: two maps that have to stay in sync is the shape that
+     rots, and the ordering (worst first) is information a mapping cannot carry.
+  - Waterfall surfaces: 10-depth-implementation.md listed the incident body. Left
+     out deliberately: an incident is per finding and a score is per model, so a
+     freshness finding endangering five models would render five waterfalls into
+     one incident, and duplicate a number that belongs on the model. 10 is updated
+     in place to say so (docs/CLAUDE.md rule 1).
+  - The version bump check: (a) a test that fingerprints the weights, the band
+     boundaries and the contributing deduction names against a pinned digest,
+     (b) a CI job diffing config.py. (a) chosen: it runs in the existing suite,
+     it names the fix in its own failure message, and it cannot be skipped by a
+     change that arrives outside a pull request.
+- Why: F7's finding was not that the weights are wrong (there are no true weights)
+  but that a composite score with invented weights looks more rigorous than it is,
+  and that nothing recorded when the function itself changed. D-079 added two
+  detectors and silently moved every previously-scored model's number. A trend that
+  drops because a release shipped a detector is indistinguishable from one that
+  drops because somebody shipped a bug, and both were rendered as the same integer.
+- Result: 609 offline tests green. Every new test mutation-checked (tests/CLAUDE.md
+  rule 6): ordering, the cause lookup, the version render, the legacy five-field
+  parse, the discontinuity line, and the advisory each go red when broken and green
+  when restored. A pre-version history entry still parses, with an unknown version
+  rather than being dropped, because a graph scored by an older release is exactly
+  where the discontinuity is most worth showing.
+
 ## D-107: The depth axes get a task-numbered build order, not just a doc (2026-08-04)
 - Decided by: Ghassen Naouar (asked for the implementation plan as a checklist),
   written by Claude.
