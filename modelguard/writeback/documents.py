@@ -191,6 +191,7 @@ and into the ML graph.
 4. Left a guarding freshness assertion on the failing table, with the result of \
 this evaluation attached, so the next stale load is caught rather than discovered.
 
+{{counterfactual}}
 ## Caveats
 
 Freshness here is derived from metadata DataHub already holds. ModelGuard did not \
@@ -266,6 +267,7 @@ Drop `{leak.feature_name}`, or rebuild it from data observable *before* the \
 outcome is known, then retrain and revalidate. Until then, treat this model's \
 reported performance as unverified.
 
+{{counterfactual}}
 ## Caveats
 
 ModelGuard proves the derivation from lineage, not from the data. If the lineage \
@@ -330,6 +332,7 @@ Reconcile `{finding.dataset_name}`'s schema with the model's training schema, or
 retrain the model against the current schema, then revalidate. Until then, treat \
 this model's predictions as scored on inputs it was not trained for.
 
+{{counterfactual}}
 ## Caveats
 
 ModelGuard compares the training-time schema snapshot against the current schema, \
@@ -401,6 +404,7 @@ Confirm with whoever owns the classification whether this model may learn from \
 `{exposure.sensitive_column_name}`. If it may not, rebuild `{exposure.feature_name}` \
 from a column that carries no such constraint, retrain, and revalidate.
 
+{{counterfactual}}
 ## Caveats
 
 ModelGuard reports the derivation and the classification as DataHub holds them. It \
@@ -466,12 +470,36 @@ Talk to the table's owners about their timeline, then migrate this model onto \
 whatever replaces `{finding.dataset_name}` and retrain. If the deprecation was a \
 mistake, withdrawing it in DataHub closes this finding on the next scan.
 
+{{counterfactual}}
 ## Caveats
 
 ModelGuard reads the `deprecation` aspect and the model's recorded inputs. It has no \
 opinion on whether the deprecation is justified, and it cannot tell whether a \
 replacement table already exists.
 """
+
+
+def render_counterfactual(finding: Finding) -> str:
+    """Render the finding's counterfactual as a markdown section.
+
+    Sits inside the body rather than being appended after it, because it belongs
+    beside the proof: the section above says what the graph shows, and this one
+    says what the graph would have to show instead. Rendered as a fenced block so
+    the remedies read as a list of alternatives rather than as steps to perform
+    in order, which is the one way this could be misread (T-03).
+    """
+    return "\n".join(
+        [
+            "## How to clear this",
+            "",
+            "Each of these is sufficient on its own. They are alternatives, not steps.",
+            "",
+            "```",
+            *finding.counterfactual.lines(),
+            "```",
+            "",
+        ]
+    )
 
 
 def render_trust_waterfall(score: TrustScore) -> str:
@@ -565,7 +593,8 @@ def render_impact_report(
 
     The skeleton is shared; the sections that depend on what actually went wrong
     are dispatched per finding type. The narrative is substituted last, so prose
-    an LLM wrote can never collide with a brace in the template.
+    an LLM wrote can never collide with a brace in the template, and the
+    counterfactual, which is deterministic, is substituted just before it.
 
     Args:
         finding: The deterministic finding. Every number below comes from here.
@@ -590,7 +619,16 @@ def render_impact_report(
         f"**Severity: {finding.severity}** | Models at risk: {len(models)} "
         f"(live: {live}) | Run: `{run_id}`\n\n"
     )
-    body = _report_body(finding).replace("{narrative}", narrative)
+    # The counterfactual first and the narrative last: both are substituted into
+    # the same template, and only one of them may have been written by an LLM.
+    # Doing the deterministic one first means no brace an LLM emitted can ever
+    # reach a substitution, which is the property the narrative-last ordering
+    # already had and must keep.
+    body = (
+        _report_body(finding)
+        .replace("{counterfactual}", render_counterfactual(finding))
+        .replace("{narrative}", narrative)
+    )
     sections = [render_trust_waterfall(score) if score else "", render_trust_trend(history)]
     return header + body + "".join(f"\n\n{section}" for section in sections if section)
 

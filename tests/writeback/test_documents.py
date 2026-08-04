@@ -346,3 +346,46 @@ def test_one_scoring_version_throughout_says_nothing_about_versions():
     )
 
     assert "The scoring function changed" not in trend
+
+
+def test_every_report_says_how_to_clear_the_finding():
+    """T-03: the report carries the counterfactual beside the proof.
+
+    Inside the body rather than appended after it, because "what would have to be
+    different" belongs next to "what the graph shows", not below the trust trend.
+    """
+    for finding in (
+        _finding(),
+        _leakage_finding(),
+        _drift_finding(),
+        _sensitive_finding(),
+        _deprecated_finding(),
+    ):
+        markdown = render_impact_report(finding, "prose", "scan-abc")
+        assert "## How to clear this" in markdown, type(finding).__name__
+        assert markdown.index("## How to clear this") < markdown.index("## Caveats")
+        for remedy in finding.counterfactual.remedies:
+            assert remedy.summary in markdown
+
+
+def test_a_two_path_leak_report_says_that_cutting_one_is_not_enough():
+    markdown = render_impact_report(
+        _leakage_finding(other_paths=(("prior_default_flag", "default_status_backup"),)),
+        "prose",
+        "scan-abc",
+    )
+
+    assert "2 distinct derivation paths" in markdown
+    assert "default_status_backup" in markdown
+
+
+def test_a_narrative_carrying_a_placeholder_cannot_reach_a_substitution():
+    """The counterfactual is substituted first so LLM prose can never be one.
+
+    The narrative-last ordering already held for its own placeholder; adding a
+    second one is exactly where that property gets lost by accident.
+    """
+    markdown = render_impact_report(_leakage_finding(), "{counterfactual}", "scan-abc")
+
+    assert "Any one of these clears this finding:" in markdown
+    assert markdown.count("Any one of these clears this finding:") == 1

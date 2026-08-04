@@ -33,6 +33,7 @@ ModelGuard configuration, and detection starts working on their models.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from datahub.metadata.schema_classes import (
@@ -41,9 +42,14 @@ from datahub.metadata.schema_classes import (
     GlossaryTermsClass,
 )
 from datahub.metadata.urns import SchemaFieldUrn
+from datahub.sdk.lineage_client import LineagePath
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
+
+#: One marked ancestor the walk reached: its URN, the term or tag that marks it,
+#: and the chain of column names walked to get there.
+Match = tuple[str, str, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -58,14 +64,48 @@ class WalkResult:
     failure mode this project exists to catch, and it gets worse the wider the
     cone, which is to say worst on the mature warehouses most likely to hold an
     unnoticed leak (F1, docs/plan/07).
+
+    Every match is carried, not only the winner. The shortest is still the one
+    quoted as proof, and :attr:`hit` is still how a caller asks for it, so no
+    output moves. What the rest are for is the counterfactual: a finding reached
+    by two derivations is not cleared by cutting one of them, and a remedy that
+    only knew about the winner would confidently tell somebody to do half a fix
+    (T-03).
     """
 
-    hit: tuple[str, str, tuple[str, ...]] | None
+    matches: tuple[Match, ...]
+    """Every marked ancestor reached, in the order the server listed them."""
     truncated: bool
     """True when the walk saw exactly the cap's worth of results, so a mark
     beyond it may exist and was never checked. Equality, not >=: the cap is a
     hard limit, so exactly-the-cap is the only observable signature that more
     might exist. One result short is a complete answer."""
+
+    @property
+    def hit(self) -> Match | None:
+        """The match a finding quotes as its proof, or None when nothing matched.
+
+        The shortest chain, ties broken on the ancestor URN and then the chain
+        itself, rather than whichever the server listed first: above two hops
+        DataHub answers from a full-graph search in network order, so a
+        first-match answer can quote a different derivation chain on two walks
+        of an unchanged graph. That chain is the auditable proof a human reads
+        in the incident, and proof that changes when nothing changed is not
+        proof.
+        """
+        if not self.matches:
+            return None
+        return min(self.matches, key=lambda match: (len(match[2]), match[0], match[2]))
+
+    @property
+    def others(self) -> tuple[tuple[str, ...], ...]:
+        """The chains of every match except the quoted one, in the same order.
+
+        Compared by identity of the whole match rather than of the chain, so two
+        different ancestors reached by identically named columns both survive.
+        """
+        best = self.hit
+        return tuple(match[2] for match in self.matches if match is not best)
 
 
 class ColumnMarkIndex:
@@ -176,6 +216,38 @@ class ColumnMarkIndex:
         return self.marker(column_urn) is not None
 
 
+def split_paths(steps: Sequence[LineagePath], source_column_urn: str) -> list[list[LineagePath]]:
+    """Cut the SDK's flattened step list back into the paths it was built from.
+
+    ``LineageResult.paths`` is not one path. GMS answers a column-level lineage
+    query with a *list* of paths per upstream entity, and the SDK's
+    ``_create_lineage_result`` appends every step of every one of them to a
+    single list `[verified]`, so two derivations of the same column through the
+    same upstream table arrive concatenated and indistinguishable.
+
+    That matters twice. A walk that stopped at the first mark it met would report
+    one derivation and never see the second, which is how a counterfactual ends
+    up telling somebody to cut one edge of two (T-03). And a chain truncated by
+    index into the flattened list would carry the tail of the *previous*
+    derivation into the quoted proof.
+
+    The boundary is recoverable: every path starts at the column that was
+    queried, so each occurrence of it opens a new path. A list that does not
+    start with it is returned whole, because a fixture, or a GMS that one day
+    omits the start entity, would otherwise lose its only path to a rule about a
+    sentinel that was never there.
+    """
+    if not steps or steps[0].urn != source_column_urn:
+        return [list(steps)]
+
+    paths: list[list[LineagePath]] = []
+    for step in steps:
+        if step.urn == source_column_urn:
+            paths.append([])
+        paths[-1].append(step)
+    return paths
+
+
 def marked_ancestor(
     conn: DataHubConnection,
     source_column_urn: str,
@@ -189,13 +261,9 @@ def marked_ancestor(
     URN makes a contaminated graph look clean.
 
     A column's cone can reach a marked ancestor by more than one chain. Every
-    match is collected and the shortest is returned, ties broken on the ancestor
-    URN and then the chain itself, rather than returning whichever the server
-    listed first: above two hops DataHub answers from a full-graph search in
-    network order, so a first-match return can quote a different derivation chain
-    on two walks of an unchanged graph. That chain is the auditable proof a human
-    reads in the incident, and proof that changes when nothing changed is not
-    proof.
+    match is collected and every one is returned; which of them a finding quotes
+    as its proof, and why that choice has to be stable, is
+    :attr:`WalkResult.hit`.
 
     Args:
         conn: An open connection.
@@ -204,11 +272,11 @@ def marked_ancestor(
         config: Supplies the hop cap and the lineage result cap.
 
     Returns:
-        A :class:`WalkResult`. Its ``hit`` is the marked column's URN, the term
-        or tag that marks it, and the chain of column names walked to reach it,
-        or None when the cone (as far as the walk could see) reaches nothing
-        marked. ``truncated`` says whether "as far as the walk could see" might
-        be short of the column's whole upstream cone.
+        A :class:`WalkResult`. Its ``matches`` holds every marked ancestor
+        reached, and its ``hit`` is the one a finding quotes, or None when the
+        cone (as far as the walk could see) reaches nothing marked.
+        ``truncated`` says whether "as far as the walk could see" might be short
+        of the column's whole upstream cone.
     """
     field = SchemaFieldUrn.from_string(source_column_urn)
 
@@ -220,7 +288,9 @@ def marked_ancestor(
     # Nothing was walked, so there is nothing that could have been truncated.
     direct = index.marker(source_column_urn)
     if direct is not None:
-        return WalkResult(hit=(source_column_urn, direct, (field.field_path,)), truncated=False)
+        return WalkResult(
+            matches=((source_column_urn, direct, (field.field_path,)),), truncated=False
+        )
 
     results = conn.client.lineage.get_lineage(
         source_urn=field.parent,
@@ -233,27 +303,26 @@ def marked_ancestor(
     # observable signature that a result beyond it may exist (F1, docs/plan/07).
     truncated = len(results) == config.lineage_result_cap
 
-    matches: list[tuple[str, str, tuple[str, ...]]] = []
+    matches: list[Match] = []
     for result in results:
         # Above two hops DataHub switches to a full-graph search and returns
         # entities beyond the cap, so the cap is enforced here (D-020).
         if result.hops > config.leakage_max_hops:
             continue
 
-        path = result.paths or []
-        for position, step in enumerate(path):
-            if step.urn == source_column_urn:
-                continue
-            marker = index.marker(step.urn)
-            if marker is not None:
-                # Truncated at the match: a path that continues past the marked
-                # column to a more distant ancestor must not be quoted as part of
-                # the derivation chain that proves this finding.
-                columns = tuple(hop.column_name for hop in path[: position + 1] if hop.column_name)
-                matches.append((step.urn, marker, columns))
-                break
+        for path in split_paths(result.paths or [], source_column_urn):
+            for position, step in enumerate(path):
+                if step.urn == source_column_urn:
+                    continue
+                marker = index.marker(step.urn)
+                if marker is not None:
+                    # Truncated at the match: a path that continues past the
+                    # marked column to a more distant ancestor must not be quoted
+                    # as part of the derivation chain that proves this finding.
+                    columns = tuple(
+                        hop.column_name for hop in path[: position + 1] if hop.column_name
+                    )
+                    matches.append((step.urn, marker, columns))
+                    break
 
-    if not matches:
-        return WalkResult(hit=None, truncated=truncated)
-    best = min(matches, key=lambda match: (len(match[2]), match[0], match[2]))
-    return WalkResult(hit=best, truncated=truncated)
+    return WalkResult(matches=tuple(matches), truncated=truncated)

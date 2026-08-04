@@ -224,3 +224,23 @@ class TestCrosswalk:
     def test_the_markdown_is_not_a_conformity_claim(self):
         """The whole artifact turns on this distinction; assert it rather than trust it."""
         assert "not a conformity claim" in crosswalk_markdown()
+
+
+def test_the_json_carries_each_finding_counterfactual_with_its_kinds_and_targets():
+    """T-03: a program routing findings into a ticket needs the fix, not only the fault.
+
+    The kind and the targets, not just the sentence: a consumer that wanted prose
+    already has the assessment, and one that wants to act needs the machine-
+    readable half.
+    """
+    finding = _leakage_finding()
+    payload = report_dict(_report(finding))
+
+    counterfactual = payload["findings"][0]["counterfactual"]
+    assert counterfactual["paths"] == 1
+    assert [r["kind"] for r in counterfactual["remedies"]] == [
+        remedy.kind.value for remedy in finding.counterfactual.remedies
+    ]
+    assert counterfactual["remedies"][0]["targets"] == ["prior_default_flag <- default_status"]
+    # It has to survive the trip: the JSON is the public interface.
+    assert json.loads(report_json(_report(finding)))["findings"][0]["counterfactual"]

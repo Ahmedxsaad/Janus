@@ -438,3 +438,47 @@ def test_the_reported_leak_path_does_not_depend_on_the_order_the_server_answered
     ]
 
     assert paths[0] == paths[1] == ("prior_default_flag", "default_status")
+
+
+BACKUP_COLUMN_URN = f"urn:li:schemaField:({TABLE_URN},default_status_backup)"
+
+
+def test_a_second_derivation_reaches_the_finding_that_has_to_account_for_it():
+    """T-03: the detector hands the counterfactual every path, not just the proof.
+
+    The finding still quotes the shortest chain. What changes is that its remedy
+    now names both first edges, so a reader who cuts the quoted one and stops is
+    told, by the finding itself, that they are not done.
+    """
+    graph = FakeGraph(
+        aspects={
+            (MODEL_URN, MLModelPropertiesClass): _model(LEAK_FEATURE_URN),
+            (LEAK_FEATURE_URN, MLFeaturePropertiesClass): _feature(LEAK_COLUMN_URN),
+            (LABEL_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN),
+            (BACKUP_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN),
+        }  # type: ignore[arg-type]
+    )
+    # One upstream table reached twice: the SDK flattens both derivations into a
+    # single path list, each one starting at the column that was queried.
+    client = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=1,
+                    direction="upstream",
+                    paths=column_path(
+                        LEAK_COLUMN_URN, LABEL_COLUMN_URN, LEAK_COLUMN_URN, BACKUP_COLUMN_URN
+                    ),
+                )
+            ]
+        }
+    )
+
+    findings = leakage_findings(make_connection(graph, client), MODEL_URN, CONFIG)
+
+    assert len(findings) == 1, "two paths are one finding about one feature, not two"
+    leak = findings[0].leak
+    assert leak.column_path == ("prior_default_flag", "default_status")
+    assert leak.other_paths == (("prior_default_flag", "default_status_backup"),)
+    assert findings[0].counterfactual.paths == 2

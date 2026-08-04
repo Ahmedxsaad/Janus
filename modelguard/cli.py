@@ -318,6 +318,13 @@ def _print_finding(finding: Finding) -> None:
         serving = "[red]LIVE[/red]" if finding.model.is_live else "not serving"
         console.print(f"  model        {finding.model.name} {serving}")
 
+    # Printed for every finding type, including the two the branches above do not
+    # detail, because it comes off the Finding contract rather than off a subclass.
+    # markup=False: these sentences carry catalog names, and a column called
+    # something like "[dim]" would otherwise be swallowed as a rich style tag.
+    for line in finding.counterfactual.lines():
+        console.print(f"  {line}".rstrip(), markup=False, highlight=False)
+
 
 def _print_writes(write: FindingWrites) -> None:
     """Render what one finding actually mutated in the graph."""

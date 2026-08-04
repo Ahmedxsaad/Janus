@@ -100,7 +100,7 @@ def leak_path(
     source_column_urn: str,
     labels: ColumnMarkIndex,
     config: ScanConfig,
-) -> tuple[str, tuple[str, ...]] | None:
+) -> tuple[str, tuple[str, ...], tuple[tuple[str, ...], ...]] | None:
     """Walk a column's upstream cone and return the label it reaches, if any.
 
     A thin wrapper over :func:`~modelguard.detect.column_marks.marked_ancestor`,
@@ -110,8 +110,10 @@ def leak_path(
     would add a column of identical values.
 
     Returns:
-        The label column's URN and the chain of column names walked to reach it,
-        or None when the cone reaches no declared label. Silent about
+        The label column's URN, the chain of column names walked to reach it,
+        and the chains of every other match, or None when the cone reaches no
+        declared label. The other chains are what the finding's counterfactual
+        needs: cutting one derivation of two clears nothing (T-03). Silent about
         truncation: a caller that needs it (coverage.py, deciding whether a
         clean answer here is trustworthy) calls marked_ancestor directly rather
         than through this label-specific wrapper.
@@ -120,7 +122,7 @@ def leak_path(
     if walk.hit is None:
         return None
     label_urn, _marker, column_path = walk.hit
-    return label_urn, column_path
+    return label_urn, column_path, walk.others
 
 
 def leakage_findings(
@@ -160,8 +162,10 @@ def leakage_findings(
         if hit is None:
             continue
 
-        label_urn, column_path = hit
-        findings.append(_finding(model, feature_urn, source_column, label_urn, column_path))
+        label_urn, column_path, other_paths = hit
+        findings.append(
+            _finding(model, feature_urn, source_column, label_urn, column_path, other_paths)
+        )
 
     return tuple(sorted(findings, key=lambda finding: finding.leak.source_column_name))
 
@@ -172,6 +176,7 @@ def _finding(
     source_column_urn: str,
     label_column_urn: str,
     column_path: tuple[str, ...],
+    other_paths: tuple[tuple[str, ...], ...] = (),
 ) -> LeakageFinding:
     """Assemble one finding from the columns the traversal actually proved."""
     source_field = SchemaFieldUrn.from_string(source_column_urn)
@@ -188,5 +193,6 @@ def _finding(
             label_column_name=label_field.field_path,
             label_dataset_name=DatasetUrn.from_string(label_field.parent).name,
             column_path=column_path,
+            other_paths=other_paths,
         ),
     )

@@ -51,18 +51,26 @@ from modelguard.detect.governance import sensitive_index
 from modelguard.models import FindingType
 from modelguard.seed import graph_spec as spec
 from modelguard.seed.scenarios import (
+    BACKUP_LABEL_COLUMN,
     SENSITIVE_SOURCE_COLUMN,
     plant_deprecated_input,
     plant_leakage,
     plant_schema_drift,
+    plant_second_leak_path,
     plant_sensitive_source,
     plant_stale_source,
     revert_deprecated_input,
     revert_leakage,
     revert_schema_drift,
+    revert_second_leak_path,
     revert_sensitive_source,
     revert_stale_source,
 )
+
+#: Every column any scenario can declare to be a label. The leakage precondition
+#: reads the lineage for these and nothing else, so an unrelated upstream column
+#: appearing in the graph cannot move it.
+_LABEL_COLUMNS: tuple[str, ...] = (spec.LABEL_SOURCE_COLUMN, BACKUP_LABEL_COLUMN.name)
 
 #: How long a planted fact may take to become visible through the read path the
 #: detector uses. Lineage converged in about three seconds on a local Quickstart;
@@ -114,6 +122,13 @@ class Trial:
     without carrying the term can each go the wrong way, and a mutation of one
     line flips them. RESULTS.md counts these per detector and says plainly, per
     row, whether that row could have failed."""
+    leak_upstreams: tuple[str, ...] | None = None
+    """Which declared label columns the leaking feature must be seen deriving from.
+
+    Set only by the multi-path trials, where "is the label reachable" is no longer
+    the question: with two derivations planted, the interesting states differ in
+    *which* of them survive, and a precondition that only asked whether some label
+    was reachable would pass on the wrong graph. None means the usual question."""
     planted: bool | None = None
     """What is planted in the graph, when that differs from what should be found.
 
@@ -152,6 +167,17 @@ def _plant_freshness(conn: DataHubConnection, trial: Trial, now_ms: int) -> None
 def _plant_leakage(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
     """Restore or cut the leaking column-lineage edge."""
     plant_leakage(conn) if trial.graph_state else revert_leakage(conn)
+
+
+def _plant_two_leak_paths(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
+    """Plant both derivations, or only the second, per the trial's expectation.
+
+    The trial's own ``leak_upstreams`` decides which: it is the state the
+    precondition then waits for, so the plant and the wait cannot disagree about
+    what this trial is.
+    """
+    assert trial.leak_upstreams is not None
+    plant_second_leak_path(conn, keep_first=spec.LABEL_SOURCE_COLUMN in trial.leak_upstreams)
 
 
 def _plant_drift(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
@@ -263,6 +289,29 @@ def _leakage_trials() -> tuple[Trial, ...]:
             detail="the same 1-hop leak with the hop cap at 0: out of reach, not absent",
             plant=_plant_leakage,
             overrides=(("leakage_max_hops", 0),),
+            boundary=True,
+        ),
+        Trial(
+            name="leakage-two-paths",
+            family=FindingType.TARGET_LEAKAGE,
+            target=Target.MODEL,
+            expected=True,
+            detail="the feature derives from two separately declared label columns",
+            plant=_plant_two_leak_paths,
+            leak_upstreams=(spec.LABEL_SOURCE_COLUMN, BACKUP_LABEL_COLUMN.name),
+            boundary=True,
+        ),
+        Trial(
+            name="leakage-one-of-two-cut",
+            family=FindingType.TARGET_LEAKAGE,
+            target=Target.MODEL,
+            expected=True,
+            detail=(
+                "the derivation the incident quoted is cut and the second is left: "
+                "half a fix, and the finding must stand"
+            ),
+            plant=_plant_two_leak_paths,
+            leak_upstreams=(BACKUP_LABEL_COLUMN.name,),
             boundary=True,
         ),
         Trial(
@@ -400,6 +449,11 @@ def _leakage_visible(
 
     Asks the same column-lineage query the detector asks, but inspects the
     *lineage*, not whether a finding was raised.
+
+    A multi-path trial names the exact set of declared label columns the feature
+    must be seen deriving from, because with two derivations in play "a label is
+    reachable" is true of three different graphs and only one of them is the
+    trial.
     """
     results = conn.client.lineage.get_lineage(
         source_urn=str(spec.feature_table_dataset_urn()),
@@ -407,12 +461,12 @@ def _leakage_visible(
         direction="upstream",
         max_hops=1,
     )
-    reaches_label = any(
-        step.column_name == spec.LABEL_SOURCE_COLUMN
-        for result in results
-        for step in (result.paths or [])
+    reached = {step.column_name for result in results for step in (result.paths or [])} & set(
+        _LABEL_COLUMNS
     )
-    return reaches_label == trial.graph_state
+    if trial.leak_upstreams is not None:
+        return reached == set(trial.leak_upstreams)
+    return (spec.LABEL_SOURCE_COLUMN in reached) == trial.graph_state
 
 
 def _drift_visible(conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int) -> bool:
@@ -494,6 +548,9 @@ def restore_baseline(conn: DataHubConnection, *, now_ms: int | None = None) -> N
     another's.
     """
     revert_stale_source(conn, now_ms=now_ms)
+    # Before the leak is replanted, because reverting the second path restores
+    # the seeded single-path lineage itself and would otherwise be the last word.
+    revert_second_leak_path(conn)
     plant_leakage(conn)
     revert_schema_drift(conn)
     # The governance declarations are anomalies planted on top of the seed, not

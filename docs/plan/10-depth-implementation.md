@@ -108,35 +108,61 @@ Done when: adding a detector without a crosswalk row fails a test.
 
 ## Phase 1: the flagship
 
-### T-03 Counterfactual remediation (09 section 4.1)
+### T-03 Counterfactual remediation (09 section 4.1) [done, D-110]
 
 The single highest-value item. Smaller than it looks: `marked_ancestor`
 (`modelguard/detect/column_marks.py:179`) already collects every chain to a marked
 ancestor and discards all but the shortest.
 
-- [ ] Widen `WalkResult` to carry **all** chains, not only the winner. The shortest
-      stays the quoted proof, so no existing output changes. Assert that in a test
-      before touching anything else.
-- [ ] Add a `Counterfactual` type to `models.py`: a set of alternative changes, each
-      one sufficient on its own to clear the finding.
-- [ ] Derive it for leakage: the union of first edges (cut the edge), the feature
+- [x] Widen `WalkResult` to carry **all** chains, not only the winner. The shortest
+      stays the quoted proof, so no existing output changes. Asserted in a test
+      before anything else was touched. `matches` is the field, `hit` became a
+      property. It also turned up a latent defect: `LineageResult.paths` is not one
+      path, it is every path GMS returned, flattened by the SDK into one list, so
+      `split_paths` cuts them apart on the queried column each path starts with.
+      Without that, two derivations through one upstream table were one match and a
+      chain truncated by index carried the previous derivation's tail into the proof.
+- [x] Add a `Counterfactual` type to `models.py`: a set of alternative changes, each
+      one sufficient on its own to clear the finding. `Remedy` carries a stable
+      `RemedyKind` alongside the sentence, because the benchmark keys its appliers
+      on it. `Finding.counterfactual` is abstract, so a detector cannot skip it.
+- [x] Derive it for leakage: the union of first edges (cut the edge), the feature
       itself (drop the feature), the marked column (unmark it). Every path must be
-      cut, so a multi-path finding says so explicitly.
-- [ ] Extend to the other four detectors:
-  - [ ] Freshness: the table refreshes inside the SLA, or the model stops consuming it.
-  - [ ] Schema drift: the column returns to its training-time type, or the model is
+      cut, so a multi-path finding says so explicitly. A column that *is* itself the
+      label offers no cut at all: there is no derivation to sever.
+- [x] Extend to the other four detectors:
+  - [x] Freshness: the table refreshes inside the SLA, or the model stops consuming it.
+  - [x] Schema drift: the column returns to its training-time type, or the model is
         retrained against the current schema.
-  - [ ] Sensitive source: the derivation is cut, or the classification is corrected.
-  - [ ] Deprecated input: the model moves to the successor the deprecation note names.
-- [ ] Render in the incident body and the impact report, next to the existing proof.
-- [ ] Include the "there is one other path" clause whenever more than one path exists.
+  - [x] Sensitive source: the derivation is cut, or the classification is corrected.
+        Worded as a correction and never as a dismissal, and the sentence names the
+        owner of the classification.
+  - [x] Deprecated input: the model moves to the successor the deprecation note names.
+        With no note, it says to go and ask rather than inventing a table name.
+- [x] Render in the incident body and the impact report, next to the existing proof.
+      Also in the terminal and in the JSON, where the kind and the targets go out as
+      data: a consumer that wanted prose already had the assessment.
+- [x] Include the "there is one other path" clause whenever more than one path exists.
 
 **Verification, and this is the part that makes it real:**
 
-- [ ] The benchmark **applies** each counterfactual to the graph and asserts the
-      finding clears. A counterfactual that does not clear its own finding is a bug,
-      not a suggestion.
-- [ ] Trials for the multi-path case: cutting one path of two must **not** clear it.
+- [x] The benchmark **applies** each counterfactual to the graph and asserts the
+      finding clears. `benchmarks/counterfactuals.py`, one applier per (family,
+      kind). Remedies no metadata write can perform (retrain, migrate, drop a
+      feature) are named as not mechanically applicable rather than counted as
+      passes: a remedy that was never applied has not been verified.
+- [x] Trials for the multi-path case: cutting one path of two must **not** clear it.
+      `plant_second_leak_path` plants a backfilled copy of the label column,
+      declared a label, feeding the same feature. Two trials, one benchmark
+      measurement, and two integration tests.
+- [x] Run it. Against a live Quickstart: 54 integration tests pass, and
+      `RESULTS.md` carries the counterfactual section. All five remedies applied
+      cleared their finding; the multi-path row reads "still fires after one of
+      two is cut: True, clears once both are cut: True". Detection numbers are
+      unchanged, with leakage's trial count 5 -> 7 and its boundary count 3 -> 5.
+      One ordering fix came out of the first run: the scale sweep's fifty hard
+      deletes left enough index churn behind them to time out the counterfactual
+      measurement's wait, so scale now runs last.
 
 Files: `modelguard/detect/column_marks.py`, `modelguard/detect/*.py`,
 `modelguard/models.py`, `modelguard/writeback/incidents.py`,

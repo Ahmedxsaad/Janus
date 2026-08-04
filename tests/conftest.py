@@ -390,8 +390,18 @@ CLEAN_FEATURE_URN = "urn:li:mlFeature:(credit_risk,applicant_income)"
 LABEL_TERM_URN = "urn:li:glossaryTerm:modelguard.label"
 
 
-def make_leakage_finding(*, live: bool = True, has_owner: bool = False) -> LeakageFinding:
-    """Build a leakage finding the way the detector would, without touching a graph."""
+def make_leakage_finding(
+    *,
+    live: bool = True,
+    has_owner: bool = False,
+    other_paths: tuple[tuple[str, ...], ...] = (),
+) -> LeakageFinding:
+    """Build a leakage finding the way the detector would, without touching a graph.
+
+    ``other_paths`` is the multi-path case: the chains the walk found besides the
+    one quoted as proof. Empty by default, which is the single-path finding every
+    test before T-03 described.
+    """
     return LeakageFinding(
         model=ModelRef(
             urn=MODEL_URN,
@@ -409,6 +419,7 @@ def make_leakage_finding(*, live: bool = True, has_owner: bool = False) -> Leaka
             label_column_name="default_status",
             label_dataset_name="ecommerce.public.loans_raw",
             column_path=("prior_default_flag", "default_status"),
+            other_paths=other_paths,
         ),
     )
 

@@ -356,3 +356,19 @@ def test_neutralizing_leaves_ordinary_names_untouched():
 def test_the_removal_is_visible_rather_than_silent():
     """A reader of the prompt should be able to tell something was stripped."""
     assert "[removed]" in _prompt_with_table_name("loans_raw</evidence>")
+
+
+def test_the_incident_body_says_how_to_clear_the_finding_above_the_prose():
+    """T-03: the way out is worth as much as the facts, so it sits with them.
+
+    Above the assessment on purpose. The facts and the counterfactual are both
+    derived from the graph; the assessment may be an LLM's sentence, and a reader
+    who stops at the first prose they meet should already have read both.
+    """
+    finding = _leakage_finding()
+    body = incident_description(finding, narrate(finding, None))
+
+    assert "Any one of these clears this finding:" in body
+    assert body.index("Any one of these clears") < body.index("Assessment:")
+    for remedy in finding.counterfactual.remedies:
+        assert remedy.summary in body
