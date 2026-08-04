@@ -42,6 +42,13 @@ from pathlib import Path
 
 from benchmarks import metrics
 from benchmarks.baselines import LEAKAGE_APPROACHES, Approach
+from benchmarks.counterfactuals import (
+    CounterfactualCheck,
+    MultiPathCheck,
+    findings_for,
+    measure_counterfactuals,
+    measure_multi_path,
+)
 from benchmarks.inject import (
     Trial,
     await_precondition,
@@ -53,9 +60,7 @@ from modelguard.agent.pipeline import run_scan
 from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import blast_radius
-from modelguard.detect.governance import deprecated_input_findings, sensitive_source_findings
 from modelguard.detect.leakage import leakage_findings
-from modelguard.detect.schema_drift import schema_drift_findings
 from modelguard.models import FindingType
 from modelguard.seed import graph_spec as spec
 from modelguard.seed import scenarios
@@ -92,21 +97,14 @@ class TrialOutcome:
 
 
 def _observe(conn: DataHubConnection, config: ScanConfig, trial: Trial, now_ms: int) -> bool:
-    """Ask the detector under test whether it fires. One call, no retries."""
-    if trial.family is FindingType.UPSTREAM_FRESHNESS:
-        return blast_radius(conn, str(spec.source_table_urn()), config, now_ms=now_ms) is not None
-    if trial.family is FindingType.TARGET_LEAKAGE:
-        return bool(leakage_findings(conn, str(spec.model_urn()), config))
-    if trial.family is FindingType.INPUT_SCHEMA_DRIFT:
-        return bool(schema_drift_findings(conn, str(spec.model_urn()), config))
-    if trial.family is FindingType.SENSITIVE_SOURCE:
-        return bool(sensitive_source_findings(conn, str(spec.model_urn()), config))
-    if trial.family is FindingType.DEPRECATED_INPUT:
-        return bool(deprecated_input_findings(conn, str(spec.model_urn()), config))
-    # Raises rather than returning False: a finding type nobody registered would
-    # otherwise be scored as a detector that never fires, which is a perfect
-    # false-negative rate reported as a measurement.
-    raise ValueError(f"no detector registered for {trial.family}")
+    """Ask the detector under test whether it fires. One call, no retries.
+
+    Whether it fires is exactly whether it returns a finding, so this goes
+    through the same dispatch the counterfactual measurement uses rather than a
+    second copy of it: two lists of detectors could disagree, and the one that
+    silently dropped a detector would report a perfect score for it.
+    """
+    return bool(findings_for(conn, config, trial.family, now_ms))
 
 
 def run_trials(
@@ -379,6 +377,73 @@ def _scale_disclosure(scale: Sequence[ScaleMeasurement]) -> list[str]:
     ]
 
 
+def _counterfactual_lines(
+    checks: Sequence[CounterfactualCheck], multi: MultiPathCheck | None
+) -> list[str]:
+    """Return the counterfactual section, or nothing when it was not run."""
+    if not checks:
+        return []
+
+    lines = [
+        "",
+        "## Counterfactuals, applied",
+        "",
+        "Every finding carries a counterfactual: a set of changes, each sufficient on its",
+        "own to clear it. A suggested fix nobody performed is not a measurement, so each",
+        "one below was applied to the live graph and the same detector asked again.",
+        "",
+        "| Detector | Remedies applied | Cleared the finding | Not mechanically applicable |",
+        "|---|---|---|---|",
+    ]
+    for check in checks:
+        applied = ", ".join(remedy.kind.value for remedy in check.applied) or "-"
+        unapplied = ", ".join(kind.value for kind in check.unapplied) or "-"
+        if not check.settled:
+            verdict = "error: the graph never showed the change"
+        elif not check.fired:
+            verdict = "not measured: nothing fired to remedy"
+        else:
+            verdict = "yes" if check.cleared else "**no**"
+        lines.append(f"| {_DETECTOR_LABELS[check.family]} | {applied} | {verdict} | {unapplied} |")
+
+    lines += [
+        "",
+        "The last column is not a gap being hidden. Retraining a model, migrating onto a",
+        "successor table, and dropping a feature are real fixes that no metadata write can",
+        "carry out, so they are named as unverified rather than counted as passes.",
+        "",
+    ]
+
+    if multi is None:
+        return lines
+
+    lines += [
+        "### When one cut is not enough",
+        "",
+        "A single-path counterfactual is close to a construction proof: the remedy undoes",
+        "the plant. The case that can go wrong is a feature reaching a declared label by",
+        "two derivations, where cutting the one the incident quoted is a fix a reasonable",
+        "person would believe in. That graph is planted here, and the quoted path cut.",
+        "",
+    ]
+    if not multi.settled:
+        lines += ["Not measured: DataHub never showed the planted state.", ""]
+        return lines
+    lines += [
+        f"- Paths the counterfactual declared: {multi.paths_reported}",
+        f"- First edges its cut remedy named: {multi.edges_named}",
+        f"- Still fires after one of the two is cut: {multi.still_fires_after_one_cut} "
+        f"({'correct' if multi.still_fires_after_one_cut else '**wrong**'})",
+        f"- Clears once both are cut: {multi.cleared_after_both_cuts} "
+        f"({'correct' if multi.cleared_after_both_cuts else '**wrong**'})",
+        "",
+        "The second control matters as much as the first: without it, a detector that",
+        "could not be silenced at all would score identically on the line above.",
+        "",
+    ]
+    return lines
+
+
 def render_results(
     outcomes: Sequence[TrialOutcome],
     blast: BlastRadiusCheck | None,
@@ -388,6 +453,8 @@ def render_results(
     generated_at: datetime,
     approaches: Sequence[ApproachScore] = (),
     scale: Sequence[ScaleMeasurement] = (),
+    counterfactuals: Sequence[CounterfactualCheck] = (),
+    multi_path: MultiPathCheck | None = None,
 ) -> str:
     """Render RESULTS.md. Pure: every number comes from the arguments."""
     grouped = _by_family(outcomes)
@@ -576,6 +643,8 @@ def render_results(
         f"- Trust band written to the model: {writeback.trust_band_written}",
     ]
 
+    lines += _counterfactual_lines(counterfactuals, multi_path)
+
     if scale:
         lines += [
             "",
@@ -681,6 +750,12 @@ def main() -> None:
     print("Scale: replicating models and sweeping the catalog...")
     scale = measure_scale(conn, config)
 
+    print("Applying each finding's counterfactual (this one writes)...")
+    counterfactuals = measure_counterfactuals(conn, config, trials)
+
+    print("The multi-path case: cutting one derivation of two...")
+    multi_path = measure_multi_path(conn, config, trials)
+
     print("Restoring the seeded baseline...")
     restore_baseline(conn)
 
@@ -692,6 +767,8 @@ def main() -> None:
         generated_at=datetime.now(UTC),
         approaches=approaches,
         scale=scale,
+        counterfactuals=counterfactuals,
+        multi_path=multi_path,
     )
     args.out.write_text(report)
     print(f"\nWrote {args.out}")

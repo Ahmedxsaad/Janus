@@ -10,6 +10,7 @@ from __future__ import annotations
 from benchmarks.inject import SWEEP_LAG_HOURS, Target, Trial, build_trials
 from modelguard.config import ScanConfig
 from modelguard.models import FindingType
+from modelguard.seed import graph_spec as spec
 
 SLA = 6.0
 CONFIG = ScanConfig(freshness_sla_hours=SLA)
@@ -105,7 +106,9 @@ def test_the_leakage_boundary_trials_move_the_question_not_the_graph():
     wait on ``graph_state`` (the leak is there) rather than on ``expected`` (the
     detector must stay quiet), or the trial is unscoreable by construction.
     """
-    boundary = {t.name: t for t in _trials(FindingType.TARGET_LEAKAGE) if t.boundary}
+    boundary = {
+        t.name: t for t in _trials(FindingType.TARGET_LEAKAGE) if t.boundary and t.overrides
+    }
 
     assert set(boundary) == {
         "leakage-at-hop-cap",
@@ -114,6 +117,27 @@ def test_the_leakage_boundary_trials_move_the_question_not_the_graph():
     }
     assert all(trial.graph_state is True for trial in boundary.values())
     assert boundary["leakage-named-not-declared"].expected is False
+
+
+def test_the_multi_path_trials_name_the_label_columns_they_wait_for():
+    """T-03: with two derivations planted, "a label is reachable" is not the question.
+
+    Both trials leave the feature descending from a declared label, so the plain
+    precondition would pass on either graph and on the wrong one. Each therefore
+    names the exact set of label columns it expects to be reachable, and that set
+    is what tells the two apart.
+    """
+    trials = {t.name: t for t in _trials(FindingType.TARGET_LEAKAGE) if t.leak_upstreams}
+
+    assert set(trials) == {"leakage-two-paths", "leakage-one-of-two-cut"}
+    assert len(trials["leakage-two-paths"].leak_upstreams or ()) == 2
+    assert len(trials["leakage-one-of-two-cut"].leak_upstreams or ()) == 1
+    # Both expect the detector to fire: the second is the half-fix, and a finding
+    # that went quiet there would be the tool endorsing an incomplete remedy.
+    assert all(trial.expected for trial in trials.values())
+    assert set(trials["leakage-one-of-two-cut"].leak_upstreams or ()).isdisjoint(
+        {spec.LABEL_SOURCE_COLUMN}
+    ), "the quoted path is the one that gets cut"
 
 
 def test_a_trial_config_carries_only_that_trials_overrides():
