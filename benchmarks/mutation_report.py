@@ -538,11 +538,21 @@ def render_mutation_section(results_text: str, *, verdicts: tuple[Verdict, ...] 
 def _splice(results_md: Path, section: str) -> str:
     text = results_md.read_text() if results_md.exists() else ""
     if START_MARKER in text and END_MARKER in text:
-        before = text.split(START_MARKER)[0].rstrip("\n")
-        after = text.split(END_MARKER)[1]
-        return before + "\n\n" + section + after
-    separator = "\n\n" if text and not text.endswith("\n\n") else ""
-    return text + separator + section
+        before, after = text.split(START_MARKER)[0], text.split(END_MARKER)[1]
+    else:
+        before, after = text, ""
+
+    # Both neighbours are stripped and rebuilt rather than kept as found,
+    # because CI compares this output byte for byte against the committed file.
+    # `section` carries its own leading and trailing newline, so reusing the
+    # ones already around the old section added a line every run: appending
+    # (no markers yet) left three newlines where replacing leaves two, and
+    # replacing left a growing run of blank lines at the end of the file. The
+    # job then reported RESULTS.md stale forever over whitespace, which is the
+    # permanently red advisory job ci.yml warns about (D-124).
+    head = before.rstrip("\n") + "\n\n" if before.strip() else ""
+    tail = "\n" + after.lstrip("\n") if after.strip() else ""
+    return head + section + tail
 
 
 def main() -> None:

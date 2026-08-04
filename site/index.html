@@ -99,7 +99,7 @@
   <a href="#inventory">inventory</a>
   <a href="#link">link</a>
   <a href="#scan">scan</a>
-  <a href="#detectors">The five checks</a>
+  <a href="#detectors">The six checks</a>
   <a href="#gate">gate</a>
   <a href="#watch">watch</a>
   <div class="group">Interfaces</div>
@@ -112,6 +112,7 @@
   <a href="#config">Configuration</a>
   <a href="#security">Security model</a>
   <a href="#crosswalk">NIST AI RMF</a>
+  <a href="#documents">Model card, AI Act pack</a>
   <a href="#links">Everything else</a>
 </aside>
 
@@ -437,7 +438,7 @@ modelguard scan --model churn_model --review    # pause, show, write only what y
 </section>
 
 <section id="detectors">
-  <h2>The five checks, and what each one needs</h2>
+  <h2>The six checks, and what each one needs</h2>
   <p>
     A scan never reports something healthy that it could not measure. It names
     the check, the missing metadata, and how to supply it.
@@ -483,12 +484,20 @@ modelguard scan --model churn_model --review    # pause, show, write only what y
         <div class="needs">Needs nothing: <code>deprecation</code> is DataHub's own aspect.</div>
       </div>
     </div>
+    <div class="check">
+      <h4>Proxy candidate</h4>
+      <div>
+        <p>A feature and a column classified as a protected attribute descend
+          from a common ancestor. A question for a human, never a verdict.</p>
+        <div class="needs">Needs <code>MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS</code>, your own taxonomy.</div>
+      </div>
+    </div>
   </div>
 
-  <h3>The two that read the governance graph</h3>
+  <h3>The three that read the governance graph</h3>
   <p>
     The first three checks ask whether a model's data is <em>correct</em>. The
-    last two ask something the organization has already answered elsewhere in
+    last three ask something the organization has already answered elsewhere in
     DataHub, and that nothing today joins back to the model.
   </p>
   <p>
@@ -521,7 +530,22 @@ MODELGUARD_SENSITIVE_TERM_URNS=urn:li:glossaryTerm:Classification.Restricted
     everywhere. It is never more than <code>medium</code> severity, because it
     is a deadline rather than a defect.
   </p>
-  <p>Both are reversible scenarios, so you can watch them fire and clear:</p>
+  <p>
+    <strong>Proxy candidate.</strong> A feature and a column somebody classified
+    as a protected attribute both descend from a common ancestor, with neither
+    descending from the other. That shape is how a proxy usually arises, and it
+    is also how two harmless siblings arise, so the finding is raised as a
+    question for a human and capped at <code>medium</code> forever: it never
+    escalates on a live model, and its first suggested remedy is to review it,
+    which no machine here will perform for you. Whether a feature actually
+    proxies for a protected attribute is a statistical claim about data this
+    tool has never read a row of. Configured, like the classification above,
+    from your own taxonomy with no default:
+  </p>
+<pre><code>MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS=urn:li:tag:ProtectedAttribute
+MODELGUARD_PROTECTED_ATTRIBUTE_TERM_URNS=urn:li:glossaryTerm:Protected.Ethnicity
+</code></pre>
+  <p>The first two are reversible scenarios, so you can watch them fire and clear:</p>
 <pre><code>modelguard-scenario --scenario sensitive-source
 modelguard scan --model credit_risk_v3
 modelguard-scenario --scenario sensitive-source --revert
@@ -875,6 +899,49 @@ MODELGUARD_LABEL_TERM_URN=              # honor your existing label term
     <li><code>MANAGE 2.3</code> Procedures are followed to respond to and recover from a previously unknown risk when it is identified.</li>
     <li><code>MANAGE 4.1</code> Post-deployment AI system monitoring plans are implemented, including mechanisms for capturing and evaluating input from users and other relevant AI actors, appeal and override, decommissioning, incident response, recovery, and change management.</li>
   </ul>
+</section>
+
+<section id="documents">
+  <h2>Two documents, generated instead of maintained</h2>
+<pre><code>modelguard model-card    --model credit_risk_v3   # prints; --write publishes it to DataHub
+modelguard evidence-pack --model credit_risk_v3   # EU AI Act Article 10
+</code></pre>
+  <p>
+    A <strong>model card</strong> in the sense Mitchell et al. (FAT* 2019)
+    proposed one: intended use, which columns each feature was actually computed
+    from, the reported training metrics, the trust score with its waterfall, the
+    findings open against the model, and the checks that could not run. An
+    <strong>evidence pack</strong> mapping the same graph to Regulation (EU)
+    2024/1689 Article 10 and Article 12, by paragraph number, so a reader can
+    check the mapping rather than trust it.
+  </p>
+  <p>
+    Neither is maintained by hand, which is the whole point: a hand-written
+    model card is accurate until the model next changes, and most of them are
+    already wrong. These are regenerated from the graph, so they are current by
+    construction and empty where the catalog is. Anything DataHub does not
+    record prints as <em>not recorded in the catalog</em> rather than being
+    quietly dropped, so a gap is visible in the document instead of reading as
+    an absence of a problem.
+  </p>
+  <p>
+    The evidence pack's first heading is <strong>This is not a compliance
+    certification</strong>, and its second is <strong>What this pack could NOT
+    establish</strong>: deliberately the first section rather than a closing
+    caveat, because a gap at the end of a long document is a gap nobody reads.
+    It states, for instance, that freshness at training time is unknowable from
+    this graph (ModelGuard measures freshness <em>now</em>, which is a different
+    claim and not a substitute), and that whether anyone examined the data for
+    bias is an activity no catalog records. A generated document that implied
+    conformity would be worse than no document at all.
+  </p>
+  <p>
+    Both print by default and write nothing. <code>--write</code> publishes the
+    document against the model, keyed on the model alone, so regenerating
+    replaces it rather than leaving a second copy behind. Either way the
+    underlying scan is read-only: asking for documentation never raises an
+    incident as a side effect.
+  </p>
 </section>
 
 <section id="links">

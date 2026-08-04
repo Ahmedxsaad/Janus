@@ -197,3 +197,29 @@ class TestSplice:
         assert spliced.count(START_MARKER) == 1
         assert "Before." in spliced
         assert "After." in spliced
+
+    def test_splicing_the_same_section_twice_changes_nothing(self, tmp_path):
+        """The CI job diffs this output against the committed file (D-124).
+
+        Anything that is not a fixed point reports RESULTS.md stale on every
+        run, which is a permanently red advisory job over whitespace.
+        """
+        results_md = tmp_path / "RESULTS.md"
+        results_md.write_text("# Results\n\nBefore.\n")
+        section = f"{START_MARKER}\nnew section\n{END_MARKER}\n"
+
+        results_md.write_text(_splice(results_md, section))
+        once = results_md.read_text()
+        results_md.write_text(_splice(results_md, section))
+
+        assert results_md.read_text() == once
+
+    def test_a_section_at_the_end_of_the_file_keeps_one_trailing_newline(self, tmp_path):
+        """The shape RESULTS.md actually has: nothing follows the section."""
+        results_md = tmp_path / "RESULTS.md"
+        results_md.write_text(f"# Results\n\nBefore.\n\n{START_MARKER}\nold\n{END_MARKER}\n")
+
+        spliced = _splice(results_md, f"{START_MARKER}\nnew section\n{END_MARKER}\n")
+
+        assert spliced.endswith(f"{END_MARKER}\n")
+        assert not spliced.endswith(f"{END_MARKER}\n\n")

@@ -16,6 +16,70 @@ Entry template:
 
 ---
 
+## D-124: The mutation section grew a newline per run (2026-08-05)
+- Decided by: Ahmed Saad.
+- Decision: `_splice` normalizes both sides of the section instead of reusing
+  the whitespace it found, so writing the same section twice is a fixed point.
+- Why: the advisory mutation job on main went red on the merge of PR #53, on a
+  one-character diff: a blank line after `<!-- MUTATION:END -->`. D-122 had
+  stopped `run_bench` from deleting the section, which is what finally let the
+  two writers be compared, and the comparison found this. `render_mutation_section`
+  ends its output with a newline, and `_splice` then re-attached the newline
+  that had followed the old `END_MARKER`, so the file gained one blank line on
+  every invocation. The append branch had the mirror-image bug: it added `\n\n`
+  to text already ending in `\n`, leaving three newlines where the replace
+  branch leaves two, so the first run after a section existed never matched the
+  run before it.
+- Why it survived the tests already covering `_splice`: the existing replace
+  test put content *after* the section, so the tail was never the end of the
+  file, and it asserted on what the output contains, never on its shape.
+  RESULTS.md has nothing after that section, which is the one case not covered.
+- Result: two tests, both confirmed red against the pre-fix function per
+  tests/CLAUDE.md rule 6. One asserts the property CI actually depends on, that
+  splicing twice changes nothing; the other pins the shape for the file's real
+  layout. Verified against the committed RESULTS.md by replaying exactly what
+  the job does: the regenerated file is byte-identical, so the diff is empty.
+  The job's own content was never wrong; both defects were whitespace, which is
+  the kind of red a team learns to wave through, and this one was on main.
+
+---
+
+## D-123: Phase 5's two commands existed and were undiscoverable (2026-08-05)
+- Decided by: Ahmed Saad.
+- Decision: `model-card` and `evidence-pack` are documented in the README and on
+  the documentation page, and a test now asserts that every command ModelGuard
+  registers appears in both.
+- Options considered: (a) document the two commands and move on; (b) document
+  them and add the test; (c) leave it, since `--help` lists them.
+- Why (b): the two commands shipped in D-119 and appeared in neither document.
+  Nothing failed. The phase's own gate in `docs/plan/10-depth-implementation.md`
+  asks for exactly this ("README.md updated if the phase changed a user-facing
+  command"), was checked by a human remembering to check it, and the human did
+  not. So did `site/CLAUDE.md` rule 5, which says the page changes in the same
+  commit as the README. Two written promises, both kept by memory, both broken
+  the first time it mattered. (a) fixes the instance and leaves the mechanism;
+  (c) is worse than it sounds, because the artifact nobody could find is the EU
+  AI Act evidence pack, which is the one a governance reader would come for.
+- Why a test and not a lint rule: this is the same joint `test_site.py` already
+  covers for the crosswalk table, and for the same stated reason. The CLI's copy
+  of the crosswalk cannot go stale because it is generated; the page's can, so a
+  test pins it. The command list is the same shape of hazard, and the fix should
+  look like the one already here rather than introduce a second mechanism.
+- Result: `tests/test_docs.py`, two tests, both confirmed red against the
+  pre-fix documents per tests/CLAUDE.md rule 6: each reported exactly
+  `['evidence-pack', 'model-card']` missing. Documenting the two commands
+  surfaced three further staleness bugs on the page, all from Phase 5 and all
+  fixed here: it advertised "the five checks" while six ship, "the two that read
+  the governance graph" while three do, and it described the proxy-attribute
+  detector nowhere despite already carrying its crosswalk row (the crosswalk
+  test enforces that row; nothing enforced the prose). One gap is documented and
+  not closed: `plant_proxy_attribute` exists in `seed/scenarios.py` and the
+  benchmark drives it, but `modelguard-scenario` does not expose it, so the
+  proxy check is the one governance finding a reader cannot plant and watch
+  clear. The page says which two are reversible rather than implying all three.
+
+---
+
 ## D-122: Merging phase 6, a decision-log collision and a section that deleted itself (2026-08-04)
 - Decided by: Ahmed Saad.
 - Decision: `feat/depth-phase-6` (T-14) is merged into main after two fixes that
