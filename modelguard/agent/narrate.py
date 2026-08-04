@@ -627,9 +627,13 @@ def narrate(finding: Finding, llm: LLMConfig | None) -> Narrative:
 
 
 def incident_description(finding: Finding, narrative: Narrative) -> str:
-    """Assemble the incident body: measured facts first, prose second.
+    """Assemble the incident body: measured facts, the way out, then prose.
 
     The order is deliberate. A reader who trusts nothing else can still read the
-    numbers, and they are identical whether or not an LLM was involved.
+    numbers, and they are identical whether or not an LLM was involved. The
+    counterfactual sits directly under them, above the assessment, for the same
+    reason: it is derived from the same graph facts, so it is worth exactly as
+    much as they are, and it is what the reader came to find out (T-03).
     """
-    return f"{fact_block(finding)}\n\nAssessment:\n{narrative.assessment}"
+    counterfactual = "\n".join(finding.counterfactual.lines())
+    return f"{fact_block(finding)}\n\n{counterfactual}\n\nAssessment:\n{narrative.assessment}"

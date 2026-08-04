@@ -98,6 +98,22 @@ def _finding_dict(write: FindingWrites) -> dict[str, Any]:
         # coercion and cannot carry a type json cannot represent.
         "evidence": dict(finding.evidence),
         "models_at_risk": [_model_dict(model) for model in finding.models_at_risk],
+        # An object and not a list of sentences: a consumer routing findings into
+        # a ticket wants the remedy's kind and its targets, and the sentence is
+        # the part it is least likely to want. `paths` is here because a consumer
+        # that shows only the first remedy would otherwise be showing half a fix
+        # with nothing to warn it (T-03).
+        "counterfactual": {
+            "paths": finding.counterfactual.paths,
+            "remedies": [
+                {
+                    "kind": remedy.kind.value,
+                    "summary": remedy.summary,
+                    "targets": list(remedy.targets),
+                }
+                for remedy in finding.counterfactual.remedies
+            ],
+        },
         "assessment": write.narrative.assessment,
         "assessment_source": write.narrative.source.value,
     }
