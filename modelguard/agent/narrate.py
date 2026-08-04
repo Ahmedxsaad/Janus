@@ -63,6 +63,7 @@ from modelguard.models import (
     Finding,
     FreshnessFinding,
     LeakageFinding,
+    ProxyCandidateFinding,
     SchemaDriftFinding,
     SensitiveSourceFinding,
     TableLevelRiskFinding,
@@ -147,6 +148,22 @@ _SENSITIVE_EXTRA = """\
 - If the model is live, say plainly that the exposure is in production today.
 """
 
+_PROXY_SUBJECT = (
+    "a feature that may act as a stand-in for a protected attribute, raised for a "
+    "human to decide rather than as a determination that it does"
+)
+_PROXY_EXTRA = """\
+- This is a CANDIDATE, not a finding of discrimination or of proxying. Never assert
+  that the feature is a proxy, that the model discriminates, or that anything is
+  unlawful. Every one of those would be a claim the evidence does not support.
+- Say what was actually established: the feature and the classified column are both
+  computed from the shared ancestor the evidence names, and neither derives from the
+  other. Name that ancestor.
+- Say that settling it needs the data itself, which this tool has not seen, and that
+  the decision belongs to whoever owns the feature.
+- Do not recommend dropping the feature. Recommend that somebody check it.
+"""
+
 _TABLE_LEVEL_SUBJECT = (
     "a table-level observation about a model nobody has linked to its columns: "
     "the training table has a problem, and which feature carries it is unknown"
@@ -202,6 +219,11 @@ def _sensitive_prompt(finding: SensitiveSourceFinding) -> str:
 @_system_prompt.register
 def _deprecated_prompt(finding: DeprecatedInputFinding) -> str:
     return _SYSTEM_PREAMBLE.format(subject=_DEPRECATED_SUBJECT, extra=_DEPRECATED_EXTRA)
+
+
+@_system_prompt.register
+def _proxy_prompt(finding: ProxyCandidateFinding) -> str:
+    return _SYSTEM_PREAMBLE.format(subject=_PROXY_SUBJECT, extra=_PROXY_EXTRA)
 
 
 @_system_prompt.register
@@ -310,6 +332,36 @@ def _sensitive_facts(finding: SensitiveSourceFinding) -> str:
             "The classification is the organization's own, read from the column in "
             "DataHub. The derivation is declared in column-level lineage. ModelGuard "
             "did not read the data, only the lineage.",
+        ]
+    )
+
+
+@fact_block.register
+def _proxy_facts(finding: ProxyCandidateFinding) -> str:
+    candidate = finding.candidate
+    model = finding.model
+    return "\n".join(
+        [
+            f"The feature {candidate.feature_name}, computed from "
+            f"{candidate.source_column_name}, shares an ancestor with "
+            f"{candidate.protected_dataset_name}.{candidate.protected_column_name}, "
+            f"classified {candidate.marker_name}.",
+            "",
+            f"Shared ancestor: {candidate.ancestor_dataset_name}."
+            f"{candidate.ancestor_name} "
+            f"({candidate.feature_hops} hop(s) to the feature, "
+            f"{candidate.protected_hops} to the classified column)",
+            "",
+            f"Fork: {candidate.shared_text}",
+            "",
+            f"Model affected: {model.name} "
+            f"[{finding.severity}] {'live' if model.is_live else 'not serving'}.",
+            "",
+            "This is a candidate for human review, not a determination that the "
+            "feature proxies for the attribute. Neither column derives from the "
+            "other; they share an ancestor. Whether the feature actually carries "
+            "information about the attribute is a question about the data, which "
+            "ModelGuard has not read.",
         ]
     )
 
@@ -467,6 +519,24 @@ def _sensitive_template(finding: SensitiveSourceFinding) -> str:
 
 
 @template_narrative.register
+def _proxy_template(finding: ProxyCandidateFinding) -> str:
+    candidate = finding.candidate
+    return (
+        f"The feature {candidate.feature_name} and {candidate.protected_column_name}, "
+        f"a column classified {candidate.marker_name} in this catalog, are both "
+        f"computed from {candidate.ancestor_name} in "
+        f"{candidate.ancestor_dataset_name}. Neither derives from the other, so this "
+        "is not a case of the model reading a protected attribute directly; it is the "
+        "shape a proxy variable takes when nobody chose one, and it is why this is "
+        "raised for review rather than reported as a defect. Whether "
+        f"{candidate.feature_name} actually carries information about "
+        f"{candidate.protected_column_name} depends on the data, which ModelGuard has "
+        "not read and cannot judge from lineage. Have whoever owns the feature check "
+        "it against the data and record the answer."
+    )
+
+
+@template_narrative.register
 def _deprecated_template(finding: DeprecatedInputFinding) -> str:
     model = finding.model
 
@@ -564,6 +634,15 @@ def _sensitive_detail(finding: SensitiveSourceFinding) -> str:
 
 
 @_evidence_detail.register
+def _proxy_detail(finding: ProxyCandidateFinding) -> str:
+    model = finding.model
+    return (
+        f"\n\nmodels:\n- name={model.name!r} severity={finding.severity} "
+        f"live={model.is_live} owned={model.has_owner}"
+    )
+
+
+@_evidence_detail.register
 def _deprecated_detail(finding: DeprecatedInputFinding) -> str:
     model = finding.model
     return (
@@ -608,6 +687,24 @@ def _neutralize(text: str) -> str:
     return _DELIMITER_LOOKALIKE.sub(_NEUTRALIZED, text)
 
 
+def grounding_facts(finding: Finding) -> str:
+    """Every fact the narrator is permitted to speak from, as one block of text.
+
+    This is the whole of it: :attr:`Finding.evidence` plus the per-type detail,
+    which carries facts the mapping has no room for (a model's hop count, how
+    many of its features are at risk). Both reach the model, so both are
+    grounded, and a checker that only knew about the mapping would report a
+    correctly-quoted hop count as a hallucination.
+
+    Public because ``benchmarks/faithfulness.py`` measures the narrator against
+    exactly this text (T-10). Deriving the grounding set separately there would
+    be a second copy of the answer, free to drift from the prompt the model
+    actually saw, and the measurement would then be of the copy.
+    """
+    facts = "\n".join(f"{key}: {value}" for key, value in sorted(finding.evidence.items()))
+    return f"{facts}{_evidence_detail(finding)}"
+
+
 def _evidence_prompt(finding: Finding) -> str:
     """Render the evidence as a delimited, untrusted block for the model.
 
@@ -615,9 +712,7 @@ def _evidence_prompt(finding: Finding) -> str:
     across a key and its value, or introduced by the per-type detail, is caught
     just the same as one sitting inside a single name.
     """
-    facts = "\n".join(f"{key}: {value}" for key, value in sorted(finding.evidence.items()))
-    body = _neutralize(f"{facts}{_evidence_detail(finding)}")
-    return f"<evidence>\n{body}\n</evidence>"
+    return f"<evidence>\n{_neutralize(grounding_facts(finding))}\n</evidence>"
 
 
 def _llm_narrative(finding: Finding, llm: LLMConfig) -> str:

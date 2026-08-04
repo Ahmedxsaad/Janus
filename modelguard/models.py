@@ -72,6 +72,17 @@ class FindingType(StrEnum):
     weaker question with weaker evidence and a report that blurred the two would
     be claiming precision it did not have."""
 
+    PROXY_CANDIDATE = "proxy-candidate"
+    """A feature that shares an ancestor with a protected attribute (T-11).
+
+    Its own type, and deliberately not folded into SENSITIVE_SOURCE, because the
+    two make claims of different strength about different things. Sensitive
+    source is a proved derivation: this feature *descends from* a column the
+    organization restricted, and the column path is the proof. This is a
+    structural coincidence that a human should look at: two columns share an
+    ancestor, and whether that makes one a stand-in for the other is a question
+    about the data, which no walk of a metadata graph can answer."""
+
 
 class RemedyKind(StrEnum):
     """The kind of change one remedy asks for.
@@ -96,6 +107,13 @@ class RemedyKind(StrEnum):
     """Take the models off the failing table."""
     RESTORE_SCHEMA = "restore-schema"
     """Put the drifted columns back the way the model was trained to read them."""
+    REVIEW = "review"
+    """Answer a question the graph raised but cannot settle (T-11).
+
+    The only remedy kind that asks for a judgement rather than a change, and it
+    has no applier in the benchmark for exactly that reason: a proxy candidate
+    is cleared by a human deciding it is not one, and a tool that could
+    mechanically perform that decision would be making it."""
     RETRAIN = "retrain"
     """Retrain against what the data says now, and record the new snapshot."""
     MIGRATE_INPUT = "migrate-input"
@@ -848,6 +866,181 @@ class SensitiveSourceFinding(Finding):
             ),
         ]
         return Counterfactual(remedies=tuple(remedies), paths=len(exposure.all_paths))
+
+
+@dataclass(frozen=True)
+class ProxyCandidate:
+    """A feature sharing an ancestor with a column classified as protected.
+
+    Not a derivation and not an accusation. The structure is a fork rather than
+    a chain: some column upstream feeds both this feature's source column and a
+    column the organization marked as a protected attribute, and neither
+    descends from the other. That is the shape a proxy variable takes when it
+    arises by accident, which Barocas and Selbst (2016) identify as the dominant
+    mechanism of unintentional discrimination: nobody put race in the model,
+    they put postcode in, and postcode carries it.
+
+    What this object asserts is exactly that shape and nothing more. Whether the
+    feature actually stands in for the attribute is a question about the *data*,
+    answerable only with the data and the predictions, which this tool has by
+    design never seen. The finding's job is to put the question in front of a
+    human who can answer it, with the shared ancestor named so they can start.
+    """
+
+    feature_urn: str
+    feature_name: str
+    source_column_urn: str
+    """The feature's own source column. Where the finding lands."""
+    source_column_name: str
+    protected_column_urn: str
+    protected_column_name: str
+    protected_dataset_name: str
+    marker_urn: str
+    """The term or tag classifying the protected column, quoted so the finding
+    names the organization's own declaration rather than ModelGuard's guess."""
+    ancestor_urn: str
+    """The column both descend from. The thing a human goes and looks at."""
+    ancestor_name: str
+    ancestor_dataset_name: str
+    feature_hops: int
+    """Hops from the shared ancestor down to the feature's source column."""
+    protected_hops: int
+    """Hops from the shared ancestor down to the protected column."""
+
+    @property
+    def marker_name(self) -> str:
+        """The classification's readable name, from the tail of its URN."""
+        return self.marker_urn.rsplit(":", 1)[-1]
+
+    @property
+    def shared_text(self) -> str:
+        """Render the fork the way the incident quotes it."""
+        return f"{self.source_column_name} <- {self.ancestor_name} -> {self.protected_column_name}"
+
+
+@dataclass(frozen=True)
+class ProxyCandidateFinding(Finding):
+    """A feature that may stand in for a protected attribute. For human review.
+
+    Every sentence this finding produces is written to be read by somebody who
+    will decide, not to decide for them. The tool has no access to the data or
+    the predictions and therefore cannot know whether the proxying is real; what
+    it can do, and what nothing else does, is find the candidates before the
+    model is trained, from lineage alone.
+    """
+
+    model: ModelRef
+    candidate: ProxyCandidate
+
+    @property
+    def finding_type(self) -> FindingType:
+        """A structural proxy candidate, never an assertion of discrimination."""
+        return FindingType.PROXY_CANDIDATE
+
+    @property
+    def resource_urn(self) -> str:
+        """The feature's own source column: the precise column to go and look at."""
+        return self.candidate.source_column_urn
+
+    @property
+    def incident_type(self) -> str:
+        """FIELD is DataHub's column-scoped incident type. There is no COLUMN."""
+        return "FIELD"
+
+    @property
+    def severity(self) -> Severity:
+        """MEDIUM, always, whether or not the model is live.
+
+        Every other detector here escalates for a live model, because a live
+        model means the harm is happening now. This one does not escalate at
+        all, and the reason is the same one that caps it: this is a prompt to
+        look, not a defect (the plan's wording, and P6's precedent). A finding
+        that cannot be confirmed from the graph must not be able to outrank one
+        that can, or a team triaging by severity will spend its attention on
+        the maybes and miss the proofs.
+        """
+        return Severity.MEDIUM
+
+    @property
+    def title(self) -> str:
+        """A pure function of three column names. Worded as a question to answer."""
+        return (
+            f"Proxy candidate: {self.candidate.source_column_name} shares "
+            f"{self.candidate.ancestor_name} with {self.candidate.marker_name} column "
+            f"{self.candidate.protected_column_name}"
+        )
+
+    @property
+    def evidence(self) -> Mapping[str, str]:
+        """The fork, its distances, and the classification. All read from the graph."""
+        candidate = self.candidate
+        return {
+            "feature": candidate.feature_name,
+            "feature_column": candidate.source_column_name,
+            "protected_column": candidate.protected_column_name,
+            "protected_table": candidate.protected_dataset_name,
+            "classification": candidate.marker_name,
+            "shared_ancestor": candidate.ancestor_name,
+            "shared_ancestor_table": candidate.ancestor_dataset_name,
+            "hops_to_feature": str(candidate.feature_hops),
+            "hops_to_protected": str(candidate.protected_hops),
+            "shared_path": candidate.shared_text,
+            "model": self.model.name,
+            "model_is_live": str(self.model.is_live).lower(),
+            "severity": str(self.severity),
+            "finding_is": "a candidate for human review, not a determination of proxying",
+        }
+
+    @property
+    def models_at_risk(self) -> tuple[ModelRef, ...]:
+        """Exactly the one model that consumes this feature."""
+        return (self.model,)
+
+    @property
+    def counterfactual(self) -> Counterfactual:
+        """What would settle the question, rather than what would silence it.
+
+        The first remedy is deliberately not a change to the graph at all. Every
+        other finding in this project can be cleared by fixing the thing it
+        found; this one is a question, and the honest way to clear a question is
+        to answer it. Offering "drop the feature" first would push a team to
+        delete a feature they may well be entitled to use, on a tool's
+        suggestion, which is the failure mode 09 section 5.1 warns about.
+        """
+        candidate = self.candidate
+        return Counterfactual(
+            remedies=(
+                Remedy(
+                    kind=RemedyKind.REVIEW,
+                    summary=(
+                        f"Have whoever owns {candidate.feature_name} check whether it carries "
+                        f"information about {candidate.protected_column_name}, using the data "
+                        f"itself: both are computed from {candidate.ancestor_name}, which is "
+                        f"the only thing this finding establishes. If it does not, record "
+                        f"that and this stops being a question."
+                    ),
+                    targets=(candidate.source_column_urn,),
+                ),
+                Remedy(
+                    kind=RemedyKind.CUT_LINEAGE,
+                    summary=(
+                        f"Rebuild {candidate.source_column_name} from a column that does not "
+                        f"also feed {candidate.protected_column_name}, so the two stop sharing "
+                        f"{candidate.ancestor_name}."
+                    ),
+                    targets=(candidate.ancestor_urn,),
+                ),
+                Remedy(
+                    kind=RemedyKind.DROP_FEATURE,
+                    summary=(
+                        f"Stop the model consuming {candidate.feature_name}. Sufficient, and "
+                        f"the bluntest of the three: a feature can share an ancestor with a "
+                        f"protected attribute and carry nothing about it."
+                    ),
+                    targets=(candidate.feature_urn,),
+                ),
+            )
+        )
 
 
 @dataclass(frozen=True)

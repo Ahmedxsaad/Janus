@@ -857,6 +857,7 @@ MODELGUARD_LABEL_TERM_URN=              # honor your existing label term
     <tr><td>Target leakage</td><td>A field incident on the offending column, quoting the derivation chain from the feature to the label column, hop by hop</td><td><code>MAP 2.3</code></td><td><code>MEASURE 2.5</code></td><td><code>MANAGE 2.3</code></td></tr>
     <tr><td>Input schema drift</td><td>A schema incident naming every column added, removed or retyped since the training-time snapshot recorded on the training run</td><td><code>MAP 2.3</code></td><td><code>MEASURE 2.3</code></td><td><code>MANAGE 4.1</code></td></tr>
     <tr><td>Sensitive source</td><td>A field incident naming the classification the organization applied and the path from the classified column to the feature that carries it</td><td><code>MAP 4.1</code></td><td><code>MEASURE 2.10</code></td><td><code>MANAGE 2.3</code></td></tr>
+    <tr><td>Proxy candidate (for human review)</td><td>A field incident naming the column a feature and a classified protected attribute both descend from, raised as a question for a human rather than as a determination that the feature proxies for the attribute</td><td><code>MAP 2.3</code></td><td><code>MEASURE 2.11</code></td><td><code>MANAGE 2.3</code></td></tr>
     <tr><td>Deprecated input</td><td>An incident on the deprecated dataset, quoting its owners' own note and decommission date, against the models still training on it</td><td><code>MAP 4.2</code></td><td><code>MEASURE 2.4</code></td><td><code>MANAGE 2.2</code></td></tr>
     <tr><td>Table-level risk (degraded mode, no column link)</td><td>An incident on the training table naming the table-level fact, the mode that produced it, and that mode's measured precision, so the record states how far it can be trusted</td><td><code>MAP 4.1</code></td><td><code>MEASURE 2.5</code></td><td><code>MANAGE 4.1</code></td></tr>
   </table>
@@ -869,6 +870,7 @@ MODELGUARD_LABEL_TERM_URN=              # honor your existing label term
     <li><code>MEASURE 2.4</code> The functionality and behavior of the AI system and its components are monitored when in production.</li>
     <li><code>MEASURE 2.5</code> The AI system to be deployed is demonstrated to be valid and reliable. Limitations of the generalizability beyond the conditions under which the technology was developed are documented.</li>
     <li><code>MEASURE 2.10</code> Privacy risk of the AI system is examined and documented.</li>
+    <li><code>MEASURE 2.11</code> Fairness and bias, as identified in the MAP function, are evaluated and results are documented.</li>
     <li><code>MANAGE 2.2</code> Mechanisms are in place and applied to sustain the value of deployed AI systems.</li>
     <li><code>MANAGE 2.3</code> Procedures are followed to respond to and recover from a previously unknown risk when it is identified.</li>
     <li><code>MANAGE 4.1</code> Post-deployment AI system monitoring plans are implemented, including mechanisms for capturing and evaluating input from users and other relevant AI actors, appeal and override, decommissioning, incident response, recovery, and change management.</li>

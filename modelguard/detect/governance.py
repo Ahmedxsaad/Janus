@@ -56,12 +56,14 @@ from datahub.metadata.urns import DatasetUrn, MlFeatureUrn, SchemaFieldUrn
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
-from modelguard.detect.column_marks import ColumnMarkIndex, marked_ancestor
+from modelguard.detect.column_marks import ColumnMarkIndex, marked_ancestor, related_columns
 from modelguard.detect.graph_reads import model_ref
 from modelguard.detect.leakage import feature_source_column
 from modelguard.models import (
     DeprecatedInputFinding,
     ModelRef,
+    ProxyCandidate,
+    ProxyCandidateFinding,
     SensitiveFeature,
     SensitiveSourceFinding,
 )
@@ -79,6 +81,185 @@ def sensitive_index(conn: DataHubConnection, config: ScanConfig) -> ColumnMarkIn
         conn,
         terms=frozenset(config.sensitive_term_urns),
         tags=frozenset(config.sensitive_tag_urns),
+    )
+
+
+def protected_attribute_index(conn: DataHubConnection, config: ScanConfig) -> ColumnMarkIndex:
+    """Return the index of columns the organization classified as protected.
+
+    A separate index from :func:`sensitive_index`, over separate configuration,
+    because "restricted" and "protected attribute" are different claims. See
+    :attr:`~modelguard.config.ScanConfig.protected_attribute_term_urns`.
+    """
+    return ColumnMarkIndex(
+        conn,
+        terms=frozenset(config.protected_attribute_term_urns),
+        tags=frozenset(config.protected_attribute_tag_urns),
+    )
+
+
+def proxy_candidate_findings(
+    conn: DataHubConnection,
+    model_urn: str,
+    config: ScanConfig,
+) -> tuple[ProxyCandidateFinding, ...]:
+    """Return every feature that shares an ancestor with a protected attribute.
+
+    The shape being looked for is a fork, not a chain::
+
+        shared ancestor
+           |        |
+           v        v
+        feature   protected attribute
+
+    Both descend from one column, and neither descends from the other. That is
+    how a proxy variable arises without anyone choosing it: postcode and race
+    are not derived from each other, they are both derived from the person
+    (Barocas and Selbst 2016, docs/plan/resources.md).
+
+    Direct descent is deliberately excluded and left to
+    :func:`sensitive_source_findings`, which proves it rather than suggesting
+    it. Reporting both would raise two incidents about one column, the weaker
+    of which would dilute the stronger.
+
+    Deterministic and read-only. Nothing here decides that a feature *is* a
+    proxy: see :class:`~modelguard.models.ProxyCandidateFinding`.
+
+    Args:
+        conn: An open connection.
+        model_urn: The model to audit.
+        config: Supplies the protected-attribute classification and the proxy
+            hop cap. Unconfigured means no walk at all, and coverage.py reports
+            the check as never having run.
+
+    Returns:
+        One finding per (feature, protected attribute) pair, ordered by the
+        feature's source column so a report reads identically on every run.
+    """
+    index = protected_attribute_index(conn, config)
+    if not index.configured:
+        return ()
+
+    properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
+    if properties is None or not properties.mlFeatures:
+        return ()
+
+    model = model_ref(conn, model_urn, properties=properties)
+    hops = config.proxy_max_hops
+
+    # Downstream walks are shared across features: two features of one model
+    # very often derive from the same handful of raw columns, and re-walking a
+    # shared ancestor once per feature would turn a fork into an N+1
+    # (detect/CLAUDE.md rule 3).
+    descendants: dict[str, dict[str, int]] = {}
+
+    findings: list[ProxyCandidateFinding] = []
+    for feature_urn in properties.mlFeatures:
+        source_column = feature_source_column(conn, feature_urn)
+        if source_column is None:
+            continue
+
+        # Direct descent is sensitive_source_findings' finding, not this one.
+        if marked_ancestor(conn, source_column, index, config).hit is not None:
+            continue
+
+        ancestors = related_columns(
+            conn, source_column, config, direction="upstream", max_hops=hops
+        )
+        for ancestor_urn, up_hops in sorted(ancestors.items()):
+            if ancestor_urn not in descendants:
+                descendants[ancestor_urn] = related_columns(
+                    conn, ancestor_urn, config, direction="downstream", max_hops=hops
+                )
+
+            for protected_urn, down_hops in sorted(descendants[ancestor_urn].items()):
+                if protected_urn in (source_column, ancestor_urn):
+                    continue
+                marker = index.marker(protected_urn)
+                if marker is None:
+                    continue
+                findings.append(
+                    _proxy_finding(
+                        model,
+                        feature_urn,
+                        source_column,
+                        protected_urn,
+                        marker,
+                        ancestor_urn,
+                        up_hops,
+                        down_hops,
+                    )
+                )
+
+    return tuple(
+        sorted(
+            _first_per_pair(findings),
+            key=lambda finding: (
+                finding.candidate.source_column_name,
+                finding.candidate.protected_column_name,
+            ),
+        )
+    )
+
+
+def _first_per_pair(
+    findings: list[ProxyCandidateFinding],
+) -> list[ProxyCandidateFinding]:
+    """Keep the nearest shared ancestor for each (feature, protected) pair.
+
+    Two columns that share one ancestor usually share that ancestor's ancestors
+    too, so an unfiltered walk reports the same pair once per generation. The
+    nearest is the one worth quoting: it is the column a human would recognise
+    as the thing they have in common, and the further ones are consequences of
+    it rather than separate findings.
+    """
+    nearest: dict[tuple[str, str], ProxyCandidateFinding] = {}
+    for finding in findings:
+        key = (finding.candidate.source_column_urn, finding.candidate.protected_column_urn)
+        current = nearest.get(key)
+        if current is None or _distance(finding) < _distance(current):
+            nearest[key] = finding
+    return list(nearest.values())
+
+
+def _distance(finding: ProxyCandidateFinding) -> tuple[int, str]:
+    """Total hops through the shared ancestor, ties broken on its URN."""
+    candidate = finding.candidate
+    return (candidate.feature_hops + candidate.protected_hops, candidate.ancestor_urn)
+
+
+def _proxy_finding(
+    model: ModelRef,
+    feature_urn: str,
+    source_column_urn: str,
+    protected_column_urn: str,
+    marker_urn: str,
+    ancestor_urn: str,
+    feature_hops: int,
+    protected_hops: int,
+) -> ProxyCandidateFinding:
+    """Assemble one candidate from the fork the traversal actually walked."""
+    source_field = SchemaFieldUrn.from_string(source_column_urn)
+    protected_field = SchemaFieldUrn.from_string(protected_column_urn)
+    ancestor_field = SchemaFieldUrn.from_string(ancestor_urn)
+
+    return ProxyCandidateFinding(
+        model=model,
+        candidate=ProxyCandidate(
+            feature_urn=feature_urn,
+            feature_name=MlFeatureUrn.from_string(feature_urn).name,
+            source_column_urn=source_column_urn,
+            source_column_name=source_field.field_path,
+            protected_column_urn=protected_column_urn,
+            protected_column_name=protected_field.field_path,
+            protected_dataset_name=DatasetUrn.from_string(protected_field.parent).name,
+            marker_urn=marker_urn,
+            ancestor_urn=ancestor_urn,
+            ancestor_name=ancestor_field.field_path,
+            ancestor_dataset_name=DatasetUrn.from_string(ancestor_field.parent).name,
+            feature_hops=feature_hops,
+            protected_hops=protected_hops,
+        ),
     )
 
 

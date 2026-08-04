@@ -35,6 +35,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from datahub.metadata.schema_classes import (
     EditableSchemaMetadataClass,
@@ -343,3 +344,66 @@ def marked_ancestor(
                     break
 
     return WalkResult(matches=tuple(matches), truncated=truncated, hop_capped=hop_capped)
+
+
+def related_columns(
+    conn: DataHubConnection,
+    source_column_urn: str,
+    config: ScanConfig,
+    *,
+    direction: Literal["upstream", "downstream"],
+    max_hops: int,
+) -> dict[str, int]:
+    """Every column reachable from one column, mapped to its shortest hop distance.
+
+    The unmarked sibling of :func:`marked_ancestor`: that one answers "does this
+    column descend from something interesting", and this one answers "what does
+    this column touch at all". Proxy detection (T-11) needs the second question
+    in both directions, because the shape it looks for is not a chain, it is a
+    fork: two columns descending from one ancestor, neither descending from the
+    other.
+
+    Reads ``LineageResult.paths`` and never ``LineageResult.urn``, for the same
+    reason the whole module does (the module docstring): ``urn`` is the upstream
+    *dataset*, and a proxy walk comparing datasets would call two unrelated
+    columns of one wide table related to each other, which is every column in
+    the warehouse.
+
+    Args:
+        conn: An open connection.
+        source_column_urn: The column to walk from.
+        config: Supplies the lineage result cap.
+        direction: ``upstream`` or ``downstream``.
+        max_hops: How far to walk. Separate from the leakage cap: a proxy
+            relationship gets less meaningful with distance, where a leak does
+            not (config.proxy_max_hops).
+
+    Returns:
+        Column URN to the fewest hops it was reached in, the queried column
+        excluded. Empty when the column has no lineage in that direction.
+    """
+    field = SchemaFieldUrn.from_string(source_column_urn)
+    results = conn.client.lineage.get_lineage(
+        source_urn=field.parent,
+        source_column=field.field_path,
+        direction=direction,
+        max_hops=max_hops,
+        count=config.lineage_result_cap,
+    )
+
+    reached: dict[str, int] = {}
+    for result in results:
+        # DataHub answers past the cap above two hops (D-020), so the cap is
+        # enforced here rather than trusted from the server.
+        if result.hops > max_hops:
+            continue
+        for path in split_paths(result.paths or [], source_column_urn):
+            for position, step in enumerate(path):
+                if step.urn == source_column_urn:
+                    continue
+                # Position in the path is the hop count: the queried column sits
+                # at index 0, so the step after it is one hop away.
+                previous = reached.get(step.urn)
+                if previous is None or position < previous:
+                    reached[step.urn] = position
+    return reached

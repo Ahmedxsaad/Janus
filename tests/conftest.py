@@ -34,6 +34,8 @@ from modelguard.models import (
     LeakingFeature,
     ModelAtRisk,
     ModelRef,
+    ProxyCandidate,
+    ProxyCandidateFinding,
     SchemaChange,
     SchemaDriftFinding,
     SensitiveFeature,
@@ -537,6 +539,42 @@ def make_sensitive_source_finding(
             sensitive_dataset_name="ecommerce.public.loans_raw",
             marker_urn="urn:li:tag:modelguard.sensitive",
             column_path=("applicant_income", "income"),
+        ),
+    )
+
+
+def make_proxy_candidate_finding(
+    *, live: bool = True, has_owner: bool = False
+) -> ProxyCandidateFinding:
+    """Build a proxy candidate the way the detector would, without a graph.
+
+    The fork rather than a chain: `applicant_income` and the classified
+    `income_bracket_demographic` both descend from `income`.
+    """
+    return ProxyCandidateFinding(
+        model=ModelRef(
+            urn=MODEL_URN,
+            name="Credit Risk v3",
+            deployments=(DEPLOYMENT_URN,),
+            live_deployments=(DEPLOYMENT_URN,) if live else (),
+            has_owner=has_owner,
+        ),
+        candidate=ProxyCandidate(
+            feature_urn=CLEAN_FEATURE_URN,
+            feature_name="applicant_income",
+            source_column_urn=CLEAN_COLUMN_URN,
+            source_column_name="applicant_income",
+            protected_column_urn=(
+                f"urn:li:schemaField:({FEATURE_TABLE_URN},income_bracket_demographic)"
+            ),
+            protected_column_name="income_bracket_demographic",
+            protected_dataset_name="ecommerce.public.customer_features",
+            marker_urn="urn:li:tag:modelguard.protected-attribute",
+            ancestor_urn=INCOME_COLUMN_URN,
+            ancestor_name="income",
+            ancestor_dataset_name="ecommerce.public.loans_raw",
+            feature_hops=1,
+            protected_hops=1,
         ),
     )
 

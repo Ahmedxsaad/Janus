@@ -50,6 +50,7 @@ from modelguard.models import (
     FreshnessFinding,
     LeakageFinding,
     ModelAtRisk,
+    ProxyCandidateFinding,
     SchemaDriftFinding,
     SensitiveSourceFinding,
     TableLevelRiskFinding,
@@ -146,6 +147,11 @@ def _sensitive_subject(finding: SensitiveSourceFinding) -> str:
 
 @report_subject.register
 def _deprecated_subject(finding: DeprecatedInputFinding) -> str:
+    return finding.model.name
+
+
+@report_subject.register
+def _proxy_subject(finding: ProxyCandidateFinding) -> str:
     return finding.model.name
 
 
@@ -482,6 +488,81 @@ mistake, withdrawing it in DataHub closes this finding on the next scan.
 ModelGuard reads the `deprecation` aspect and the model's recorded inputs. It has no \
 opinion on whether the deprecation is justified, and it cannot tell whether a \
 replacement table already exists.
+"""
+
+
+@_report_body.register
+def _proxy_body(finding: ProxyCandidateFinding) -> str:
+    candidate = finding.candidate
+    model = finding.model
+    serving = (
+        f"**Live**, serving through {len(model.live_deployments)} deployment(s)."
+        if model.is_live
+        else "Not currently serving."
+    )
+    owner = "Owned." if model.has_owner else "**Unowned**: nobody is on the hook to look at this."
+
+    return f"""## This is a question, not a finding
+
+The model **{model.name}** consumes the feature `{candidate.feature_name}`, computed \
+from `{candidate.source_column_name}`. That column and \
+`{candidate.protected_dataset_name}.{candidate.protected_column_name}`, which this \
+organization classified as `{candidate.marker_name}`, are **both computed from** \
+`{candidate.ancestor_dataset_name}.{candidate.ancestor_name}`.
+
+Neither derives from the other. That is the whole of what has been established, and \
+it is not a determination that `{candidate.feature_name}` proxies for \
+`{candidate.protected_column_name}`, nor that this model discriminates. Whether the \
+feature actually carries information about the attribute depends on the data, which \
+ModelGuard has never read.
+
+## The shared ancestry
+
+```
+{candidate.shared_text.replace("`", "'")}
+```
+
+`{candidate.ancestor_name}` is {candidate.feature_hops} hop(s) from the feature's \
+source column and {candidate.protected_hops} from the classified column. Every edge \
+above is a declared column-level lineage edge in DataHub.
+
+## Assessment
+
+{{narrative}}
+
+## Why this is worth someone's time
+
+A proxy variable is how unintentional discrimination usually arises: nobody puts a \
+protected attribute into a model, they put in something computed from the same source, \
+and it carries the attribute with it. Barocas and Selbst (2016) identify this as the \
+dominant mechanism. Finding the candidates needs lineage rather than data, so this can \
+be asked before the model is trained, which is the only time the answer is cheap to act \
+on.
+
+## Model under review
+
+### {model.name}
+
+- URN: `{model.urn}`
+- Severity: **{finding.severity}** (capped: a prompt to look, not a defect)
+- Serving status: {serving}
+- Ownership: {owner}
+- Feature under review: `{candidate.feature_urn}`
+- Classification on the other column: `{candidate.marker_urn}`
+
+## What ModelGuard did
+
+1. Raised a `{finding.incident_type}` incident on the feature's own source column, \
+`{candidate.source_column_name}`.
+2. Nothing else. This finding does not move the model's trust score, because a \
+question nobody has answered should not change how much a model is trusted.
+
+## What to do
+
+Have whoever owns `{candidate.feature_name}` check it against the data: does it carry \
+information about `{candidate.protected_column_name}`? If it does not, record that and \
+this stops being a question. If it does, the decision about what to do next is theirs \
+and their compliance function's, not this tool's.
 """
 
 

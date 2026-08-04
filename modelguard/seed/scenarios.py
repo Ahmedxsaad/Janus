@@ -79,6 +79,12 @@ SECOND_LEAK_PATH = "second-leak-path"
 COMMON_ANCESTOR = "common-ancestor-label"
 LABEL_LOOKALIKE = "label-lookalike"
 
+#: The proxy scenario (T-11): the same fork COMMON_ANCESTOR plants, read for the
+#: opposite purpose. There the sibling is a declared label and the detector must
+#: stay silent; here it is a declared protected attribute and the detector must
+#: raise a candidate for review.
+PROXY_ATTRIBUTE = "proxy-attribute"
+
 #: The governance scenarios. A classified column upstream of a feature, and a
 #: training input its owners have marked deprecated. Both are facts an
 #: organization records about its own data and that nothing today joins back to
@@ -607,6 +613,109 @@ def revert_common_ancestor_label(conn: DataHubConnection) -> LeakageResult:
         feature_column=COMMON_ANCESTOR_LABEL.name,
         upstream_columns=(),
         leaking=False,
+    )
+
+
+#: The tag the proxy scenario applies (T-11). A tag rather than a term, and a
+#: different one from :data:`SENSITIVE_TAG_URN`, because the two classifications
+#: are different claims: "restricted" is a handling rule, "protected attribute"
+#: is a legal category. A catalog that used one URN for both would report every
+#: PII column as a proxy candidate.
+PROTECTED_TAG_URN = "urn:li:tag:modelguard.protected-attribute"
+PROTECTED_TAG_NAME = "modelguard.protected-attribute"
+PROTECTED_TAG_DESCRIPTION = (
+    "Demo classification: a column holding a protected attribute (race, sex, age, "
+    "disability). Planted by modelguard-scenario; stands in for whatever term an "
+    "organization already uses. A feature sharing an ancestor with such a column is "
+    "a proxy candidate for human review, never a finding of discrimination."
+)
+
+#: The proxy scenario's column: a protected attribute on the *feature* table,
+#: derived from ``income``, the same column ``applicant_income`` derives from.
+#: The fork T-11 looks for: both descend from one ancestor, neither from the
+#: other. Deliberately not on the source table, because a protected attribute
+#: upstream of the feature would be plain descent and P5's finding instead.
+PROXY_PROTECTED_COLUMN = spec.Column(
+    "income_bracket_demographic",
+    "VARCHAR",
+    "Declared a protected attribute for this scenario. Derives from income, the "
+    "same column applicant_income derives from; neither descends from the other.",
+)
+
+
+def plant_proxy_attribute(conn: DataHubConnection) -> GovernanceResult:
+    """Give a protected attribute the same ancestor a model feature has (T-11).
+
+    The positive trial for proxy detection. ``applicant_income`` (a model
+    feature) and ``income_bracket_demographic`` (classified protected) are both
+    computed from ``income``, and neither derives from the other, which is the
+    shape a proxy variable takes when nobody chose one.
+    """
+    ensure_tag(conn, PROTECTED_TAG_NAME, PROTECTED_TAG_DESCRIPTION)
+    _emit_feature_schema(
+        conn, (*spec.FEATURE_COLUMNS, PROXY_PROTECTED_COLUMN), scenario=PROXY_ATTRIBUTE
+    )
+    _set_column_lineage(conn, {**spec.COLUMN_LINEAGE, PROXY_PROTECTED_COLUMN.name: ["income"]})
+    column_urn = str(spec.feature_column_urn(PROXY_PROTECTED_COLUMN.name))
+    conn.graph.emit_mcp(
+        MetadataChangeProposalWrapper(
+            entityUrn=column_urn,
+            aspect=GlobalTagsClass(tags=[TagAssociationClass(tag=PROTECTED_TAG_URN)]),
+        )
+    )
+    return GovernanceResult(
+        name=PROXY_ATTRIBUTE,
+        resource_urn=column_urn,
+        declared=True,
+        detail=PROTECTED_TAG_NAME,
+    )
+
+
+def cut_proxy_shared_ancestor(conn: DataHubConnection) -> GovernanceResult:
+    """Break the fork without touching the classification or the column.
+
+    The counterfactual T-11 offers is "rebuild the feature from a column that
+    does not also feed the protected attribute", and this performs exactly
+    that half of it: the protected column stays, its tag stays, and only the
+    derivation the two shared is removed. So a finding that clears afterwards
+    clears because the *ancestry* changed, which is the claim, rather than
+    because the classified column stopped existing.
+
+    Deliberately the narrowest possible edit, for the reason
+    :func:`revert_leakage` is: a benchmark that cleared a finding by deleting
+    the evidence would prove nothing about the remedy.
+    """
+    _emit_feature_schema(
+        conn, (*spec.FEATURE_COLUMNS, PROXY_PROTECTED_COLUMN), scenario=PROXY_ATTRIBUTE
+    )
+    _set_column_lineage(conn, dict(spec.COLUMN_LINEAGE))
+    return GovernanceResult(
+        name=PROXY_ATTRIBUTE,
+        resource_urn=str(spec.feature_column_urn(PROXY_PROTECTED_COLUMN.name)),
+        declared=True,
+        detail=PROTECTED_TAG_NAME,
+    )
+
+
+def revert_proxy_attribute(conn: DataHubConnection) -> GovernanceResult:
+    """Undeclare the protected attribute and drop the column, in that order.
+
+    Same ordering rule as every other scenario that both classifies and creates
+    a column: a tag on a ``schemaField`` outlives the column's removal from
+    ``schemaMetadata``, so dropping the column first would strand the
+    declaration on a column nobody can see.
+    """
+    column_urn = str(spec.feature_column_urn(PROXY_PROTECTED_COLUMN.name))
+    conn.graph.emit_mcp(
+        MetadataChangeProposalWrapper(entityUrn=column_urn, aspect=GlobalTagsClass(tags=[]))
+    )
+    _emit_feature_schema(conn, spec.FEATURE_COLUMNS, scenario=None)
+    _set_column_lineage(conn, dict(spec.COLUMN_LINEAGE))
+    return GovernanceResult(
+        name=PROXY_ATTRIBUTE,
+        resource_urn=column_urn,
+        declared=False,
+        detail="",
     )
 
 

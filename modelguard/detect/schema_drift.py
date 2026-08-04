@@ -56,7 +56,7 @@ from modelguard.detect.graph_reads import model_ref
 from modelguard.models import ChangeKind, ModelRef, SchemaChange, SchemaDriftFinding
 
 
-def _training_snapshot(
+def training_snapshot(
     conn: DataHubConnection,
     run_urn: str,
     property_name: str,
@@ -131,7 +131,7 @@ def _run_findings(
     config: ScanConfig,
 ) -> list[SchemaDriftFinding]:
     """Return the drift findings for one training run of a model."""
-    snapshot = _training_snapshot(conn, run_urn, config.training_schema_property)
+    snapshot = training_snapshot(conn, run_urn, config.training_schema_property)
     if snapshot is None:
         return []
 
@@ -220,7 +220,7 @@ def schema_drift_candidate_resources(
 
     resources: list[str] = []
     for run_urn in properties.trainingJobs:
-        snapshot = _training_snapshot(conn, run_urn, config.training_schema_property)
+        snapshot = training_snapshot(conn, run_urn, config.training_schema_property)
         if snapshot is None:
             continue
         inputs = conn.graph.get_aspect(run_urn, DataProcessInstanceInputClass)

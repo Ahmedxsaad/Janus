@@ -256,3 +256,17 @@ def test_a_row_with_a_boundary_trial_counts_it_and_names_the_mutation():
 
     row = next(line for line in report.splitlines() if line.startswith("| Target leakage"))
     assert "| 1 | Yes: an off-by-one in the hop cap" in row
+
+
+def test_every_detector_has_a_row_label_so_none_is_silently_dropped():
+    """A family with no label renders no row, silently.
+
+    The report would then be short one detector with nothing saying so.
+
+    Exactly what happened when the proxy detector first ran: 31 trials
+    executed, four of them proxy trials, and the table printed six rows
+    (D-117).
+    """
+    from benchmarks.run_bench import _DETECTOR_LABELS
+
+    assert set(_DETECTOR_LABELS) == set(FindingType)

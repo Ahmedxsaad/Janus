@@ -40,7 +40,11 @@ from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import blast_radius, finding_for
 from modelguard.detect.degraded import table_level_findings
-from modelguard.detect.governance import deprecated_input_findings, sensitive_source_findings
+from modelguard.detect.governance import (
+    deprecated_input_findings,
+    proxy_candidate_findings,
+    sensitive_source_findings,
+)
 from modelguard.detect.leakage import leakage_findings
 from modelguard.detect.schema_drift import schema_drift_findings
 from modelguard.models import Finding, FindingType, Remedy, RemedyKind
@@ -72,6 +76,17 @@ APPLIERS: dict[tuple[FindingType, RemedyKind], Callable[[DataHubConnection], obj
     # somebody links the model, rather than adding a second opinion beside the
     # detector that can prove things.
     (FindingType.TABLE_LEVEL_RISK, RemedyKind.DECLARE_LINK): scenarios.revert_delinked_model,
+    # The proxy candidate's *first* remedy is REVIEW, and it deliberately has no
+    # applier: it asks a human to decide, and a benchmark that could perform that
+    # decision would be making it (T-11). What is mechanically checkable is the
+    # second remedy, cutting the shared ancestry, and this applier performs
+    # exactly that: the classified column and its tag stay, only the derivation
+    # the two shared is removed. A finding that clears afterwards clears because
+    # the ancestry changed rather than because the evidence was deleted.
+    (
+        FindingType.PROXY_CANDIDATE,
+        RemedyKind.CUT_LINEAGE,
+    ): scenarios.cut_proxy_shared_ancestor,
 }
 
 
@@ -97,6 +112,8 @@ def findings_for(
         return schema_drift_findings(conn, str(spec.model_urn()), config)
     if family is FindingType.SENSITIVE_SOURCE:
         return sensitive_source_findings(conn, str(spec.model_urn()), config)
+    if family is FindingType.PROXY_CANDIDATE:
+        return proxy_candidate_findings(conn, str(spec.model_urn()), config)
     if family is FindingType.DEPRECATED_INPUT:
         return deprecated_input_findings(conn, str(spec.model_urn()), config)
     if family is FindingType.TABLE_LEVEL_RISK:

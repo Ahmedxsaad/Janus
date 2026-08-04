@@ -16,6 +16,156 @@ Entry template:
 
 ---
 
+## D-120: Phase 4 and 5 close-out, and two silent drops the live run found (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: three registration gaps found by running the full benchmark rather
+  than by review, each fixed with a test that fails if it recurs.
+- Options considered: none worth recording. All three are the same class of
+  defect (a new detector reaching a surface nobody registered it in), and this
+  repo already has the rule for it: writeback/CLAUDE.md's D-096 line, "a new
+  finding type is not shipped until every dispatch table it passes through is
+  registered". The rule was written about `documents.py`; the gaps here were in
+  three tables it does not mention.
+- Why: worth a decision-log entry because the *failure modes differed*, and only
+  one of the three was loud.
+- Result:
+  1. `benchmarks/counterfactuals.findings_for` had no proxy branch and **raised**,
+     stopping the run. The loud one, and correct: it exists precisely so a
+     detector nobody registered is not scored as one that never fires, which
+     would publish a perfect false-negative rate as a measurement.
+  2. `run_bench._DETECTOR_LABELS` had no proxy entry, so the detection table
+     **silently rendered six rows for seven detectors**. Nothing failed. Four
+     proxy trials ran, passed, and vanished from the report. Now tested against
+     `set(FindingType)`.
+  3. `measure_faithfulness` narrated whatever the trial matrix happened to leave
+     behind, which by the end of a run is a graph most detectors have nothing to
+     say about: **one narrative out of seven families**, reported as a rate. It
+     now plants each family's own positive trial, waits for it, and narrates
+     that, which is four of seven live (the rest are async-index misses, dropped
+     from the measurement rather than counted). It also moved to last before
+     `restore_baseline`, because it now plants state and anything after it would
+     be reading a graph it did not set up.
+- Final numbers, all measured on a live Quickstart: 31/31 trials correct, the
+  new proxy family at 1.00 precision and recall over 4 trials (3 boundary), all
+  seven counterfactual families applied and cleared, faithfulness 1.00 over 4
+  narratives and 3 figures, 804 offline tests and 66 integration tests green.
+
+## D-119: T-12 and T-13, two artifacts that refuse to certify anything (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: `writeback/model_documents.py` renders two per-model documents from
+  facts already in the graph: a **model card** (T-12, Mitchell et al. 2019,
+  which `trust_score.py` has cited since Phase 2 without producing the artifact)
+  and an **EU AI Act Article 10 evidence pack** (T-13). One `gather()` reads the
+  graph; both renderers are pure functions of what it returns, so the two
+  artifacts cannot disagree about the same model. Exposed as `modelguard
+  model-card` and `modelguard evidence-pack`, printing by default and
+  publishing only with `--write`.
+- Options considered:
+  1. Produce them on every scan. Rejected: they are not findings, they are
+     documentation, and writing two documents per model per scan makes a
+     catalog noisier without making it more accurate. A command a human runs
+     when they want the artifact matches what the artifact is.
+  2. One command with a `--kind` flag. Rejected on discoverability: the two have
+     different audiences (a data scientist reads the card, a compliance function
+     reads the pack) and a flag hides the second one from anybody who does not
+     already know to look.
+- Why: 09 section 5.2's argument is that the depth move in governance is not
+  more controls, it is producing the artifact a compliance function actually has
+  to file. Both are renderers over facts detection already computes.
+- Result: the design constraint is what these documents **refuse** to say, and
+  it is enforced by tests rather than by intent. The evidence pack's first
+  heading is "This is not a compliance certification"; it denies being a
+  conformity assessment, a certification, and legal advice, and says it must not
+  be filed or cited as any of them; and "What this pack could NOT establish" is
+  its *second* heading, before any evidence, because a gap at the end of a long
+  document is a gap nobody reads. Four things it can never establish are named
+  unconditionally: freshness at training time (ModelGuard measures freshness
+  now, nothing records it as of the run, and the two are different claims),
+  whether anybody examined the data for bias, how the data was collected, and
+  anything at all about the data's contents. Articles 10 and 12 are cited by
+  number so the mapping is checkable, and the mapping is labelled this project's
+  reading rather than fact. Both artifacts mark anything absent as "not recorded
+  in the catalog", one phrase everywhere so a reader can search for the gaps.
+  Rendered and published against a live graph; the mutation check confirms the
+  suite fails if the disclaimer heading is renamed or if the gaps section moves
+  below the evidence.
+
+## D-117: T-11, proxy attributes as candidates rather than accusations (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: a sixth detector, `proxy_candidate_findings`, looks for a **fork**
+  rather than a chain: a model feature and a column classified a protected
+  attribute both descending from one ancestor within `proxy_max_hops`, with
+  neither descending from the other. Configured by
+  `MODELGUARD_PROTECTED_ATTRIBUTE_TERM_URNS` / `..._TAG_URNS`, no default and
+  no fallback (root rule 6a); unset reports not-evaluated, never clean.
+- Options considered:
+  1. Extend the existing sensitive-source detector to cover it. Rejected: the
+     two make claims of different strength. P5 proves a derivation and quotes
+     the column path; this establishes a structural coincidence. Merging them
+     would let the weaker claim inherit the stronger one's credibility, and a
+     single config key for both would report every PII column as a proxy
+     candidate.
+  2. Reuse `leakage_max_hops` for the walk. Rejected, and the asymmetry is the
+     point: a leak four joins back is still a leak, but a *shared ancestor*
+     four joins back is most of a warehouse, because everything descends from
+     the same few raw tables eventually. `proxy_max_hops` defaults to 3.
+- Why: 09 section 5.1 calls this the most novel item in the plan, and the
+  structural claim is the moat: fairness tooling needs the data and the
+  predictions, this needs neither and runs before the model is trained.
+- Result: what the finding is *allowed to say* was the design, not an
+  afterthought. Every surface says candidate for human review and never proxy,
+  bias, or discrimination; severity is capped at MEDIUM and does **not**
+  escalate for a live model, which is unique among the detectors here (a maybe
+  that outranks a proof sends triage to the wrong finding); it contributes
+  nothing to the trust score, by the T-07 precedent; and its first remedy is
+  `RemedyKind.REVIEW`, which has deliberately no benchmark applier, because a
+  tool that could mechanically perform "decide this is not a proxy" would be
+  making the decision. Barocas and Selbst (2016) added to resources.md with
+  what it changed. Verified live: the fork fires at MEDIUM, both negatives
+  (direct descent read as P5's finding, and the hop cap at 0) stay silent, and
+  cutting the shared ancestry clears it while the classified column and its tag
+  stay in place. Rule 6 earned its keep twice here: the first
+  direct-descent test passed against a detector with the exclusion deleted
+  (it never reached the guard), and the first nearest-ancestor test passed
+  against keep-first because the fixture's alphabetically-first ancestor was
+  also the nearest. Both rewritten until the mutation failed them.
+
+## D-118: T-10, faithfulness is measurable where quality is not (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: `benchmarks/faithfulness.py` checks generated prose against the
+  facts its narrator was shown: every figure in the prose must appear in those
+  facts, and every URN must resolve in the graph. Reported in RESULTS.md as a
+  rate beside the count of figures actually checked.
+- Options considered:
+  1. Ground against `Finding.evidence`, which is what 10's task text says.
+     **Corrected in place per docs/CLAUDE.md rule 1**: the prompt shows
+     `evidence` *plus* `_evidence_detail` (a model's hop count, how many of its
+     features are at risk), so a checker grounded on the mapping alone reports a
+     correctly-quoted hop count as a hallucination. `narrate.grounding_facts`
+     is now the one source of truth for "what the model was allowed to speak
+     from", used by the prompt and the checker, so the two cannot drift.
+  2. An LLM-as-judge readability rubric. Kept out of the primary slot, per 09
+     section 7: soft evidence that varies by provider sits badly beside a
+     project whose decisions are deterministic. Quality stays unscored and
+     RESULTS.md says so.
+- Why: "narrative quality is not scored" was doing double duty as a disclosure
+  and as an excuse. Faithfulness is a property rather than a judgement, and
+  agent/CLAUDE.md rule 5 has claimed this self-check since Phase 1 without
+  anything measuring it.
+- Result: the check is numeric rather than textual, which matters: the evidence
+  renders a lag as `30.0` and prose writing "30 hours" has quoted it exactly,
+  where a substring match would also accept `3`. Identifiers are excluded on
+  both sides by the same rule, so `credit_risk_v3` yields no figure and a model
+  whose version is in its own name is not flagged forever. All six template
+  narrators pass at 1.00 over 6 figures; the checker is shown to reject
+  invented, derived ("five times the SLA"), and rounded figures, and an
+  unresolvable URN, so the green rate is a measurement and not a check that
+  cannot fail. **The plan's "runs against every provider in CI" is not what
+  shipped and RESULTS.md says so**: CI has no API key, so the template
+  narrator is what is always measured, a provider row appears only when a
+  credential for it was present, and its absence is explicitly not a passing
+  grade.
+
 ## D-116: T-09, the confusable negatives (2026-08-04)
 - Decided by: Ahmed Saad.
 - Decision: four hard negatives for target leakage, per 09 section 2.2's own

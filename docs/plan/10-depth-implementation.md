@@ -383,69 +383,117 @@ being chased: the sensitive-source trial's own precondition checked a tag's
 presence but never lineage reachability, the same gap `_leakage_visible` was
 built to avoid.
 
-### T-10 Narrative faithfulness, deterministically (09 section 2.4)
+### T-10 Narrative faithfulness, deterministically (09 section 2.4) [done, D-118]
 
 Moved into this phase from 09's "everything remaining": it is S, it is benchmark
 work, and it belongs with the other evidence items.
 
-- [ ] Every URN in generated prose resolves in the graph. Zero hallucinated entities.
-- [ ] Every number in generated prose appears in that finding's `evidence`
-      (`Finding.evidence`, `Mapping[str, str]` `[verified]`).
-- [ ] **No number appears in prose that is absent from `evidence`.** The interesting
-      one: a hallucination detector for figures.
-- [ ] Runs against every provider in `SUPPORTED_PROVIDERS`, and against the template
-      fallback, in CI.
-- [ ] Reported in `RESULTS.md` as a faithfulness rate.
+- [x] Every URN in generated prose resolves in the graph. Zero hallucinated entities.
+- [x] Every number in generated prose appears in ~~that finding's `evidence`~~ **the
+      facts the narrator was shown**, corrected in place per docs/CLAUDE.md rule 1.
+      The prompt carries `Finding.evidence` *plus* the per-type detail (a model's
+      hop count, its features at risk), so grounding on the mapping alone reports a
+      correctly-quoted hop count as a hallucination. `narrate.grounding_facts` is now
+      the single source of both, so prompt and checker cannot drift.
+- [x] **No number appears in prose that is absent from those facts.** The interesting
+      one: a hallucination detector for figures. Numeric rather than textual
+      comparison, so `30.0` and "30 hours" agree and `3` is not a substring match
+      for `30`; identifiers are excluded on both sides, so `credit_risk_v3` yields
+      no figure.
+- [x] ~~Runs against every provider in `SUPPORTED_PROVIDERS`~~, and against the
+      template fallback, in CI. **Not what shipped, and RESULTS.md says so**: CI has
+      no API key, so the template narrator is what is always measured. A provider row
+      appears only when a credential for it was present, and its absence is stated as
+      not a passing grade rather than left to look like one.
+- [x] Reported in `RESULTS.md` as a faithfulness rate, beside the count of figures
+      actually checked: prose quoting no number is faithful by this measure and says
+      nothing.
 - [ ] An LLM-as-judge readability rubric may sit on top afterwards, clearly labelled
       as the soft secondary metric (09 section 7 keeps it out of the primary slot).
+      Deliberately not built: 09 section 7 keeps it out of the primary slot, and
+      nothing yet needs the secondary one.
 
 ---
 
 ## Phase 5: governance depth
 
-### T-11 Proxy-attribute detection (09 section 5.1)
+### T-11 Proxy-attribute detection (09 section 5.1) [done, D-117]
 
 Reuses T-09's common-ancestor scenario, read for the opposite purpose.
 
-- [ ] The walk: feature X and protected attribute A share a common ancestor within
-      k hops, and X does not descend from A.
-- [ ] `MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS` and `..._TERM_URNS`. **No default**,
+- [x] The walk: feature X and protected attribute A share a common ancestor within
+      k hops, and X does not descend from A. `column_marks.related_columns` is the
+      new primitive: the unmarked sibling of `marked_ancestor`, answering what a
+      column touches rather than what it descends from, in either direction.
+- [x] `MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS` and `..._TERM_URNS`. **No default**,
       exactly as P5 has none (root rule 6a, and 09's argument: a guessed
       classification URN is the worst kind to be wrong about). All-or-nothing group
       (rule 6c). Both keys added to `.env` and `.env.example` in the same order
-      (rule 6e).
-- [ ] Unset means the check reports **not evaluated**, never clean
-      (`detect/coverage.py` handles this already).
-- [ ] Reported as a **proxy candidate for human review**, never as discrimination.
-      This is the whole feature and it is built in from the first commit.
-- [ ] Severity caps at `medium`, for P6's reason: it is a prompt to look, not a defect.
-- [ ] Must not double-report what P5 already reports (direct descent).
-- [ ] Add Barocas and Selbst, *Big Data's Disparate Impact* (2016) to
+      (rule 6e), checked by diffing the two key lists.
+- [x] Unset means the check reports **not evaluated**, never clean. `coverage.py`
+      gains `_proxy_gap` rather than relying on the existing ones.
+- [x] Reported as a **proxy candidate for human review**, never as discrimination.
+      This is the whole feature and it is built in from the first commit: the finding
+      type, the title, the evidence mapping's own `finding_is` key, the narrator's
+      brief (which forbids asserting proxying, bias or unlawfulness), the impact
+      report's first heading ("This is a question, not a finding"), and the first
+      remedy, which asks a human rather than changing the graph.
+- [x] Severity caps at `medium`, for P6's reason: it is a prompt to look, not a
+      defect. Stronger than P6 in fact: it does not escalate for a live model at all,
+      which is unique here, because a maybe that outranks a proof sends triage to
+      the wrong finding. It contributes nothing to the trust score either, by T-07's
+      precedent.
+- [x] Must not double-report what P5 already reports (direct descent). Excluded
+      explicitly, and the test that proves it had to be rewritten once: the first
+      version never reached the guard.
+- [x] Add Barocas and Selbst, *Big Data's Disparate Impact* (2016) to
       `docs/plan/resources.md` with what it changed here, per the existing convention.
-- [ ] Trials: one positive, plus the two negatives that matter (direct descent, and
-      an unrelated common ancestor beyond k hops).
+- [x] Trials: one positive, plus the two negatives that matter (direct descent, and
+      an unrelated common ancestor beyond k hops). Four in total, and a fourth
+      `proxy-reverted`. Verified live: the fork fires at MEDIUM, both negatives stay
+      silent, and cutting the shared ancestry clears it with the classified column
+      and its tag left in place.
 
 Files: `modelguard/detect/governance.py`, `modelguard/detect/column_marks.py`,
 `modelguard/models.py`, `modelguard/config.py`, `.env`, `.env.example`.
 
-### T-12 Generated model cards (09 section 5.3)
+### T-12 Generated model cards (09 section 5.3) [done, D-119]
 
-- [ ] Intended use where declared, training-data provenance, the trust score with its
-      T-01 waterfall, known findings, and the checks that could not run.
-- [ ] Written back as a document, reusing `writeback/documents.py` and its
-      idempotency keying.
+- [x] Intended use where declared, training-data provenance, the trust score with its
+      T-01 waterfall, known findings, and the checks that could not run. Intended use
+      is the one section a graph cannot derive, so an undeclared one says exactly that
+      rather than being omitted.
+- [x] Written back as a document, reusing `writeback/documents.py` and its
+      idempotency keying. Keyed on the model alone: there is one card per model and it
+      is meant to be current, unlike an impact report, which is per finding.
+- [x] `modelguard model-card --model X`, printing by default and publishing with
+      `--write`. Read-only either way: generating documentation must not raise
+      incidents as a side effect.
 
-### T-13 EU AI Act Article 10 evidence pack (09 section 5.2)
+### T-13 EU AI Act Article 10 evidence pack (09 section 5.2) [done, D-119]
 
-- [ ] Assemble per model: training data sources, column-level provenance,
-      classification exposures, freshness at training time, schema at training time,
-      deprecated inputs, ownership.
-- [ ] **The first paragraph states that this is evidence assembled from measured
+- [x] Assemble per model: training data sources, column-level provenance,
+      classification exposures, ~~freshness at training time~~, schema at training
+      time, deprecated inputs, ownership. **Freshness at training time is not
+      assembled and cannot be**, corrected in place per docs/CLAUDE.md rule 1:
+      ModelGuard measures freshness *now*, and DataHub records no snapshot of it as of
+      the training run. Substituting current freshness would answer a different
+      question than Article 10 asks, so the pack names it as unestablished instead.
+- [x] **The first paragraph states that this is evidence assembled from measured
       facts, not a compliance certification.** A generated document implying
-      conformity is the single most damaging thing this project could ship.
-- [ ] What it could **not** establish is as prominent as what it could, reusing
-      `coverage.py`'s not-evaluated discipline.
-- [ ] Cite Article 10 and Article 12 by number, so a reader can check the mapping.
+      conformity is the single most damaging thing this project could ship. It is the
+      first *heading*, not the first paragraph of a later section, and it denies all
+      three readings a filer might take (conformity assessment, certification, legal
+      advice) plus filing or citing it as any of them.
+- [x] What it could **not** establish is as prominent as what it could, reusing
+      `coverage.py`'s not-evaluated discipline and going further: it is the second
+      heading, above every piece of evidence, because a gap at the end of a long
+      document is a gap nobody reads. Four limits are stated unconditionally rather
+      than only when triggered, and the scan's own coverage gaps are appended.
+- [x] Cite Article 10 and Article 12 by number, so a reader can check the mapping.
+      Subsections cite the specific paragraphs (10(2)(b), 10(3), 10(2)(f), 10(5)), and
+      the mapping is labelled this project's reading rather than fact.
+- [x] `modelguard evidence-pack --model X`, same surface as the card.
 
 ---
 

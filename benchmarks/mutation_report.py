@@ -311,7 +311,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "would kill it.",
     ),
     Verdict(
-        "modelguard.detect.schema_drift.x__training_snapshot",
+        "modelguard.detect.schema_drift.x_training_snapshot",
         "gap",
         "The guard `properties is None or not properties.customProperties` "
         "mutated to `and` survives: no trial reaches this line with "

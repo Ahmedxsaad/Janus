@@ -72,6 +72,13 @@ from modelguard.writeback.link import (
     recorded_link,
 )
 from modelguard.writeback.link_infer import LinkProposal, declared_proposal, infer_link
+from modelguard.writeback.model_documents import (
+    gather,
+    publish_evidence_pack,
+    publish_model_card,
+    render_evidence_pack,
+    render_model_card,
+)
 
 app = typer.Typer(
     add_completion=False,
@@ -2004,6 +2011,94 @@ def crosswalk() -> None:
     # print rather than console.print: this output is meant to be redirected to a
     # file, and rich would soft-wrap the table cells to the terminal width.
     print(crosswalk_markdown())
+
+
+@app.command(name="model-card")
+def model_card(
+    model: Annotated[
+        str,
+        typer.Option("--model", help="Model name or URN to document."),
+    ],
+    write: Annotated[
+        bool,
+        typer.Option("--write/--dry-run", help="Publish to DataHub, or print and write nothing."),
+    ] = False,
+) -> None:
+    """Generate a model card for one model, from what the catalog records (T-12).
+
+    Intended use where somebody declared it, where the training data came from,
+    the trust score with its waterfall, the findings open against it, and the
+    checks that could not run. Mitchell et al. 2019 proposed the artifact;
+    everything in it here is read from DataHub rather than maintained by hand,
+    so it is current by construction and empty where the catalog is.
+
+    Prints by default and writes nothing. `--write` publishes it as a document
+    linked to the model, keyed on the model alone so a rerun replaces the card
+    rather than adding a second one.
+    """
+    _publish_model_document(model, write=write, kind="card")
+
+
+@app.command(name="evidence-pack")
+def evidence_pack(
+    model: Annotated[
+        str,
+        typer.Option("--model", help="Model name or URN to assemble evidence for."),
+    ],
+    write: Annotated[
+        bool,
+        typer.Option("--write/--dry-run", help="Publish to DataHub, or print and write nothing."),
+    ] = False,
+) -> None:
+    """Assemble the EU AI Act Article 10 evidence pack for one model (T-13).
+
+    Training-data provenance, the input schema at training time, governance
+    findings, record-keeping, and ownership, mapped to Article 10 and Article 12
+    by number so a reader can check the mapping rather than trust it.
+
+    **It is not a conformity assessment and not a certification**, it says so in
+    its own first paragraph, and what it could not establish is its first
+    section rather than a closing caveat. A generated document that implied
+    conformity would be worse than no document at all.
+    """
+    _publish_model_document(model, write=write, kind="evidence-pack")
+
+
+def _publish_model_document(model: str, *, write: bool, kind: str) -> None:
+    """Shared body: scan read-only, gather the facts, render, optionally publish."""
+    conn, config, _, _, model_urn = _prepare(
+        table=None,
+        model=model,
+        sla_hours=None,
+        no_llm=True,
+        llm_provider=None,
+        llm_model=None,
+        writes=write,
+    )
+    if model_urn is None:
+        console.print("[red]This command needs --model.[/red]")
+        raise typer.Exit(code=2)
+
+    # Read-only always: the artifacts describe what a scan would find, and a
+    # document generation that also raised incidents would be a surprising
+    # side effect of asking for documentation.
+    report = run_scan(conn, config, model_urn=model_urn, llm=None, dry_run=True)
+    facts = gather(
+        conn,
+        model_urn,
+        config,
+        findings=report.findings,
+        gaps=report.not_evaluated,
+        score=report.trust[0].score if report.trust else None,
+    )
+
+    render = render_model_card if kind == "card" else render_evidence_pack
+    print(render(facts))
+
+    if write:
+        publish = publish_model_card if kind == "card" else publish_evidence_pack
+        urn = publish(conn, facts, run_id=report.run_id)
+        console.print(f"\n[green]Published[/green] {urn}")
 
 
 def main() -> None:
