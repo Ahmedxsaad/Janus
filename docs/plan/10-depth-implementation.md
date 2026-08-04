@@ -87,15 +87,20 @@ Files: `modelguard/detect/trust_score.py`, `modelguard/models.py`,
 Done when: a scored model's report leads with what is wrong and the history shows a
 version change as a labelled discontinuity rather than a mystery drop.
 
-### T-02 NIST AI RMF crosswalk (09 section 5.4)
+### T-02 NIST AI RMF crosswalk (09 section 5.4) [done, D-109]
 
-- [ ] Generate a table mapping each detector to the MAP / MEASURE / MANAGE
-      subcategory it produces evidence for.
-- [ ] Generated from the detector registry, not typed by hand, so a new detector
-      cannot silently be absent from it.
-- [ ] Rendered into the docs site and available as a CLI output.
+- [x] Generate a table mapping each detector to the MAP / MEASURE / MANAGE
+      subcategory it produces evidence for. Subcategory text is quoted verbatim
+      from the AI RMF 1.0 Playbook, held in one dict keyed by id, not paraphrased.
+- [x] Generated from the detector registry, not typed by hand, so a new detector
+      cannot silently be absent from it. Keyed by `FindingType`.
+- [x] Rendered into the docs site and available as a CLI output
+      (`modelguard crosswalk`, which connects to nothing).
+- [x] Not in the original checklist and it is the load-bearing part: the artifact
+      states in its own first paragraph that it is a mapping and **not a conformity
+      claim**, on both surfaces, asserted by a test on each.
 
-Files: `modelguard/render.py`, `site/`, `docs/plan/resources.md`.
+Files: `modelguard/render.py`, `modelguard/cli.py`, `site/`, `docs/plan/resources.md`.
 
 Done when: adding a detector without a crosswalk row fails a test.
 

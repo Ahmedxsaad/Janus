@@ -16,6 +16,45 @@ Entry template:
 
 ---
 
+## D-109: The NIST AI RMF crosswalk is generated, and says it is not conformity (2026-08-04)
+- Decided by: Ghassen Naouar (asked for phase 0 of the depth plan), implemented by
+  Claude. Closes T-02.
+- Decision: `modelguard crosswalk` prints a markdown table mapping each detector to
+  one MAP, one MEASURE and one MANAGE subcategory of the NIST AI RMF, plus the
+  verbatim text of every subcategory it cites. The same table is a section on the
+  docs site. Three properties, in order of how much they matter:
+  1. **It is a mapping, not a conformity claim**, and the artifact says so in its
+     own first paragraph, on both surfaces, asserted by a test on each. A crosswalk
+     says which subcategory an artifact is evidence *for*; whether the subcategory
+     is satisfied is a judgement about a whole organization's process that no tool
+     reading a metadata graph can make. This is the same distinction
+     `detect/coverage.py` already draws between "not evaluated" and "clean".
+  2. **It is generated from the detector registry**, keyed by `FindingType`, so a
+     new detector with no crosswalk row fails a test rather than leaving a hole in
+     a document somebody files. The site's copy is HTML, so a second test asserts
+     the page carries a row and the cited ids for every detector.
+  3. **The subcategory text is quoted, not paraphrased.** Retrieved from the NIST
+     AI RMF 1.0 Playbook (airc.nist.gov) on 2026-08-04 and held in one dict keyed
+     by id, so several detectors cite the same subcategory without the text being
+     retyped and a reader can check every quotation in one pass.
+- Options considered:
+  - Where the table lives: (a) `render.py`, as 10-depth-implementation.md says,
+    (b) a new `modelguard/crosswalk.py`. (a) chosen: it is a rendering with no
+    judgement in it, which is exactly what that module holds, and one dict plus one
+    function does not earn a module. render.py's docstring gains a section saying
+    the third reader is a governance function rather than a program or a pull request.
+  - Assigning subcategories: paraphrasing the framework's language was rejected in
+    favour of quoting it. A paraphrase in a compliance artifact is a claim about
+    what the framework says, and getting it subtly wrong is worse than citing an id.
+- Why: D.6 of 03-production-hardening.md name-dropped the AI RMF and produced
+  nothing. A name-drop is a claim; a generated table a reader can check is an
+  artifact. It also costs almost nothing, because every fact in it already existed.
+- Result: 619 offline tests green. Mutation-checked (tests/CLAUDE.md rule 6):
+  adding a sixth `FindingType` fails, renaming a detector without updating the page
+  fails, and weakening the disclaimer fails on both the CLI and the markdown.
+  `docs/plan/resources.md` records what the framework changed here, per the
+  convention the other entries follow.
+
 ## D-108: The trust score leads with its deductions, and is versioned (2026-08-04)
 - Decided by: Ghassen Naouar (chose the typed deduction and the surfaces),
   implemented by Claude. Closes T-01, and F7 in 07-weaknesses-and-remedies.md.

@@ -33,3 +33,4 @@ the art out of `../argos/`, and `fetch` is blocked under `file://`.
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-03 | Claude (for Ghassen Naouar) | Initial version: the documentation page, its beats, and the rule against a second copy of the art (D-104) |
+| 2026-08-04 | Claude (for Ghassen Naouar) | The NIST AI RMF crosswalk section lands. The page holds the only hand-written copy of a table the code generates, so tests/test_site.py asserts it carries a row for every detector: a check added to ModelGuard cannot go missing here (D-109, T-02) |

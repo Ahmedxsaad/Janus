@@ -58,6 +58,7 @@ from modelguard.models import (
 )
 from modelguard.render import (
     OutputFormat,
+    crosswalk_markdown,
     job_summary_markdown,
     report_json,
     write_job_summary,
@@ -1786,6 +1787,24 @@ def link(
         console.print("\n[dim]Dry run: nothing was written.[/dim]")
     else:
         console.print(f"\n[dim]Now run: modelguard scan --model {model}[/dim]")
+
+
+@app.command()
+def crosswalk() -> None:
+    """Print the map from each detector to the NIST AI RMF subcategory it evidences.
+
+    Connects to nothing and reads no graph: the crosswalk is a fact about the
+    detectors, not about anybody's catalog, so it works on a fresh install before
+    a token exists. Markdown on stdout, so it can be piped straight into whatever
+    document a governance function actually files.
+
+    It is a mapping and not a conformity claim, and the artifact says so in its
+    own first paragraph. A generated document that implied conformity would be
+    worse than no document.
+    """
+    # print rather than console.print: this output is meant to be redirected to a
+    # file, and rich would soft-wrap the table cells to the terminal width.
+    print(crosswalk_markdown())
 
 
 def main() -> None:

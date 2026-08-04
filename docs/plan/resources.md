@@ -318,8 +318,18 @@ https://arxiv.org/abs/2102.07750
 - **Maps to:** conceptual pairing - our trust score is the *governance* companion to *cryptographic* provenance (PH §D, `01-strategy §3 P4`).
 
 **NIST AI Risk Management Framework** - https://www.nist.gov/itl/ai-risk-management-framework
-- **Read:** the four functions **Govern / Map / Measure / Manage** + the Playbook.
+- **Read:** the four functions **Govern / Map / Measure / Manage** + the Playbook
+  (https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook), which is where the
+  subcategory text lives.
 - **Maps to:** maps our model-risk write-back to a recognized governance vocabulary (pairs with SR 11-7 for finance).
+- **What it changed here (T-02, D-109):** `modelguard crosswalk` and the site's
+  crosswalk section. Each detector cites one MAP, one MEASURE and one MANAGE
+  subcategory, quoted verbatim from the Playbook (retrieved 2026-08-04), and the
+  table is generated from the detector registry so a new check cannot be absent
+  from it. The framing is the load-bearing part: a crosswalk says which
+  subcategory an artifact is evidence **for**, never that the subcategory is
+  satisfied, which is a judgement about a whole organization's process that no
+  tool reading a metadata graph can make.
 
 ---
 

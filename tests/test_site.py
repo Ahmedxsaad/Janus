@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from modelguard.render import AI_RMF_SUBCATEGORIES, CROSSWALK
+
 from .test_argos import _frames
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -79,3 +81,25 @@ def test_the_page_reads_the_one_copy_of_the_art():
     assert '"../argos/ui/sprites/argos.txt"' in GUIDE
     assert '"../argos/ui/sprites.js"' in PAGE
     assert not list(SITE.glob("**/*.txt"))
+
+
+def test_the_page_carries_a_crosswalk_row_for_every_detector():
+    """A fourth joint: the page names a table the code generates (T-02).
+
+    The CLI's copy cannot go stale, because it is rendered from the registry.
+    The page's copy is HTML somebody wrote once, so this is what stops a new
+    detector from being absent there while present everywhere else.
+    """
+    for row in CROSSWALK.values():
+        assert f"<td>{row.detector}</td>" in PAGE, row.detector
+        for sub_id in row.subcategory_ids:
+            assert f"<code>{sub_id}</code>" in PAGE, sub_id
+
+
+def test_the_page_quotes_every_subcategory_it_cites():
+    for sub_id, text in AI_RMF_SUBCATEGORIES.items():
+        assert f"<code>{sub_id}</code> {text}" in PAGE, sub_id
+
+
+def test_the_page_says_the_crosswalk_is_not_a_conformity_claim():
+    assert "not a conformity claim" in PAGE
