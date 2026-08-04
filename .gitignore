@@ -36,3 +36,8 @@ htmlcov/
 # reproducible); target/ and Tauri's generated schemas are not.
 argos/target/
 argos/gen/
+
+# mutmut's working copy (T-08): the mutated source tree and its per-run
+# cache. Reproduced by `mutmut run`; only benchmarks/RESULTS.md's generated
+# section is the durable artifact.
+mutants/

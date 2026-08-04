@@ -14,6 +14,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 # A second push to the same branch makes the first run's answer irrelevant.
 concurrency:
@@ -83,6 +84,44 @@ jobs:
         # -m 'not integration' is already the default in pyproject's addopts;
         # stated here so a reader of this file knows what did and did not run.
         run: pytest -m "not integration" -q
+
+  mutation:
+    name: mutation score (modelguard/detect/)
+    # Advisory only (T-08, docs/plan/10-depth-implementation.md): a run over
+    # ~1500 mutants is the slow job the top-of-file note already warns about,
+    # so it stays off the PR hot path the same way the integration suite does,
+    # running after a merge to main and on demand rather than on every push.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the project and its dev tools
+        run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+
+      - name: Run mutation testing
+        run: mutmut run --max-children "$(nproc)"
+
+      - name: Mutation summary
+        if: always()
+        run: |
+          mutmut results --all=true | awk -F': ' '{c[$2]++} END {for (k in c) print k, c[k]}'
+          mutmut export-cicd-stats
+
+      - name: Regenerate the RESULTS.md mutation section
+        if: always()
+        run: python -m benchmarks.mutation_report
+
+      - name: Fail the job (advisory) if the section is stale
+        if: always()
+        run: git diff --exit-code benchmarks/RESULTS.md
 
   audit:
     name: dependency audit

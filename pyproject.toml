@@ -143,6 +143,7 @@ dev = [
     "feast>=0.65,<1",
     "langgraph==1.2.9",
     "mcp==1.28.1",
+    "mutmut==3.7.0",
     "mypy==2.2.0",
     "pre-commit==4.6.0",
     "pytest==9.1.1",
@@ -203,3 +204,32 @@ markers = [
 ]
 # Unit runs stay offline and fast; integration is opt-in.
 addopts = "-m 'not integration'"
+
+[tool.mutmut]
+# T-08 (docs/plan/10-depth-implementation.md): the claim under test is
+# detection, so only modelguard/detect/ is mutated; mutating the whole
+# package would measure something this task never claimed. source_paths still
+# copies all of modelguard, because a detector's own imports (models, config,
+# column_marks) have to resolve and the full offline suite runs against the
+# copy; only_mutate is what keeps cli.py or writeback/ from padding the
+# survivor count. also_copy adds what the full suite reads off disk beyond
+# modelguard and tests/ (both already copied by default): the adapter fixture
+# repo, the sprite art and its two other readers, and benchmarks/, which
+# tests/benchmarks/ imports directly.
+source_paths = ["modelguard"]
+only_mutate = ["modelguard/detect/*"]
+also_copy = ["examples/", "argos/", "site/", "benchmarks/"]
+# type_check_command (mutmut's mypy-assisted filter, verified against 3.7.0):
+# tried and reverted. It crashes on this codebase --
+# "Could not find mutant for type error ...trust_score.py:7345 (Unused
+# 'type: ignore' comment)" -- because a mutation shifts which line an existing
+# `# type: ignore` covers, mypy reports that comment unused, and mutmut cannot
+# map the error back to a mutant. Real: a `None`-for-`bool` survivor is a class
+# mypy strict already refuses to merge (pre-commit), so RESULTS.md's mutation
+# section names it as a class rather than pretending each instance is an
+# undiscovered gap. Revisit if a later mutmut release fixes the crash.
+# Diagnostic-only calls, never a decision or a graph write (modelguard/CLAUDE.md
+# rule 2's layer boundary: detect/ is pure). A corrupted log line is invisible
+# to every consumer this project has; see also mutmut's own README example for
+# this exact pattern.
+do_not_mutate_patterns = ['logger\.\w+\(']
