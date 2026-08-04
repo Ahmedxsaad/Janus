@@ -747,14 +747,21 @@ def main() -> None:
     print("Comparing against approaches without column-level lineage...")
     approaches = measure_leakage_approaches(conn, config)
 
-    print("Scale: replicating models and sweeping the catalog...")
-    scale = measure_scale(conn, config)
-
     print("Applying each finding's counterfactual (this one writes)...")
     counterfactuals = measure_counterfactuals(conn, config, trials)
 
     print("The multi-path case: cutting one derivation of two...")
     multi_path = measure_multi_path(conn, config, trials)
+
+    # Scale goes last, and the reason is a measured one rather than a preference.
+    # It creates and then hard-deletes fifty models, and the index churn behind
+    # that pushed the counterfactual measurement's wait for a refreshed table past
+    # its 45s precondition timeout on the first run of this suite: the remedy had
+    # landed and the graph had not caught up. Raising the timeout would have made
+    # every genuine error slower to report; running the index-latency-sensitive
+    # measurement before the index-churning one costs nothing.
+    print("Scale: replicating models and sweeping the catalog...")
+    scale = measure_scale(conn, config)
 
     print("Restoring the seeded baseline...")
     restore_baseline(conn)
