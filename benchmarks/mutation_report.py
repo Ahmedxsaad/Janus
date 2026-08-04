@@ -191,6 +191,55 @@ VERDICTS: tuple[Verdict, ...] = (
         "reaches this function checks which knob is named, never the exact "
         "count or casing.",
     ),
+    Verdict(
+        "modelguard.detect.column_marks.x_related_columns",
+        "gap",
+        "T-11's own walk (D-117), landed after the run these verdicts were first "
+        "written against. `get_lineage`'s `max_hops`/`count` arguments swap for "
+        "`None` or drop and survive, the same argument-not-asserted case as "
+        "x_marked_ancestor above and closeable the same way: only a live GMS "
+        "distinguishes a wrong argument from a right one, because the fixture "
+        "answers with a canned cone regardless of what was asked.",
+    ),
+    Verdict(
+        "modelguard.detect.governance.x_proxy_candidate_findings",
+        "gap",
+        "T-11 (D-117). Two patterns, both already named elsewhere in this table: "
+        "the `properties is None or not properties.mlFeatures` guard mutated to "
+        "`and` survives because no trial reaches that line with `properties` "
+        "None, and several arguments threaded into the walk swap for `None` "
+        "without any assertion on what was actually sent. The detector's own "
+        "decisions (the direct-descent exclusion, the hop cap, the "
+        "nearest-ancestor choice) are covered: tests/detect/test_proxy.py "
+        "mutation-checks each, and two of those tests had to be rewritten "
+        "before they could fail.",
+    ),
+    Verdict(
+        "modelguard.detect.governance.x__proxy_finding",
+        "gap",
+        "T-11 (D-117). The built `ProxyCandidate`'s identifying fields swap for "
+        "`None` and survive, the single biggest class in this whole table: a "
+        "trial checks that a candidate exists without checking what it says.",
+    ),
+    Verdict(
+        "modelguard.detect.governance.x__first_per_pair",
+        "gap",
+        "T-11 (D-117). `current is None or _distance(...) < _distance(...)` "
+        "mutated to `and` survives: with `current` None the `and` short-circuits "
+        "before the comparison, so both forms keep the first finding for a pair "
+        "seen once. Only a pair reached through three or more generations, where "
+        "the middle one is nearest, separates them; the two-generation test that "
+        "covers the ordering does not.",
+    ),
+    Verdict(
+        "modelguard.detect.coverage.x__proxy_gap",
+        "gap",
+        "T-11 (D-117), and the largest single group here. Prose content in the "
+        "reason and remedy sentences, the same class as the five `_gap` "
+        "functions above and unpinned for the same reason: exact wording is not "
+        "a contract the offline suite holds. The minority worth a trial is the "
+        "unasserted `target_urn`, identical to its siblings.",
+    ),
     # --- degraded.py -----------------------------------------------------
     Verdict(
         "modelguard.detect.degraded.x__classified",

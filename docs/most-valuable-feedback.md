@@ -195,3 +195,41 @@ after each ingest. The fix upstream is a patch-style emit (`ChangeType.PATCH`, o
 read-merge-emit) for the fields the source does not own, which is what
 DataHub's own docs already recommend to *users* of the SDK for exactly this
 reason.
+
+## 15. A dbt semantic model silently overwrites the dbt model it is built on
+
+**Package:** `acryl-datahub` 1.6.0.13, `datahub ingest` with `source: dbt` and
+`include_column_lineage: true`; dbt-core 1.12.0, manifest schema v12.
+**Symptom:** the source emits a dbt semantic model as a dataset keyed by the
+semantic model's `name`. A semantic model built on a dbt model of the same name
+(`- name: customer_features` over `model: ref('customer_features')`, which reads
+as the obvious thing to type) therefore lands on the *same* URN as the model, and
+the last writer wins. What survives is the semantic model's view of the table:
+its entities become the columns, so `customer_id` is replaced by the entity name
+`customer`, and the `upstreamLineage` the compiled SQL produced (including every
+fine-grained column edge) is replaced by nothing.
+
+Nothing warns. Both entities are legitimately named, the dataset still renders in
+the UI with a schema and a description, and the only visible symptom is that
+column-level lineage for that table is gone. For us that meant a target-leakage
+detector that reads exactly those edges reported a leaking model as having
+nothing to check, on a graph that still held the leak.
+
+**Repro:**
+```bash
+# a dbt project with models/marts/customer_features.sql and a schema yml declaring
+#   semantic_models: [{name: customer_features, model: ref('customer_features'), ...}]
+dbt run && dbt docs generate
+datahub ingest -c dbt.yml
+# read upstreamLineage on urn:li:dataset:(urn:li:dataPlatform:dbt,<db>.<schema>.customer_features,PROD)
+#   -> no upstream but the warehouse sibling, no fineGrainedLineages
+#   read schemaMetadata -> the entity name, not the key column
+# rename the semantic model to `customers`, regenerate, re-ingest: both come back
+```
+Verified on a postgres + dbt + MLflow stack, 2026-08-04 (D-121, T-14).
+
+**Workaround:** never name a semantic model after the dbt model it is built on,
+which is a rule nobody can be expected to know and which dbt itself does not
+require. The fix upstream is to key semantic models on a URN that cannot collide
+with a model's (they are different kinds of node in the same manifest), or, at
+minimum, to warn when two manifest nodes resolve to one dataset URN.
