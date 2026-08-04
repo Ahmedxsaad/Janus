@@ -578,3 +578,20 @@ def make_trust_score(
             for name, points in sorted(named.items(), key=lambda item: (-item[1], item[0]))
         ),
     )
+
+
+#: URN prefixes of the entities ModelGuard emits about *itself*: the agent's
+#: dataFlow, its scan dataJob, and one dataProcessInstance per run (T-04).
+OWN_RUN_PREFIXES = ("urn:li:dataFlow:", "urn:li:dataJob:", "urn:li:dataProcessInstance:")
+
+
+def emitted_about_the_graph(graph: FakeGraph) -> list[Any]:
+    """The MCPs a scan sent about somebody else's entities.
+
+    Every scan writes its own process run into the graph, so ``graph.emitted``
+    is never empty any more. A test that means "this healthy target was left
+    untouched" is asking about the guarded entities, not about ModelGuard's own
+    run record, so it filters that record out rather than asserting a silence
+    that no longer exists.
+    """
+    return [mcp for mcp in graph.emitted if not str(mcp.entityUrn).startswith(OWN_RUN_PREFIXES)]

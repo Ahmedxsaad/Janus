@@ -26,6 +26,7 @@ from tests.conftest import (
     FakeClient,
     FakeGraph,
     active_incident,
+    emitted_about_the_graph,
     lineage_result,
     make_connection,
 )
@@ -187,7 +188,7 @@ def test_a_clean_scan_prompts_because_it_may_still_have_a_recovery_to_write():
 
     assert report.clean is True
     assert prompted["called"] is True, "a clean scan can still write a recovery"
-    assert graph.emitted == []
+    assert emitted_about_the_graph(graph) == []
     assert graph.graphql_calls == []
 
 
