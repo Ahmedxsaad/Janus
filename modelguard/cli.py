@@ -183,8 +183,8 @@ def resolve_table(conn: DataHubConnection, table: str) -> str:
 
     Args:
         conn: An open connection.
-        table: A full dataset URN, or a name like ``loans_raw`` or
-            ``ecommerce.public.loans_raw``.
+        table: A full dataset URN, or any dotted suffix of a dataset's name:
+            ``loans_raw``, ``public.loans_raw`` or ``ecommerce.public.loans_raw``.
 
     Returns:
         The dataset URN.
@@ -202,7 +202,14 @@ def resolve_table(conn: DataHubConnection, table: str) -> str:
         if not isinstance(parsed, DatasetUrn):
             continue
         name = parsed.name
-        if name == table or name.split(".")[-1] == table:
+        # Any dotted suffix, not only the last segment. A warehouse names a
+        # relation `schema.table` and DataHub names the dataset for it
+        # `database.schema.table`, so a declaration importing the first (a dbt
+        # semantic model's node_relation, a Feast source's table) matched neither
+        # form and resolved against nothing (T-14, on the ingested real project).
+        # Ambiguity is still an error naming every candidate, so a suffix that
+        # means two tables asks rather than picks.
+        if name == table or name.endswith(f".{table}"):
             matches.append(str(urn))
 
     unique = sorted(set(matches))
