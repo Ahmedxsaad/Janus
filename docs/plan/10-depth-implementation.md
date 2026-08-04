@@ -155,9 +155,14 @@ ancestor and discards all but the shortest.
       `plant_second_leak_path` plants a backfilled copy of the label column,
       declared a label, feeding the same feature. Two trials, one benchmark
       measurement, and two integration tests.
-- [ ] Run it. The benchmark and the two integration tests need a live Quickstart,
-      which the implementing session did not have; `RESULTS.md` gains its
-      counterfactual section on the next live regeneration.
+- [x] Run it. Against a live Quickstart: 54 integration tests pass, and
+      `RESULTS.md` carries the counterfactual section. All five remedies applied
+      cleared their finding; the multi-path row reads "still fires after one of
+      two is cut: True, clears once both are cut: True". Detection numbers are
+      unchanged, with leakage's trial count 5 -> 7 and its boundary count 3 -> 5.
+      One ordering fix came out of the first run: the scale sweep's fifty hard
+      deletes left enough index churn behind them to time out the counterfactual
+      measurement's wait, so scale now runs last.
 
 Files: `modelguard/detect/column_marks.py`, `modelguard/detect/*.py`,
 `modelguard/models.py`, `modelguard/writeback/incidents.py`,

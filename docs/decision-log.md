@@ -71,10 +71,24 @@ Entry template:
 - Result: 649 offline tests green, mutation-checked per tests/CLAUDE.md rule 6 (the
   shortest-chain tie-break, the path splitting, the both-edges remedy, the half-fix
   scenario state, the undeclare-before-drop ordering, and both render surfaces each
-  confirmed red before green). Not yet run: the live benchmark and the two
-  integration tests in `tests/integration/test_counterfactual.py`, which need a
-  Quickstart; `benchmarks/RESULTS.md` therefore still carries the numbers from
-  D-109's run and gains its counterfactual section on the next live regeneration.
+  confirmed red before green). Then run against a live Quickstart: 54 integration
+  tests pass, including the two that perform a remedy on a real graph, and
+  `RESULTS.md` is regenerated. Every one of the five applied remedies cleared its
+  finding; the multi-path measurement reads "still fires after one of two is cut:
+  True, clears once both are cut: True". The detection numbers are unchanged, with
+  leakage's trials at 7 (was 5) and its boundary trials at 5 (was 3).
+
+  The live run also settled two things reasoning could not. **`split_paths` is
+  correct against a real GMS**: two derivations through one upstream table came
+  back as one flattened list and were cut into two matches, which is the only
+  place that claim could be checked. And the **first bench run errored on the
+  freshness counterfactual**: the remedy had landed and the graph had not caught
+  up within the 45s precondition timeout, because the measurement ran directly
+  behind the scale sweep's fifty hard deletes. Reproduced standalone, where it
+  passes in about a second. Fixed by ordering rather than by raising the timeout:
+  scale now runs last, and a longer timeout would only have made every genuine
+  error slower to report. Reported as an error and not as a failed counterfactual
+  throughout, which is benchmarks/CLAUDE.md rule 7 working as intended.
 
 ## D-109: The NIST AI RMF crosswalk is generated, and says it is not conformity (2026-08-04)
 - Decided by: Ghassen Naouar (asked for phase 0 of the depth plan), implemented by
