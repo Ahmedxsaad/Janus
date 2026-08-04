@@ -31,7 +31,7 @@ from datahub.metadata.schema_classes import (
 from modelguard.config import ScanConfig
 from modelguard.detect.governance import proxy_candidate_findings
 from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
-from modelguard.models import FindingType, Severity
+from modelguard.models import FindingType, ProxyCandidateFinding, Severity
 from tests.conftest import (
     DEPLOYMENT_URN,
     FEATURE_TABLE_URN,
@@ -111,7 +111,9 @@ def _client(
     )
 
 
-def _findings(graph: FakeGraph, client: FakeClient, config: ScanConfig = CONFIG):
+def _findings(
+    graph: FakeGraph, client: FakeClient, config: ScanConfig = CONFIG
+) -> tuple[ProxyCandidateFinding, ...]:
     return proxy_candidate_findings(make_connection(graph, client), MODEL_URN, config)
 
 
@@ -148,8 +150,10 @@ class TestTheFork:
         assert candidate.ancestor_name == "income"
 
     def test_the_finding_names_the_shared_ancestor_as_its_evidence(self):
-        """The thing a human goes and looks at. Without it the finding is an
-        accusation with no starting point."""
+        """The thing a human goes and looks at. Without it the finding is an.
+
+        accusation with no starting point.
+        """
         findings = _findings(_graph(), _client())
 
         evidence = findings[0].evidence
@@ -164,8 +168,10 @@ class TestTheFork:
         assert "not a determination" in findings[0].evidence["finding_is"]
 
     def test_the_severity_is_medium_even_for_a_live_model(self):
-        """Every other detector escalates for a live model. This one must not:
-        a maybe that outranks a proof sends triage to the wrong finding."""
+        """Every other detector escalates for a live model. This one must not:.
+
+        a maybe that outranks a proof sends triage to the wrong finding.
+        """
         findings = _findings(_graph(), _client())
 
         assert findings[0].model.is_live
@@ -177,8 +183,10 @@ class TestTheFork:
         assert findings[0].finding_type is FindingType.PROXY_CANDIDATE
 
     def test_the_first_remedy_asks_a_human_rather_than_changing_the_graph(self):
-        """A tool that led with "drop the feature" would push a team to delete
-        something they may be entitled to use, on a suggestion."""
+        """A tool that led with "drop the feature" would push a team to delete.
+
+        something they may be entitled to use, on a suggestion.
+        """
         remedies = _findings(_graph(), _client())[0].counterfactual.remedies
 
         assert remedies[0].kind.value == "review"
@@ -186,7 +194,8 @@ class TestTheFork:
 
 class TestNotACandidate:
     def test_direct_descent_is_left_to_the_sensitive_source_detector(self):
-        """P5 proves that relationship. Reporting it here as well would raise a
+        """P5 proves that relationship. Reporting it here as well would raise a.
+
         second, weaker incident about one column.
 
         The graph is built so the guard is actually reached, which an earlier
@@ -243,8 +252,10 @@ class TestNotACandidate:
         assert _findings(_graph(), client) == ()
 
     def test_a_shared_ancestor_beyond_the_hop_cap_is_not_a_candidate(self):
-        """Everything in a warehouse shares a raw table eventually, so a
-        candidate that named half the catalog would be worse than silence."""
+        """Everything in a warehouse shares a raw table eventually, so a.
+
+        candidate that named half the catalog would be worse than silence.
+        """
         client = _client(
             feature_upstream=[
                 lineage_result(
@@ -298,7 +309,8 @@ class TestNotACandidate:
 
 class TestOnePerPair:
     def test_one_pair_reached_through_two_generations_is_reported_once(self):
-        """Two columns sharing an ancestor share its ancestors too, so an
+        """Two columns sharing an ancestor share its ancestors too, so an.
+
         unfiltered walk reports the same pair once per generation.
 
         The grandparent is named so it sorts *before* the nearer ancestor

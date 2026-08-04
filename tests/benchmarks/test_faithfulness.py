@@ -41,8 +41,10 @@ ALL_BUILDERS = (
 
 class TestNumbersIn:
     def test_a_version_inside_a_name_is_not_a_figure(self):
-        """`credit_risk_v3` is an identifier. Reading the 3 out of it would flag
-        every model whose version is in its own name."""
+        """`credit_risk_v3` is an identifier. Reading the 3 out of it would flag.
+
+        every model whose version is in its own name.
+        """
         assert numbers_in("credit_risk_v3 is affected") == ()
 
     def test_a_trailing_underscore_number_is_not_a_figure(self):
@@ -88,8 +90,10 @@ class TestCheck:
         assert [v.token for v in result.violations] == ["47"]
 
     def test_a_figure_derived_by_arithmetic_is_caught(self):
-        """The one that matters. 30 divided by 6 is five, and five was never
-        measured: a reader cannot tell it from a figure that was."""
+        """The one that matters. 30 divided by 6 is five, and five was never.
+
+        measured: a reader cannot tell it from a figure that was.
+        """
         finding = make_finding()
 
         result = check(finding, "the lag is 5 times the 6.0 hour SLA", source="template")
@@ -105,9 +109,11 @@ class TestCheck:
         assert not result.faithful
 
     def test_a_figure_from_the_per_type_detail_is_grounded(self):
-        """hops is not in Finding.evidence, but it is in the prompt the model
+        """Hops is not in Finding.evidence, but it is in the prompt the model.
+
         saw, so quoting it is faithful. Grounding against the mapping alone
-        would report this as a hallucination."""
+        would report this as a hallucination.
+        """
         finding = make_finding()
         assert "hops" not in finding.evidence
         assert "hops=3" in grounding_facts(finding)
@@ -117,8 +123,10 @@ class TestCheck:
         assert result.faithful
 
     def test_prose_quoting_no_figure_is_faithful_but_counts_nothing(self):
-        """Faithful by this measure and says nothing, which is why the rate is
-        reported beside the count."""
+        """Faithful by this measure and says nothing, which is why the rate is.
+
+        reported beside the count.
+        """
         result = check(make_finding(), "the table is stale", source="template")
 
         assert result.faithful
@@ -151,8 +159,10 @@ class TestCheck:
 
 class TestTemplates:
     def test_every_finding_types_template_quotes_only_measured_figures(self):
-        """The stricter half of T-10: template prose is written in this repo, so
-        a violation here is this project quoting a figure it never measured."""
+        """The stricter half of T-10: template prose is written in this repo, so.
+
+        a violation here is this project quoting a figure it never measured.
+        """
         findings = [build() for build in ALL_BUILDERS]
 
         result = check_template_narratives(findings)
@@ -168,8 +178,10 @@ class TestTemplates:
         assert result.numbers_checked > 0
 
     def test_a_template_that_invented_a_figure_would_fail_this_suite(self):
-        """Rule 6 in miniature: the check above is only worth reading because
-        this one shows the same call rejecting prose that is not grounded."""
+        """Rule 6 in miniature: the check above is only worth reading because.
+
+        this one shows the same call rejecting prose that is not grounded.
+        """
         finding = make_finding()
         unfaithful = narrate(finding, None).assessment + " That is 99.5 times the budget."
 

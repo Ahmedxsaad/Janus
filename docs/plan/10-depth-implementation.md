@@ -457,24 +457,43 @@ Reuses T-09's common-ancestor scenario, read for the opposite purpose.
 Files: `modelguard/detect/governance.py`, `modelguard/detect/column_marks.py`,
 `modelguard/models.py`, `modelguard/config.py`, `.env`, `.env.example`.
 
-### T-12 Generated model cards (09 section 5.3)
+### T-12 Generated model cards (09 section 5.3) [done, D-119]
 
-- [ ] Intended use where declared, training-data provenance, the trust score with its
-      T-01 waterfall, known findings, and the checks that could not run.
-- [ ] Written back as a document, reusing `writeback/documents.py` and its
-      idempotency keying.
+- [x] Intended use where declared, training-data provenance, the trust score with its
+      T-01 waterfall, known findings, and the checks that could not run. Intended use
+      is the one section a graph cannot derive, so an undeclared one says exactly that
+      rather than being omitted.
+- [x] Written back as a document, reusing `writeback/documents.py` and its
+      idempotency keying. Keyed on the model alone: there is one card per model and it
+      is meant to be current, unlike an impact report, which is per finding.
+- [x] `modelguard model-card --model X`, printing by default and publishing with
+      `--write`. Read-only either way: generating documentation must not raise
+      incidents as a side effect.
 
-### T-13 EU AI Act Article 10 evidence pack (09 section 5.2)
+### T-13 EU AI Act Article 10 evidence pack (09 section 5.2) [done, D-119]
 
-- [ ] Assemble per model: training data sources, column-level provenance,
-      classification exposures, freshness at training time, schema at training time,
-      deprecated inputs, ownership.
-- [ ] **The first paragraph states that this is evidence assembled from measured
+- [x] Assemble per model: training data sources, column-level provenance,
+      classification exposures, ~~freshness at training time~~, schema at training
+      time, deprecated inputs, ownership. **Freshness at training time is not
+      assembled and cannot be**, corrected in place per docs/CLAUDE.md rule 1:
+      ModelGuard measures freshness *now*, and DataHub records no snapshot of it as of
+      the training run. Substituting current freshness would answer a different
+      question than Article 10 asks, so the pack names it as unestablished instead.
+- [x] **The first paragraph states that this is evidence assembled from measured
       facts, not a compliance certification.** A generated document implying
-      conformity is the single most damaging thing this project could ship.
-- [ ] What it could **not** establish is as prominent as what it could, reusing
-      `coverage.py`'s not-evaluated discipline.
-- [ ] Cite Article 10 and Article 12 by number, so a reader can check the mapping.
+      conformity is the single most damaging thing this project could ship. It is the
+      first *heading*, not the first paragraph of a later section, and it denies all
+      three readings a filer might take (conformity assessment, certification, legal
+      advice) plus filing or citing it as any of them.
+- [x] What it could **not** establish is as prominent as what it could, reusing
+      `coverage.py`'s not-evaluated discipline and going further: it is the second
+      heading, above every piece of evidence, because a gap at the end of a long
+      document is a gap nobody reads. Four limits are stated unconditionally rather
+      than only when triggered, and the scan's own coverage gaps are appended.
+- [x] Cite Article 10 and Article 12 by number, so a reader can check the mapping.
+      Subsections cite the specific paragraphs (10(2)(b), 10(3), 10(2)(f), 10(5)), and
+      the mapping is labelled this project's reading rather than fact.
+- [x] `modelguard evidence-pack --model X`, same surface as the card.
 
 ---
 

@@ -16,6 +16,46 @@ Entry template:
 
 ---
 
+## D-119: T-12 and T-13, two artifacts that refuse to certify anything (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: `writeback/model_documents.py` renders two per-model documents from
+  facts already in the graph: a **model card** (T-12, Mitchell et al. 2019,
+  which `trust_score.py` has cited since Phase 2 without producing the artifact)
+  and an **EU AI Act Article 10 evidence pack** (T-13). One `gather()` reads the
+  graph; both renderers are pure functions of what it returns, so the two
+  artifacts cannot disagree about the same model. Exposed as `modelguard
+  model-card` and `modelguard evidence-pack`, printing by default and
+  publishing only with `--write`.
+- Options considered:
+  1. Produce them on every scan. Rejected: they are not findings, they are
+     documentation, and writing two documents per model per scan makes a
+     catalog noisier without making it more accurate. A command a human runs
+     when they want the artifact matches what the artifact is.
+  2. One command with a `--kind` flag. Rejected on discoverability: the two have
+     different audiences (a data scientist reads the card, a compliance function
+     reads the pack) and a flag hides the second one from anybody who does not
+     already know to look.
+- Why: 09 section 5.2's argument is that the depth move in governance is not
+  more controls, it is producing the artifact a compliance function actually has
+  to file. Both are renderers over facts detection already computes.
+- Result: the design constraint is what these documents **refuse** to say, and
+  it is enforced by tests rather than by intent. The evidence pack's first
+  heading is "This is not a compliance certification"; it denies being a
+  conformity assessment, a certification, and legal advice, and says it must not
+  be filed or cited as any of them; and "What this pack could NOT establish" is
+  its *second* heading, before any evidence, because a gap at the end of a long
+  document is a gap nobody reads. Four things it can never establish are named
+  unconditionally: freshness at training time (ModelGuard measures freshness
+  now, nothing records it as of the run, and the two are different claims),
+  whether anybody examined the data for bias, how the data was collected, and
+  anything at all about the data's contents. Articles 10 and 12 are cited by
+  number so the mapping is checkable, and the mapping is labelled this project's
+  reading rather than fact. Both artifacts mark anything absent as "not recorded
+  in the catalog", one phrase everywhere so a reader can search for the gaps.
+  Rendered and published against a live graph; the mutation check confirms the
+  suite fails if the disclaimer heading is renamed or if the gaps section moves
+  below the evidence.
+
 ## D-117: T-11, proxy attributes as candidates rather than accusations (2026-08-04)
 - Decided by: Ahmed Saad.
 - Decision: a sixth detector, `proxy_candidate_findings`, looks for a **fork**
