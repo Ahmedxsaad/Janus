@@ -24,12 +24,18 @@ keeps a shipped feature from being abused into an unbounded log.
 
 Format
 ------
-``<ISO-8601 UTC>|<run_id>|<score>|<band>|<deduction,deduction,...>``, chosen so
-it is readable straight off the property in the UI without a renderer, sorts
-chronologically as a string, and parses on ``split`` without a dependency. The
-deductions are the *names* only, never their point values: the weights are
+``<ISO-8601 UTC>|<run_id>|<score>|<band>|<deduction,...>|<scoring_version>``,
+chosen so it is readable straight off the property in the UI without a renderer,
+sorts chronologically as a string, and parses on ``split`` without a dependency.
+The deductions are the *names* only, never their point values: the weights are
 configuration and can change between runs, so recording a number that was
 computed under weights nobody kept would be a fact that quietly stops being true.
+
+The trailing scoring version is what makes the trend readable at all (F7). Two
+scores are comparable only when the same function produced them, and this project
+has already changed that function under models it had scored (D-079). An entry
+written before the version existed parses with an empty one, so a graph scanned
+by an older release keeps its history instead of having it silently dropped.
 """
 
 from __future__ import annotations
@@ -39,6 +45,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from modelguard.client import DataHubConnection
+from modelguard.config import SCORING_VERSION
 from modelguard.models import TrustScore
 from modelguard.writeback.properties import (
     TRUST_HISTORY,
@@ -70,6 +77,10 @@ class TrustEntry:
     score: int
     band: str
     deductions: tuple[str, ...]
+    scoring_version: str = ""
+    """The scoring function that produced this score, as a string because that is
+    what was stored. Empty for an entry written before the version was recorded:
+    unknown, which is a different fact from "the same version as today"."""
 
     def render(self) -> str:
         """Render the entry back to its stored form."""
@@ -80,6 +91,7 @@ class TrustEntry:
                 str(self.score),
                 self.band,
                 ",".join(self.deductions),
+                self.scoring_version,
             ]
         )
 
@@ -91,11 +103,16 @@ def parse_entry(raw: str) -> TrustEntry | None:
     editable by anyone with write access to the model, and a hand-edited line
     must cost a missing row in a trend, never a failed scan: the history is a
     convenience on top of the score, and nothing decides anything from it.
+
+    Five fields is the pre-version format and still parses, with an unknown
+    version. A graph scored by an earlier release is exactly the graph a version
+    discontinuity is most worth showing on, so refusing to read its history would
+    defeat the point of recording the version.
     """
     parts = raw.split(SEPARATOR)
-    if len(parts) != 5:
+    if len(parts) not in (5, 6):
         return None
-    recorded_at, run_id, score, band, deductions = parts
+    recorded_at, run_id, score, band, deductions = parts[:5]
     try:
         value = int(score)
     except ValueError:
@@ -106,6 +123,7 @@ def parse_entry(raw: str) -> TrustEntry | None:
         score=value,
         band=band,
         deductions=tuple(name for name in deductions.split(",") if name),
+        scoring_version=parts[5] if len(parts) == 6 else "",
     )
 
 
@@ -161,7 +179,8 @@ def project_history(
         run_id=run_id,
         score=score.value,
         band=str(score.band),
-        deductions=tuple(sorted(score.deductions)),
+        deductions=score.names,
+        scoring_version=str(SCORING_VERSION),
     )
 
     kept = [existing for existing in read_history(conn, model_urn) if existing.run_id != run_id]

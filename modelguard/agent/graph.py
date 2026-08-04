@@ -226,8 +226,18 @@ def build_scan_graph(
         clear (D-070).
         """
         trust_history = _project_trust_history(conn, artifacts.trust, run_id)
+        trust_by_model = {write.model_urn: write.score for write in artifacts.trust}
         writes = tuple(
-            _write_back(conn, finding, narrative, config, run_id, observed_at, trust_history)
+            _write_back(
+                conn,
+                finding,
+                narrative,
+                config,
+                run_id,
+                observed_at,
+                trust_history,
+                trust_by_model,
+            )
             for finding, narrative in zip(artifacts.findings, artifacts.narratives, strict=True)
         )
         # Assigned on the holder, not rebound: `artifacts` is the closure's

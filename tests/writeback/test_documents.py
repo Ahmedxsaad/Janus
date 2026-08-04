@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from modelguard.config import SCORE_PROVENANCE, SCORING_VERSION
 from modelguard.models import FindingType
 from modelguard.writeback.documents import (
     RUN_ID_PROPERTY,
@@ -9,10 +10,11 @@ from modelguard.writeback.documents import (
     publish_impact_report,
     render_impact_report,
     render_trust_trend,
+    render_trust_waterfall,
 )
 from modelguard.writeback.trust_history import TrustEntry
 from tests.conftest import MODEL_URN as MODEL
-from tests.conftest import TABLE_URN, FakeClient, FakeGraph, make_connection
+from tests.conftest import TABLE_URN, FakeClient, FakeGraph, make_connection, make_trust_score
 from tests.conftest import make_deprecated_input_finding as _deprecated_finding
 from tests.conftest import make_finding as _finding
 from tests.conftest import make_leakage_finding as _leakage_finding
@@ -226,13 +228,20 @@ def make_leakage_finding(**kwargs):  # noqa: ANN003 - alias for the shared fixtu
     return _leakage_finding(**kwargs)
 
 
-def _entry(recorded_at: str, score: int, *, deductions: tuple[str, ...] = ()) -> TrustEntry:
+def _entry(
+    recorded_at: str,
+    score: int,
+    *,
+    deductions: tuple[str, ...] = (),
+    scoring_version: str = str(SCORING_VERSION),
+) -> TrustEntry:
     return TrustEntry(
         recorded_at=recorded_at,
         run_id=f"scan-{score}",
         score=score,
         band="healthy" if score >= 70 else "at-risk",
         deductions=deductions,
+        scoring_version=scoring_version,
     )
 
 
@@ -285,3 +294,55 @@ def test_the_impact_report_carries_the_trend_when_there_is_one():
     # The finding's own sections are unchanged either way.
     assert "## Assessment" in with_history
     assert "## Assessment" in without
+
+
+# --------------------------------------------------------------------------
+# The trust waterfall, and the version step that is not a regression (T-01)
+# --------------------------------------------------------------------------
+
+
+def test_the_waterfall_section_leads_with_what_the_model_lost_trust_for():
+    section = render_trust_waterfall(make_trust_score(70, deductions={"leakage": 20.0}))
+
+    assert "## Trust score" in section
+    # The deduction is above the total in the rendered text, not merely present.
+    assert section.index("-20  leakage") < section.index("70  healthy")
+    assert SCORE_PROVENANCE in section
+
+
+def test_a_model_with_no_deductions_renders_no_waterfall():
+    """A waterfall with no steps is the number again with extra ceremony."""
+    assert render_trust_waterfall(make_trust_score(100, deductions={})) == ""
+
+
+def test_the_impact_report_carries_the_waterfall_when_a_score_is_given():
+    finding = make_leakage_finding()
+    score = make_trust_score(55, deductions={"leakage": 20.0, "missing_owner": 10.0})
+
+    with_score = render_impact_report(finding, "assessment", "scan-1", (), score)
+    without = render_impact_report(finding, "assessment", "scan-1")
+
+    assert "## Trust score" in with_score
+    assert "## Trust score" not in without
+    assert "## Assessment" in without
+
+
+def test_a_scoring_version_change_inside_the_window_is_called_out():
+    """Otherwise a release that added a detector reads exactly like a regression."""
+    trend = render_trust_trend(
+        [
+            _entry("2026-08-01T09:00:00Z", 95, scoring_version="1"),
+            _entry("2026-08-02T09:00:00Z", 64, scoring_version="2"),
+        ]
+    )
+
+    assert "The scoring function changed inside this window" in trend
+    assert "not a regression" in trend
+
+
+def test_one_scoring_version_throughout_says_nothing_about_versions():
+    trend = render_trust_trend(
+        [_entry("2026-08-01T09:00:00Z", 95), _entry("2026-08-02T09:00:00Z", 64)]
+    )
+
+    assert "The scoring function changed" not in trend

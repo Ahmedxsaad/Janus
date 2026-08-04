@@ -46,7 +46,7 @@ from datahub.metadata.urns import DatasetUrn, SchemaFieldUrn
 
 from modelguard.agent.narrate import Narrative, incident_description, narrate
 from modelguard.client import DataHubConnection
-from modelguard.config import ScanConfig
+from modelguard.config import SCORING_VERSION, ScanConfig
 from modelguard.detect.blast_radius import (
     blast_radius,
     downstream_models,
@@ -95,6 +95,7 @@ from modelguard.writeback.properties import (
     OPEN_LEAK_COLUMNS,
     RISK_FLAGS,
     RUN_ID,
+    SCORING_VERSION_PROPERTY,
     TRUST_BAND,
     TRUST_HISTORY,
     TRUST_SCORE,
@@ -218,6 +219,7 @@ def _write_back(
     run_id: str,
     observed_at_ms: int,
     history: Mapping[str, tuple[TrustEntry, ...]] | None = None,
+    scores: Mapping[str, TrustScore] | None = None,
 ) -> FindingWrites:
     """Perform every mutation for one finding, idempotently.
 
@@ -305,6 +307,7 @@ def _write_back(
                 narrative=narrative.assessment,
                 run_id=run_id,
                 history=(history or {}).get(model.urn, ()),
+                score=(scores or {}).get(model.urn),
             )
         )
 
@@ -412,6 +415,7 @@ def _persist_trust(
             {
                 TRUST_SCORE: [float(trust_write.score.value)],
                 TRUST_BAND: [str(trust_write.score.band)],
+                SCORING_VERSION_PROPERTY: [float(SCORING_VERSION)],
                 TRUST_HISTORY: rendered(history.get(trust_write.model_urn, ())),
             },
         )
@@ -792,6 +796,7 @@ def _reconcile_stale_findings(
             {
                 TRUST_SCORE: [float(score.value)],
                 TRUST_BAND: [str(score.band)],
+                SCORING_VERSION_PROPERTY: [float(SCORING_VERSION)],
                 RUN_ID: [run_id],
             },
         )
@@ -925,10 +930,20 @@ def run_scan(
     # Projected before anything is written, so the impact report each finding
     # publishes can carry the same trend the graph will hold a moment later.
     trust_history = _project_trust_history(conn, trust, run_id)
+    # The same score objects that are about to be persisted, so a report's
+    # waterfall and the model's own property describe one computation.
+    trust_by_model = {write.model_urn: write.score for write in trust}
 
     writes = tuple(
         _write_back(
-            conn, finding, narrate(finding, llm), config, run_id, observed_at, trust_history
+            conn,
+            finding,
+            narrate(finding, llm),
+            config,
+            run_id,
+            observed_at,
+            trust_history,
+            trust_by_model,
         )
         for finding in findings
     )

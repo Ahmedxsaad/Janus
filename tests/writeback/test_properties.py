@@ -39,6 +39,9 @@ def test_the_shipped_declarations_parse_and_cover_the_planned_properties():
         # One capped entry per scan that scored the model, so the score has a
         # direction: 82 means nothing without the 95 it was last week (D-081).
         "modelguard.trust_history",
+        # The scoring function behind the stored score, so a step in the trend
+        # across a release reads as a discontinuity and not a regression (F7).
+        "modelguard.scoring_version",
         # What `modelguard link` was told, kept so it can be replayed after an
         # ingestion run overwrites the model's own aspect (D-074).
         "modelguard.feature_table",

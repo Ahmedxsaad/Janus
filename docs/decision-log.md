@@ -16,6 +16,55 @@ Entry template:
 
 ---
 
+## D-108: The trust score leads with its deductions, and is versioned (2026-08-04)
+- Decided by: Ghassen Naouar (chose the typed deduction and the surfaces),
+  implemented by Claude. Closes T-01, and F7 in 07-weaknesses-and-remedies.md.
+- Decision: Five changes, all of them about making the score honest about what it
+  is rather than about changing what it computes. No score's value moves.
+  1. `TrustScore.deductions` becomes `tuple[Deduction, ...]`, worst first, where
+     each `Deduction` carries `name`, `points`, and the `cause` that triggered it
+     (the finding's own title, or the model's name for a missing owner).
+  2. `TrustScore.waterfall()` renders the score contrastively: 100, each
+     deduction, then the total. Used by the terminal, the CI job summary, and a
+     new "Trust score" section in the impact report. The integer goes last
+     everywhere it appears.
+  3. `SCORING_VERSION` (config.py, currently 2) is stamped into every
+     `modelguard.trust_history` entry and written as a new `modelguard.scoring_version`
+     structured property. The trend table renders a version change as a labelled
+     discontinuity, saying in the document that the step is a release and not a
+     regression.
+  4. `SCORE_PROVENANCE`, one sentence, printed wherever the number is: the weights
+     are a stated preference ordering, not a calibrated model.
+  5. `GatePolicy.advisory` cautions when `--min-trust` is used without
+     `--block-at-or-above`, and `modelguard gate` prints it.
+- Options considered:
+  - Deductions shape: (a) the typed `Deduction` tuple, (b) keeping the existing
+     `Mapping[str, float]` and adding a parallel `causes` map. (b) was the smaller
+     diff and was rejected: two maps that have to stay in sync is the shape that
+     rots, and the ordering (worst first) is information a mapping cannot carry.
+  - Waterfall surfaces: 10-depth-implementation.md listed the incident body. Left
+     out deliberately: an incident is per finding and a score is per model, so a
+     freshness finding endangering five models would render five waterfalls into
+     one incident, and duplicate a number that belongs on the model. 10 is updated
+     in place to say so (docs/CLAUDE.md rule 1).
+  - The version bump check: (a) a test that fingerprints the weights, the band
+     boundaries and the contributing deduction names against a pinned digest,
+     (b) a CI job diffing config.py. (a) chosen: it runs in the existing suite,
+     it names the fix in its own failure message, and it cannot be skipped by a
+     change that arrives outside a pull request.
+- Why: F7's finding was not that the weights are wrong (there are no true weights)
+  but that a composite score with invented weights looks more rigorous than it is,
+  and that nothing recorded when the function itself changed. D-079 added two
+  detectors and silently moved every previously-scored model's number. A trend that
+  drops because a release shipped a detector is indistinguishable from one that
+  drops because somebody shipped a bug, and both were rendered as the same integer.
+- Result: 609 offline tests green. Every new test mutation-checked (tests/CLAUDE.md
+  rule 6): ordering, the cause lookup, the version render, the legacy five-field
+  parse, the discontinuity line, and the advisory each go red when broken and green
+  when restored. A pre-version history entry still parses, with an unknown version
+  rather than being dropped, because a graph scored by an older release is exactly
+  where the discontinuity is most worth showing.
+
 ## D-107: The depth axes get a task-numbered build order, not just a doc (2026-08-04)
 - Decided by: Ghassen Naouar (asked for the implementation plan as a checklist),
   written by Claude.

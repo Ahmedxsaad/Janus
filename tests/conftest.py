@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,6 +25,7 @@ from modelguard.client import DataHubConnection
 from modelguard.models import (
     BlastRadius,
     ChangeKind,
+    Deduction,
     DeprecatedInputFinding,
     FreshnessFinding,
     FreshnessSignal,
@@ -35,6 +37,8 @@ from modelguard.models import (
     SchemaDriftFinding,
     SensitiveFeature,
     SensitiveSourceFinding,
+    TrustBand,
+    TrustScore,
 )
 
 
@@ -336,6 +340,7 @@ def make_finding(
     lag_hours: float = 30.0,
     sla_hours: float = 6.0,
     has_owner: bool = False,
+    table_name: str = "ecommerce.public.loans_raw",
 ) -> FreshnessFinding:
     """Build a finding the way the detector would, without touching a graph.
 
@@ -364,7 +369,7 @@ def make_finding(
             sla_hours=sla_hours,
         ),
         failing_table_urn=TABLE_URN,
-        failing_table_name="ecommerce.public.loans_raw",
+        failing_table_name=table_name,
         downstream_datasets=(TABLE_URN,),
         downstream_features=(LEAK_FEATURE_URN,),
         models=models,
@@ -538,4 +543,27 @@ def make_deprecated_input_finding(
         dataset_name="ecommerce.public.customer_features",
         note=note,
         decommission_time_ms=1_800_000_000_000,
+    )
+
+
+def make_trust_score(
+    value: int,
+    *,
+    band: TrustBand | None = None,
+    deductions: Mapping[str, float] | None = None,
+) -> TrustScore:
+    """Build a trust score the way the detector would, without running it.
+
+    Takes the deductions as a name-to-points mapping because that is what a test
+    is actually saying something about; the cause is filled in from the name, so
+    a test never has to invent prose it is not asserting on.
+    """
+    named = {"leakage": 20.0} if deductions is None else deductions
+    return TrustScore(
+        value=value,
+        band=band or (TrustBand.HEALTHY if value >= 70 else TrustBand.AT_RISK),
+        deductions=tuple(
+            Deduction(name=name, points=points, cause=f"a {name} finding")
+            for name, points in sorted(named.items(), key=lambda item: (-item[1], item[0]))
+        ),
     )

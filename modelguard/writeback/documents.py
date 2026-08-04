@@ -42,6 +42,7 @@ from datahub.metadata.urns import MlModelUrn
 from datahub.sdk.document import Document
 
 from modelguard.client import DataHubConnection
+from modelguard.config import SCORE_PROVENANCE, SCORING_VERSION
 from modelguard.models import (
     DeprecatedInputFinding,
     Finding,
@@ -51,6 +52,7 @@ from modelguard.models import (
     ModelAtRisk,
     SchemaDriftFinding,
     SensitiveSourceFinding,
+    TrustScore,
 )
 from modelguard.writeback.trust_history import TrustEntry
 
@@ -472,6 +474,35 @@ replacement table already exists.
 """
 
 
+def render_trust_waterfall(score: TrustScore) -> str:
+    """Render a model's score as its deductions, or ``""`` when there are none.
+
+    The contrastive rendering F7 asks for: what went wrong, what each thing cost,
+    and only then the total. A reader who meets the integer first has to go
+    looking for what to do about it, and the integer is the least defensible part
+    of the object (see :class:`~modelguard.models.TrustScore`). Empty for a model
+    with no deductions, because a waterfall with no steps is just the number
+    again with extra ceremony.
+    """
+    if not score.deductions:
+        return ""
+
+    return "\n".join(
+        [
+            "## Trust score",
+            "",
+            "What this model lost trust for, worst first.",
+            "",
+            "```",
+            *score.waterfall(),
+            "```",
+            "",
+            f"Scored under scoring version {SCORING_VERSION}. {SCORE_PROVENANCE}",
+            "",
+        ]
+    )
+
+
 def render_trust_trend(history: Sequence[TrustEntry]) -> str:
     """Render a model's recent trust scores as a markdown section, or ``""``.
 
@@ -489,12 +520,13 @@ def render_trust_trend(history: Sequence[TrustEntry]) -> str:
         "Every scan that scored this model, most recent last. The score alone is not",
         "the signal; the direction is, and the deductions column says what moved it.",
         "",
-        "| When (UTC) | Score | Band | Deductions |",
-        "|---|---|---|---|",
+        "| When (UTC) | Score | Band | Deductions | Scoring |",
+        "|---|---|---|---|---|",
     ]
     lines += [
         f"| {entry.recorded_at} | {entry.score}/100 | {entry.band} "
-        f"| {', '.join(entry.deductions) or 'none'} |"
+        f"| {', '.join(entry.deductions) or 'none'} "
+        f"| {('v' + entry.scoring_version) if entry.scoring_version else 'unknown'} |"
         for entry in history
     ]
 
@@ -506,6 +538,19 @@ def render_trust_trend(history: Sequence[TrustEntry]) -> str:
         + (f" by {abs(change)} points." if change else "."),
         "",
     ]
+
+    # A version change is a discontinuity in the function, not a change in the
+    # model. Saying so is the whole reason the version is recorded: without this
+    # line a release that added a detector reads exactly like a regression (F7).
+    versions = {entry.scoring_version for entry in history}
+    if len(versions) > 1:
+        lines += [
+            "The scoring function changed inside this window "
+            f"({', '.join('v' + v if v else 'unknown' for v in sorted(versions))}). "
+            "Scores either side of that change are not comparable: the step is a "
+            "release, not a regression.",
+            "",
+        ]
     return "\n".join(lines)
 
 
@@ -514,6 +559,7 @@ def render_impact_report(
     narrative: str,
     run_id: str,
     history: Sequence[TrustEntry] = (),
+    score: TrustScore | None = None,
 ) -> str:
     """Render the Model Impact Report as markdown.
 
@@ -529,6 +575,9 @@ def render_impact_report(
         history: This model's recorded trust scores, oldest first. Omitted, or
             shorter than two entries, and the trend section is left out entirely
             rather than rendered empty.
+        score: This run's score for the model the report is about, for the
+            waterfall. Omitted and the section is left out: a report about a
+            finding is still a complete report without it.
 
     Returns:
         The markdown body.
@@ -542,8 +591,8 @@ def render_impact_report(
         f"(live: {live}) | Run: `{run_id}`\n\n"
     )
     body = _report_body(finding).replace("{narrative}", narrative)
-    trend = render_trust_trend(history)
-    return header + body + (f"\n\n{trend}" if trend else "")
+    sections = [render_trust_waterfall(score) if score else "", render_trust_trend(history)]
+    return header + body + "".join(f"\n\n{section}" for section in sections if section)
 
 
 def publish_impact_report(
@@ -554,6 +603,7 @@ def publish_impact_report(
     narrative: str,
     run_id: str,
     history: Sequence[TrustEntry] = (),
+    score: TrustScore | None = None,
 ) -> DocumentWrite:
     """Write the impact report as a knowledge document linked to the model.
 
@@ -566,11 +616,12 @@ def publish_impact_report(
         run_id: Stamped on the document as provenance.
         history: The model's recorded trust scores, oldest first, for the trend
             section. Empty and the section is omitted.
+        score: This run's score for this model, for the waterfall section.
 
     Returns:
         The document URN and the markdown that was published.
     """
-    markdown = render_impact_report(finding, narrative, run_id, history)
+    markdown = render_impact_report(finding, narrative, run_id, history, score)
     title = f"ModelGuard impact report: {report_subject(finding)}"
 
     document = Document.create_document(

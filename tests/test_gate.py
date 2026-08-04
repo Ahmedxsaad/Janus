@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 
 from modelguard.agent.pipeline import FindingWrites, ScanReport, TrustWrite
+from modelguard.config import SCORE_PROVENANCE
 from modelguard.gate import (
     EXIT_BLOCKED,
     EXIT_ERROR,
@@ -25,8 +26,8 @@ from modelguard.gate import (
     github_annotations,
     summary,
 )
-from modelguard.models import Finding, Severity, TrustBand, TrustScore
-from tests.conftest import MODEL_URN
+from modelguard.models import Finding, Severity, TrustBand
+from tests.conftest import MODEL_URN, make_trust_score
 from tests.conftest import make_finding as _finding
 from tests.conftest import make_leakage_finding as _leakage_finding
 
@@ -58,7 +59,7 @@ def _trust(value: int, *, name: str = "Credit Risk v3") -> TrustWrite:
     return TrustWrite(
         model_urn=MODEL_URN,
         model_name=name,
-        score=TrustScore(value=value, band=band, deductions={"leakage": 20.0}),
+        score=make_trust_score(value, band=band),
     )
 
 
@@ -225,3 +226,31 @@ def test_the_trust_floor_is_a_strict_comparison_at_every_value(value: int):
     verdict = evaluate(_report(trust=(_trust(value),)), GatePolicy(min_trust_score=70))
 
     assert verdict.blocked is (value < 70)
+
+
+class TestAdvisory:
+    """--min-trust is a blunt control and the policy says so (F7 step 3, T-01)."""
+
+    def test_a_trust_floor_alone_cautions_that_the_scale_is_undefined(self):
+        advisory = GatePolicy(min_trust_score=80).advisory
+
+        assert "--block-at-or-above" in advisory
+        assert SCORE_PROVENANCE in advisory
+
+    def test_a_trust_floor_beside_a_severity_policy_is_not_cautioned(self):
+        assert GatePolicy(min_trust_score=80, block_at_or_above=Severity.HIGH).advisory == ""
+
+    def test_a_severity_policy_alone_is_not_cautioned(self):
+        assert GatePolicy(block_at_or_above=Severity.HIGH).advisory == ""
+
+    def test_an_empty_policy_is_not_cautioned(self):
+        """Nothing is being gated on, so there is nothing to caution about."""
+        assert GatePolicy().advisory == ""
+
+    def test_the_advisory_never_blocks_by_itself(self):
+        """It is advice about how the policy is written, not a violation."""
+        policy = GatePolicy(min_trust_score=80)
+        verdict = evaluate(_report(trust=(_trust(90),)), policy)
+
+        assert policy.advisory
+        assert verdict.blocked is False

@@ -30,11 +30,12 @@ debt (stale inputs, leakage, drift, no owner) a single visible number.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
 
 from modelguard.config import ScanConfig
 from modelguard.models import (
+    Deduction,
     DeprecatedInputFinding,
     Finding,
     FreshnessFinding,
@@ -69,6 +70,20 @@ DEDUCTION_MISSING_OWNER = "missing_owner"
 DEDUCTION_SENSITIVE_SOURCE = "sensitive_source"
 DEDUCTION_DEPRECATED_INPUT = "deprecated_input"
 
+#: What a deduction is rendered as when no finding was recorded against it. Only
+#: reachable through a hand-built :class:`TrustInputs`, which is how the weights
+#: are exercised without findings; a scan always names the finding. The strings
+#: describe the flag rather than pretending to a specific cause.
+_FALLBACK_CAUSES = {
+    DEDUCTION_UPSTREAM_FAILURE: "a failing upstream table",
+    DEDUCTION_LEAKAGE: "a target-leakage finding",
+    DEDUCTION_SCHEMA_DRIFT: "an input-schema-drift finding",
+    DEDUCTION_FRESHNESS_LAG: "stale upstream data",
+    DEDUCTION_MISSING_OWNER: "no owner recorded on the model",
+    DEDUCTION_SENSITIVE_SOURCE: "a feature derived from a classified column",
+    DEDUCTION_DEPRECATED_INPUT: "a training input its owners deprecated",
+}
+
 
 @dataclass(frozen=True)
 class TrustInputs:
@@ -99,6 +114,15 @@ class TrustInputs:
     """
     has_deprecated_input: bool = False
     """A training input its own owners have marked deprecated."""
+    causes: Mapping[str, str] = field(default_factory=dict)
+    """Deduction name to the finding title that triggered it.
+
+    Defaulted empty, because a caller that builds these inputs by hand (the
+    detector's own tests, and any future caller reasoning about weights rather
+    than about findings) has no findings to name. A deduction with no recorded
+    cause falls back to a description of the flag itself, so the waterfall is
+    never rendered with a blank reason.
+    """
 
 
 def trust_inputs_from_findings(
@@ -123,6 +147,10 @@ def trust_inputs_from_findings(
     has_deprecated_input = False
     lag_ratio = 0.0
     worst_severity: Severity | None = None
+    # The first finding of each kind is the one named as the cause. Findings
+    # arrive in a deterministic order from the detectors, so two runs over the
+    # same graph name the same one, which keeps the rendered waterfall stable.
+    causes: dict[str, str] = {}
 
     for finding in findings:
         if worst_severity is None or severity_rank(finding.severity) < severity_rank(
@@ -131,17 +159,30 @@ def trust_inputs_from_findings(
             worst_severity = finding.severity
         if isinstance(finding, FreshnessFinding):
             has_upstream_failure = True
+            causes.setdefault(DEDUCTION_UPSTREAM_FAILURE, finding.title)
             signal = finding.blast_radius.signal
             if signal.sla_hours > 0:
-                lag_ratio = max(lag_ratio, min(signal.lag_hours / signal.sla_hours, 1.0))
+                ratio = min(signal.lag_hours / signal.sla_hours, 1.0)
+                # The worst lag is the one that set the deduction, so it is the
+                # one whose finding the waterfall must name.
+                if ratio > lag_ratio:
+                    lag_ratio = ratio
+                    causes[DEDUCTION_FRESHNESS_LAG] = finding.title
         elif isinstance(finding, LeakageFinding):
             has_leakage = True
+            causes.setdefault(DEDUCTION_LEAKAGE, finding.title)
         elif isinstance(finding, SchemaDriftFinding):
             has_schema_drift = True
+            causes.setdefault(DEDUCTION_SCHEMA_DRIFT, finding.title)
         elif isinstance(finding, SensitiveSourceFinding):
             has_sensitive_source = True
+            causes.setdefault(DEDUCTION_SENSITIVE_SOURCE, finding.title)
         elif isinstance(finding, DeprecatedInputFinding):
             has_deprecated_input = True
+            causes.setdefault(DEDUCTION_DEPRECATED_INPUT, finding.title)
+
+    if not model.has_owner:
+        causes[DEDUCTION_MISSING_OWNER] = f"nobody owns {model.name}"
 
     return TrustInputs(
         has_upstream_failure=has_upstream_failure,
@@ -152,6 +193,7 @@ def trust_inputs_from_findings(
         freshness_lag_ratio=lag_ratio,
         missing_owner=not model.has_owner,
         worst_severity=worst_severity,
+        causes=causes,
     )
 
 
@@ -177,29 +219,41 @@ def trust_score(inputs: TrustInputs, config: ScanConfig) -> TrustScore:
         config: Supplies the weights and the band thresholds.
 
     Returns:
-        The score, its band, and the deductions that produced it. Only non-zero
-        deductions are recorded, so the map reads as the reasons the model lost
-        trust.
+        The score, its band, and the deductions that produced it, worst first.
+        Only non-zero deductions are recorded, so the list reads as the reasons
+        the model lost trust.
     """
-    deductions: dict[str, float] = {}
+    points: dict[str, float] = {}
     if inputs.has_upstream_failure:
-        deductions[DEDUCTION_UPSTREAM_FAILURE] = config.trust_weight_upstream_failure
+        points[DEDUCTION_UPSTREAM_FAILURE] = config.trust_weight_upstream_failure
     if inputs.has_leakage:
-        deductions[DEDUCTION_LEAKAGE] = config.trust_weight_leakage
+        points[DEDUCTION_LEAKAGE] = config.trust_weight_leakage
     if inputs.has_schema_drift:
-        deductions[DEDUCTION_SCHEMA_DRIFT] = config.trust_weight_schema_drift
+        points[DEDUCTION_SCHEMA_DRIFT] = config.trust_weight_schema_drift
     if inputs.has_sensitive_source:
-        deductions[DEDUCTION_SENSITIVE_SOURCE] = config.trust_weight_sensitive_source
+        points[DEDUCTION_SENSITIVE_SOURCE] = config.trust_weight_sensitive_source
     if inputs.has_deprecated_input:
-        deductions[DEDUCTION_DEPRECATED_INPUT] = config.trust_weight_deprecated_input
+        points[DEDUCTION_DEPRECATED_INPUT] = config.trust_weight_deprecated_input
     if inputs.freshness_lag_ratio > 0:
-        deductions[DEDUCTION_FRESHNESS_LAG] = (
+        points[DEDUCTION_FRESHNESS_LAG] = (
             config.trust_weight_freshness_lag * inputs.freshness_lag_ratio
         )
     if inputs.missing_owner:
-        deductions[DEDUCTION_MISSING_OWNER] = config.trust_weight_missing_owner
+        points[DEDUCTION_MISSING_OWNER] = config.trust_weight_missing_owner
 
-    value = round(max(0.0, min(100.0, 100.0 - sum(deductions.values()))))
+    # Worst first, so the waterfall leads with the deduction most worth acting
+    # on. The name breaks ties, because two equal weights must not order
+    # themselves by dict insertion, which depends on which detector ran.
+    deductions = tuple(
+        Deduction(
+            name=name,
+            points=value,
+            cause=inputs.causes.get(name, _FALLBACK_CAUSES[name]),
+        )
+        for name, value in sorted(points.items(), key=lambda item: (-item[1], item[0]))
+    )
+
+    value = round(max(0.0, min(100.0, 100.0 - sum(points.values()))))
     band = _band(value, config)
 
     # Points alone can leave a critical or high-severity finding inside the

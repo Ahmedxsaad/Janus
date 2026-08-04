@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from modelguard.agent.pipeline import FindingWrites, ScanReport
+from modelguard.config import SCORE_PROVENANCE, SCORING_VERSION
 from modelguard.env import optional_value
 from modelguard.gate import GateVerdict
 from modelguard.models import ModelRef
@@ -120,11 +121,23 @@ def report_dict(report: ScanReport, verdict: GateVerdict | None = None) -> dict[
                 "model_name": trust.model_name,
                 "score": trust.score.value,
                 "band": trust.score.band.value,
+                "scoring_version": SCORING_VERSION,
                 # Null, not the current score, when this model has never been
                 # scored before: "unchanged" and "never measured" are different
                 # facts and only one of them is reassuring.
                 "previous_score": trust.previous_score,
-                "deductions": dict(trust.score.deductions),
+                # An array and not an object, because the order is information:
+                # worst deduction first, which is the waterfall a human reads in
+                # the terminal (F7). A consumer that wants a lookup can build one;
+                # one that gets an object cannot recover the ordering.
+                "deductions": [
+                    {
+                        "name": deduction.name,
+                        "points": deduction.points,
+                        "cause": deduction.cause,
+                    }
+                    for deduction in trust.score.deductions
+                ],
             }
             for trust in report.trust
         ],
@@ -207,14 +220,27 @@ def job_summary_markdown(report: ScanReport, verdict: GateVerdict | None = None)
         lines.append("")
 
     if report.trust:
-        lines.append("| Model | Trust | Band | Deductions |")
+        # What is wrong before what it scored (F7). The band is a judgement about
+        # the model; the integer is a weighted sum whose units nobody defined, so
+        # it goes last and the reasons that a reader can act on go first.
+        lines.append("| Model | Band | What cost it | Score |")
         lines.append("|---|---|---|---|")
         for trust in report.trust:
-            reasons = ", ".join(sorted(trust.score.deductions)) or "none"
-            lines.append(
-                f"| {trust.model_name} | {trust.score.value}/100 "
-                f"| {trust.score.band.value} | {reasons} |"
+            reasons = (
+                ", ".join(
+                    f"{deduction.name} (-{deduction.points:g})"
+                    for deduction in trust.score.deductions
+                )
+                or "nothing"
             )
+            lines.append(
+                f"| {trust.model_name} | {trust.score.band.value} "
+                f"| {reasons} | {trust.score.value}/100 |"
+            )
+        lines.append("")
+        lines.append(
+            f"<sub>Scored under scoring version {SCORING_VERSION}. {SCORE_PROVENANCE}</sub>"
+        )
         lines.append("")
 
     # Printed whatever the outcome. A check that never ran is the thing a reader

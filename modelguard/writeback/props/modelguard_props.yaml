@@ -47,11 +47,23 @@ properties:
     display_name: ModelGuard Trust History
     description: >-
       One entry per scan that scored this model, oldest first, as
-      "<ISO-8601 UTC>|<run_id>|<score>|<band>|<deductions>". A score on its own
-      says nothing: 82 matters only next to the 95 it was last Tuesday. The list
-      is capped, so it is a recent trend rather than an unbounded log.
+      "<ISO-8601 UTC>|<run_id>|<score>|<band>|<deductions>|<scoring_version>".
+      A score on its own says nothing: 82 matters only next to the 95 it was
+      last Tuesday. The list is capped, so it is a recent trend rather than an
+      unbounded log.
     value_type: string
     cardinality: MULTIPLE
+    entity_types: [mlModel]
+
+  - qualified_name: modelguard.scoring_version
+    display_name: ModelGuard Scoring Version
+    description: >-
+      The version of the scoring function that produced modelguard.trust_score.
+      Two scores are comparable only when the same weights, band boundaries and
+      contributing findings produced them, so a drop across a version change is
+      a release and not a regression.
+    value_type: number
+    cardinality: SINGLE
     entity_types: [mlModel]
 
   - qualified_name: modelguard.open_leak_columns

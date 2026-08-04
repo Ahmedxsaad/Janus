@@ -33,9 +33,9 @@ from modelguard.argos.protocol import (
 from modelguard.argos.terminal import TerminalArgos
 from modelguard.argos.window import ArgosWindow, resolve_binary
 from modelguard.logs import phase
-from modelguard.models import Finding, TrustBand, TrustScore
+from modelguard.models import Finding, TrustBand
 
-from .conftest import make_finding
+from .conftest import make_finding, make_trust_score
 
 UI = Path(__file__).resolve().parent.parent / "argos" / "ui"
 PALETTE_CHARS = set(".kwgaobdr")
@@ -195,7 +195,7 @@ def test_a_dropped_trust_band_makes_the_dog_sick_even_with_no_finding():
             TrustWrite(
                 model_urn="urn:li:mlModel:(x,credit_risk_v3,PROD)",
                 model_name="credit_risk_v3",
-                score=TrustScore(value=35, band=TrustBand.AT_RISK, deductions={}),
+                score=make_trust_score(35, band=TrustBand.AT_RISK, deductions={}),
             ),
         ),
     )
@@ -457,7 +457,7 @@ def test_the_trust_score_rides_along_so_the_meter_has_something_to_draw():
             TrustWrite(
                 model_urn="urn:li:mlModel:(x,m,PROD)",
                 model_name="m",
-                score=TrustScore(value=64, band=TrustBand.WATCH, deductions={}),
+                score=make_trust_score(64, band=TrustBand.WATCH, deductions={}),
             ),
         ),
     )
@@ -481,7 +481,7 @@ def test_the_band_is_sent_rather_than_recomputed_from_the_score():
             TrustWrite(
                 model_urn="urn:li:mlModel:(x,m,PROD)",
                 model_name="m",
-                score=TrustScore(value=70, band=TrustBand.WATCH, deductions={}),
+                score=make_trust_score(70, band=TrustBand.WATCH, deductions={}),
             ),
         ),
     )

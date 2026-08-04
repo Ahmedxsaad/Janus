@@ -37,6 +37,11 @@ PROPS_FILE = Path(__file__).parent / "props" / "modelguard_props.yaml"
 
 TRUST_SCORE = "modelguard.trust_score"
 TRUST_BAND = "modelguard.trust_band"
+
+#: The scoring function behind the score written alongside it. Written on the
+#: model rather than derived at read time, because the point of it is to describe
+#: the score that is stored now, not the one this release would compute (F7).
+SCORING_VERSION_PROPERTY = "modelguard.scoring_version"
 RISK_FLAGS = "modelguard.risk_flags"
 RUN_ID = "modelguard.run_id"
 

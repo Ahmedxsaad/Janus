@@ -37,7 +37,7 @@ from modelguard.client import (
     gms_token,
     is_local_gms,
 )
-from modelguard.config import ScanConfig
+from modelguard.config import SCORE_PROVENANCE, SCORING_VERSION, ScanConfig
 from modelguard.discovery import search_model_urns
 from modelguard.env import ConfigError, scrub
 from modelguard.gate import (
@@ -397,10 +397,13 @@ def _print_findings_and_trust(report: ScanReport) -> None:
     if report.trust:
         console.print("\n[bold]Trust scores:[/bold]")
         for trust in report.trust:
-            reasons = ", ".join(sorted(trust.score.deductions)) or "no deductions"
-            console.print(
-                f"  {trust.model_name}: {trust.score.value}/100 ({trust.score.band}) - {reasons}"
-            )
+            # The waterfall, not the integer (F7). A reader who sees "45/100"
+            # first has to go looking for what to do about it; a reader who sees
+            # the deductions first is already reading the work list, and the
+            # total arrives as their consequence.
+            console.print(f"  {trust.model_name}: [bold]{trust.score.band}[/bold]")
+            for line in trust.score.waterfall():
+                console.print(f"    [dim]{line}[/dim]")
             # The direction, when there is one to report. A score on its own is
             # not actionable: 82 matters against the 95 it was last week, and
             # that is the number a reader is looking for here.
@@ -413,6 +416,7 @@ def _print_findings_and_trust(report: ScanReport) -> None:
                 console.print(
                     f"    [{colour}]{arrow} {trust.previous_score}/100 last scan[/{colour}]"
                 )
+        console.print(f"  [dim]scoring v{SCORING_VERSION}. {SCORE_PROVENANCE}[/dim]")
 
 
 def _print_writes_section(report: ScanReport) -> None:
@@ -1270,7 +1274,11 @@ def gate(
     min_trust: Annotated[
         float | None,
         typer.Option(
-            "--min-trust", help="Fail when any model's trust score is below this (0-100)."
+            "--min-trust",
+            help=(
+                "Fail when any model's trust score is below this (0-100). A blunt "
+                "secondary control: prefer --block-at-or-above, whose units are defined."
+            ),
         ),
     ] = None,
     write: Annotated[
@@ -1337,6 +1345,12 @@ def gate(
         allowed = ", ".join(level.value for level in Severity)
         console.print(f"[red]{block_at_or_above!r} is not a severity. Use one of: {allowed}.[/red]")
         raise typer.Exit(code=EXIT_ERROR) from exc
+
+    # Said here, where the choice is being made, rather than in documentation
+    # nobody reads at the moment they need it. The judgement itself is the
+    # policy's own, so gate.py can be asked about it offline (F7 step 3).
+    if policy.advisory:
+        console.print(f"[yellow]warning:[/yellow] {policy.advisory}")
 
     # Any setup failure is "could not reach a verdict", so _prepare's own exit
     # codes are remapped onto EXIT_ERROR rather than leaking through as a policy

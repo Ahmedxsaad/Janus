@@ -16,7 +16,7 @@ import pytest
 from modelguard.agent.pipeline import FindingWrites, ScanReport, TrustWrite
 from modelguard.detect.coverage import Unevaluated
 from modelguard.gate import GatePolicy, evaluate
-from modelguard.models import Finding, Severity, TrustBand, TrustScore
+from modelguard.models import Finding, Severity
 from modelguard.render import (
     ENV_STEP_SUMMARY,
     job_summary_markdown,
@@ -24,7 +24,7 @@ from modelguard.render import (
     report_json,
     write_job_summary,
 )
-from tests.conftest import MODEL_URN
+from tests.conftest import MODEL_URN, make_trust_score
 from tests.conftest import make_finding as _finding
 from tests.conftest import make_leakage_finding as _leakage_finding
 
@@ -59,11 +59,7 @@ def _trust(value: int) -> TrustWrite:
     return TrustWrite(
         model_urn=MODEL_URN,
         model_name="Credit Risk v3",
-        score=TrustScore(
-            value=value,
-            band=TrustBand.HEALTHY if value >= 70 else TrustBand.AT_RISK,
-            deductions={"leakage": 20.0},
-        ),
+        score=make_trust_score(value),
     )
 
 
