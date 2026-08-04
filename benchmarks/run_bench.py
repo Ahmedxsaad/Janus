@@ -49,6 +49,7 @@ from benchmarks.counterfactuals import (
     measure_counterfactuals,
     measure_multi_path,
 )
+from benchmarks.ingested import IngestedScore, measure_ingested
 from benchmarks.inject import (
     Trial,
     await_precondition,
@@ -494,6 +495,118 @@ def _degraded_precision_lines(approaches: Sequence[ApproachScore]) -> list[str]:
     return lines
 
 
+def _ingested_lines(score: IngestedScore | None) -> list[str]:
+    """Return the ingested-graph section, or the note saying it was not run.
+
+    Kept separate from every table above it, and never merged into them: the
+    seeded numbers and these measure different things (a detector against a graph
+    built to be measured, and a detector against a graph built by somebody else's
+    ingestion), and averaging the two would describe neither.
+    """
+    lines = [
+        "",
+        "## Against a graph this project did not build",
+        "",
+        "Everything above runs on the graph `modelguard-seed` wrote, which is the graph",
+        "where the links the detectors read already exist. This section removes the",
+        "seeder: `examples/real-project/` is a postgres warehouse holding a public",
+        "dataset, a dbt project, a scikit-learn training script and an MLflow",
+        "registry, ingested by DataHub's **own** postgres, dbt and mlflow sources. The",
+        "leak is written into the dbt model rather than planted by a seeding call, and",
+        "the column lineage the walk follows is what DataHub's SQL parser produced from",
+        "the compiled query (T-14).",
+        "",
+    ]
+    if score is None:
+        return [
+            *lines,
+            "**Not run.** No model from that stack is in this DataHub. Stand it up with the",
+            "steps in `examples/real-project/README.md` (warehouse, `dbt run`, training",
+            "script, then the three ingestion recipes) and rerun; this section then fills",
+            "itself in. Nothing above depends on it.",
+            "",
+        ]
+
+    lines += [
+        "### Before anybody links anything",
+        "",
+        "The state ingestion leaves behind, which is the state every real model starts",
+        "in. The measurement restores it first, so a rerun scores the same graph as the",
+        "first run: it clears exactly the two aspects `link` writes and plants nothing.",
+        "",
+        f"- Findings raised: **{score.unlinked_findings}** "
+        f"({'correct: nothing was knowable' if score.unlinked_findings == 0 else '**wrong**'})",
+        f"- Checks reported as not evaluated: {', '.join(score.unlinked_not_evaluated) or 'none'}",
+        f"- Tables the degraded table-level mode (T-07) could read: "
+        f"{score.unlinked_training_tables}",
+        "",
+        "That last line is the one to read twice. On the seeded graph the degraded mode",
+        "has a table to fall back to; here it has none, because DataHub's mlflow source",
+        "records no inputs on a training run and emits no lineage from the model to the",
+        "table it trained on. The table-level answer is therefore not a safety net on an",
+        "ingested graph, and the honest report is the one above: nothing was checked, and",
+        "here is what each check was missing.",
+        "",
+        "### Importing the link from a declaration (T-05, T-06)",
+        "",
+        "The same join, declared twice in the stack's own files: a Feast feature service",
+        "and a dbt semantic model. Each is read by its adapter and checked against the",
+        "*ingested* table's schema, which is the check that would have caught F10.",
+        "",
+        "| Adapter | Declared table | Datasets that name matches | Features | Label | Excluded |",
+        "|---|---|---|---|---|---|",
+    ]
+    for route in score.routes:
+        detail = route.error or f"{len(route.source_columns)}"
+        lines.append(
+            f"| `--from {route.adapter}` | `{route.declared_table}` | {route.candidates} "
+            f"| {detail} | {route.label_column or 'none declared'} "
+            f"| {', '.join(route.excluded) or 'none'} |"
+        )
+    lines += [
+        "",
+        f"- Both routes name the same columns: **{score.routes_agree}**",
+        "- Every declared column is a column the ingested table has: "
+        f"**{all(route.error is None for route in score.routes)}**",
+        "",
+        "The middle column is a fact about real graphs rather than a defect: DataHub's",
+        "dbt source emits a dbt-platform dataset beside the warehouse table and names",
+        "both after the same relation, so a declared relation resolves to two datasets",
+        "and `link` stops and prints both for a human to choose. This measurement picks",
+        "the warehouse one, which is the table the training script queried.",
+        "",
+        "### The detector, on that graph",
+        "",
+        "Scored per feature, not per model: the question worth answering is which column",
+        "carries the leak. Ground truth is the dbt model on disk, not the graph and not",
+        "the detector: delete the column from `customer_features.sql`, rebuild, re-ingest,",
+        "and the truth column below flips with no change to this benchmark.",
+        "",
+        f"- Features scored: {score.leakage.total}",
+        f"- Ground truth (from the dbt SQL): {', '.join(score.truth) or 'none'}",
+        f"- Flagged: {', '.join(score.flagged) or 'none'}",
+        f"- Precision {metrics.format_rate(score.leakage.precision)}, "
+        f"recall {metrics.format_rate(score.leakage.recall)}, "
+        f"false-positive rate {metrics.format_rate(score.leakage.false_positive_rate)}",
+        f"- Named exactly the leaking feature(s) and nothing else: **{score.exact}**",
+        f"- Derivation quoted: `{score.leak_path or '-'}`, reaching `{score.label_reached or '-'}`",
+        f"- Still not evaluated once linked: {', '.join(score.linked_not_evaluated) or 'nothing'}",
+        "",
+        "Seven decisions, not one: six of those features are clean and a detector that",
+        'answered "leak" to everything would score 0.14 precision here. The derivation is',
+        "quoted from DataHub's own column-level lineage, which is the whole claim: no",
+        "part of that path was written by this project.",
+        "",
+        "What this section does **not** measure: freshness, drift and the governance",
+        "checks, which need a lag, a schema change and a classification this stack does",
+        "not have; and the post-fix graph, which needs a dbt rebuild and a re-ingestion",
+        "that this process does not run for you. The line above says what could not be",
+        "evaluated rather than leaving silence to be read as a pass.",
+        "",
+    ]
+    return lines
+
+
 def render_results(
     outcomes: Sequence[TrialOutcome],
     blast: BlastRadiusCheck | None,
@@ -505,6 +618,7 @@ def render_results(
     scale: Sequence[ScaleMeasurement] = (),
     counterfactuals: Sequence[CounterfactualCheck] = (),
     multi_path: MultiPathCheck | None = None,
+    ingested: IngestedScore | None = None,
 ) -> str:
     """Render RESULTS.md. Pure: every number comes from the arguments."""
     grouped = _by_family(outcomes)
@@ -695,6 +809,7 @@ def render_results(
     ]
 
     lines += _counterfactual_lines(counterfactuals, multi_path)
+    lines += _ingested_lines(ingested)
 
     if scale:
         lines += [
@@ -811,6 +926,14 @@ def main() -> None:
     # landed and the graph had not caught up. Raising the timeout would have made
     # every genuine error slower to report; running the index-latency-sensitive
     # measurement before the index-churning one costs nothing.
+    # Before scale, and after everything that reads the seeded graph: this one
+    # scores a different graph entirely (the ingested real project), so it is
+    # kept away from the trials rather than interleaved with them.
+    print("The ingested real project: scoring a graph this project did not build...")
+    ingested = measure_ingested(conn, config)
+    if ingested is None:
+        print("  not ingested into this DataHub; the section will say so")
+
     print("Scale: replicating models and sweeping the catalog...")
     scale = measure_scale(conn, config)
 
@@ -827,6 +950,7 @@ def main() -> None:
         scale=scale,
         counterfactuals=counterfactuals,
         multi_path=multi_path,
+        ingested=ingested,
     )
     args.out.write_text(report)
     print(f"\nWrote {args.out}")

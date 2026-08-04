@@ -4,8 +4,10 @@ ModelGuard-Bench (docs/plan/03-production-hardening.md section A): detectors
 are measured, not asserted. Shipped: inject.py (the labelled trial matrix),
 metrics.py (the pure scoring arithmetic), run_bench.py (the live harness and
 the RESULTS.md renderer), baselines.py (the approaches without column-level
-lineage), RESULTS.md (generated). Not built: Jenga corruption injection, the
-scale test, golden/ (D-047, D-050).
+lineage), counterfactuals.py (each finding's remedies, applied), scale.py (the
+catalog sweep), ingested.py (the same detectors on a graph DataHub's own
+ingestion built, from examples/real-project/), RESULTS.md (generated). Not
+built: Jenga corruption injection, golden/ (D-047, D-050).
 
 Run it with a Quickstart up and the graph seeded:
 
@@ -60,3 +62,4 @@ Run it with a Quickstart up and the graph seeded:
 | 2026-08-04 | Claude (for Ghassen Naouar) | counterfactuals.py lands: each finding's suggested fixes are applied to the live graph and the detector asked again, with the ones no metadata write can perform named as unverified rather than counted as passes. Rule 8 applied to remediation: a remedy nobody performed is not a measurement (D-110, T-03) |
 | 2026-08-04 | Claude (for Ghassen Naouar) | The scale sweep runs last. Its fifty hard deletes left enough index churn behind them to time out the counterfactual measurement's wait for a refreshed table, so a remedy that had landed was reported as an error. Ordering, not a longer timeout: a longer one only makes every genuine error slower to report (D-110, T-03) |
 | 2026-08-04 | Claude (for Ghassen Naouar) | The degraded mode gets its own family, scored separately from the column-level detectors as rule 2 requires: two boundary trials that differ only in whether the model is linked, plus an applier for its declare-link remedy. run_bench also checks the precision the product quotes about that mode against the table-level baseline it measures, and prints both. Ordering, per the D-110 precedent: those two trials are the only ones that rewrite mlFeatures, the last edge of the blast-radius traversal measured next, so the family sits mid-matrix rather than the walk being taught to wait for its own answer (D-113, T-07) |
+| 2026-08-04 | Claude (for Ghassen Naouar) | ingested.py lands: the detectors scored against the graph DataHub's own postgres, dbt and mlflow sources built from examples/real-project/, in its own RESULTS.md section and never merged with the seeded numbers. Ground truth is the dbt model on disk, so playing the README's fix flips it with no code change; rule 6's live-graph rule reaches its strongest form here, since not even the graph's shape was written by this project. A DataHub without that stack ingested gets a section saying so and how to fill it, not zeros (D-115, T-14) |
