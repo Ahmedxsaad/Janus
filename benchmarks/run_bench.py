@@ -40,7 +40,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from benchmarks import metrics
+from benchmarks import baselines, metrics
 from benchmarks.baselines import LEAKAGE_APPROACHES, Approach
 from benchmarks.counterfactuals import (
     CounterfactualCheck,
@@ -58,7 +58,7 @@ from benchmarks.inject import (
 from benchmarks.scale import ScaleMeasurement, measure_scale
 from modelguard.agent.pipeline import run_scan
 from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
+from modelguard.config import TABLE_LEVEL_PRECISION, ScanConfig
 from modelguard.detect.blast_radius import blast_radius
 from modelguard.detect.leakage import leakage_findings
 from modelguard.models import FindingType
@@ -324,6 +324,7 @@ _DETECTOR_LABELS = {
     FindingType.INPUT_SCHEMA_DRIFT: "Input schema drift (P3)",
     FindingType.SENSITIVE_SOURCE: "Sensitive source (P5)",
     FindingType.DEPRECATED_INPUT: "Deprecated input (P6)",
+    FindingType.TABLE_LEVEL_RISK: "Table-level risk (degraded mode, T-07)",
 }
 
 
@@ -336,6 +337,10 @@ _BOUNDARY_MUTATIONS = {
     FindingType.TARGET_LEAKAGE: (
         "an off-by-one in the hop cap, or matching the label by column name "
         "instead of by declared term"
+    ),
+    FindingType.TABLE_LEVEL_RISK: (
+        "running the degraded mode unconditionally instead of only where no "
+        "column link exists, which reports every linked model twice"
     ),
 }
 
@@ -441,6 +446,51 @@ def _counterfactual_lines(
         "could not be silenced at all would score identically on the line above.",
         "",
     ]
+    return lines
+
+
+def _degraded_precision_lines(approaches: Sequence[ApproachScore]) -> list[str]:
+    """Check the number the product quotes for its degraded mode against this run.
+
+    ``modelguard.config.TABLE_LEVEL_PRECISION`` is printed to a user beside every
+    table-level finding, as that mode's measured precision. The measurement is
+    the table-level baseline above, made here. Those are two copies of one
+    number, so the run compares them and says which it found: a constant that has
+    drifted from the measurement is a product overstating (or understating) its
+    own accuracy to a user, and it should not take a code review to notice.
+
+    Nothing is hand-edited by this (rule 4): the measured value is what gets
+    printed either way, and the constant is quoted as the claim under test.
+    """
+    measured = next(
+        (score for score in approaches if score.approach is baselines.TABLE_LEVEL), None
+    )
+    if measured is None:
+        return []
+
+    precision = measured.matrix.precision
+    agrees = precision is not None and abs(precision - TABLE_LEVEL_PRECISION) < 0.005
+    lines = [
+        "",
+        "### The number the degraded mode quotes about itself",
+        "",
+        "`modelguard scan` offers this same table-level reading for a model nobody has",
+        "linked yet (T-07), and prints its measured precision beside every such finding,",
+        "so the answer arrives with the odds it is wrong. That figure is the table-level",
+        "row above.",
+        "",
+        f"- Measured here: **{metrics.format_rate(precision)}**",
+        "- Quoted by the product (`config.TABLE_LEVEL_PRECISION`): "
+        f"**{TABLE_LEVEL_PRECISION:.2f}**",
+    ]
+    if agrees:
+        lines.append("- The two agree, so the disclosure a user reads is this run's measurement.")
+    else:
+        lines.append(
+            "- **They disagree.** The product is quoting a precision this graph does not "
+            "support; update `TABLE_LEVEL_PRECISION` in modelguard/config.py to the "
+            "measured value above."
+        )
     return lines
 
 
@@ -597,6 +647,7 @@ def render_results(
             "products' own behaviour. The no-lineage row is true by construction rather than",
             "by measurement: leakage is a path, and that approach holds no paths.",
         ]
+        lines += _degraded_precision_lines(approaches)
 
     lines += [
         "",

@@ -1,0 +1,133 @@
+{
+  "metadata": {
+    "adapter_type": "duckdb",
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
+    "dbt_version": "1.12.0",
+    "project_name": "churn_analytics"
+  },
+  "semantic_models": {
+    "semantic_model.churn_analytics.customer_features": {
+      "config": {
+        "enabled": true,
+        "group": null,
+        "meta": {}
+      },
+      "created_at": 1785847402.1558366,
+      "defaults": {
+        "agg_time_dimension": "updated_at"
+      },
+      "depends_on": {
+        "macros": [],
+        "nodes": [
+          "model.churn_analytics.customer_features"
+        ]
+      },
+      "description": "One row per customer, the table churn_model_v1 trains on.",
+      "dimensions": [
+        {
+          "config": {
+            "meta": {}
+          },
+          "description": null,
+          "expr": null,
+          "is_partition": false,
+          "label": null,
+          "metadata": null,
+          "name": "updated_at",
+          "type": "time",
+          "type_params": {
+            "time_granularity": "day",
+            "validity_params": null
+          }
+        }
+      ],
+      "entities": [
+        {
+          "config": {
+            "meta": {}
+          },
+          "description": null,
+          "expr": "customer_id",
+          "label": null,
+          "name": "customer",
+          "role": null,
+          "type": "primary"
+        }
+      ],
+      "fqn": [
+        "churn_analytics",
+        "marts",
+        "customer_features"
+      ],
+      "group": null,
+      "label": null,
+      "measures": [
+        {
+          "agg": "sum",
+          "agg_params": null,
+          "agg_time_dimension": null,
+          "config": {
+            "meta": {}
+          },
+          "create_metric": false,
+          "description": null,
+          "expr": "tenure_months",
+          "label": null,
+          "name": "tenure",
+          "non_additive_dimension": null
+        },
+        {
+          "agg": "sum",
+          "agg_params": null,
+          "agg_time_dimension": null,
+          "config": {
+            "meta": {}
+          },
+          "create_metric": false,
+          "description": null,
+          "expr": null,
+          "label": null,
+          "name": "monthly_charges",
+          "non_additive_dimension": null
+        },
+        {
+          "agg": "sum",
+          "agg_params": null,
+          "agg_time_dimension": null,
+          "config": {
+            "meta": {}
+          },
+          "create_metric": false,
+          "description": null,
+          "expr": null,
+          "label": null,
+          "name": "support_calls",
+          "non_additive_dimension": null
+        }
+      ],
+      "metadata": null,
+      "model": "ref('customer_features')",
+      "name": "customer_features",
+      "node_relation": {
+        "alias": "customer_features",
+        "database": "dev",
+        "relation_name": "\"dev\".\"main\".\"customer_features\"",
+        "schema_name": "main"
+      },
+      "original_file_path": "models/marts/semantic.yml",
+      "package_name": "churn_analytics",
+      "path": "marts/semantic.yml",
+      "primary_entity": null,
+      "refs": [
+        {
+          "name": "customer_features",
+          "package": null,
+          "version": null
+        }
+      ],
+      "resource_type": "semantic_model",
+      "unique_id": "semantic_model.churn_analytics.customer_features",
+      "unrendered_config": {}
+    }
+  }
+}

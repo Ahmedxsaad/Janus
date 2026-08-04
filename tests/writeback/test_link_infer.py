@@ -28,9 +28,10 @@ from datahub.metadata.schema_classes import (
 )
 from datahub.metadata.urns import SchemaFieldUrn
 
+from modelguard.adapters import DeclaredFeature, DeclaredLink
 from modelguard.config import ScanConfig
 from modelguard.writeback.link import LinkError
-from modelguard.writeback.link_infer import InferenceError, infer_link
+from modelguard.writeback.link_infer import InferenceError, declared_proposal, infer_link
 from tests.conftest import (
     FEATURE_TABLE_URN,
     LABEL_COLUMN_URN,
@@ -433,3 +434,94 @@ class TestRenderedCommand:
 
         assert "--features ecommerce.public.customer_features" in command
         assert "--label-column" not in command
+
+
+class TestDeclaredProposal:
+    """The other route to a proposal: a declaration an adapter read off disk.
+
+    The graph half is the interesting part. A declaration names the features
+    positively and `link` takes the complement, so this is where a column that
+    exists in the table but in no declaration has to become an exclusion, and
+    where a declaration that has drifted from the catalog has to stop everything.
+    """
+
+    @staticmethod
+    def _declaration(*columns: str, label: str | None = None) -> DeclaredLink:
+        return DeclaredLink(
+            adapter="feast",
+            name="churn_model_v1",
+            source_table="customer_features",
+            features=tuple(
+                DeclaredFeature(name=column, source_column=column, declared_in="feature view 'v'")
+                for column in columns
+            ),
+            label_column=label,
+            label_table=None,
+            reasons=("read 'churn_model_v1' from the Feast repo at .",),
+        )
+
+    def test_a_column_the_declaration_does_not_name_becomes_an_exclusion(self):
+        graph = _graph(schema=_default_schema())
+        conn = make_connection(graph, FakeClient())
+
+        proposal = declared_proposal(
+            conn,
+            MODEL_URN,
+            self._declaration("applicant_income", "prior_default_flag"),
+            feature_dataset_urn=FEATURE_TABLE_URN,
+            label_dataset_urn=None,
+        )
+
+        # applicant_id is the join key and default_status is the label's column:
+        # neither is declared as a feature, so neither is one.
+        assert proposal.exclude == {"applicant_id", "default_status"}
+        assert proposal.feature_dataset_urn == FEATURE_TABLE_URN
+
+    def test_the_adapter_reasons_are_kept_and_the_exclusion_is_explained(self):
+        conn = make_connection(_graph(schema=_default_schema()), FakeClient())
+
+        proposal = declared_proposal(
+            conn,
+            MODEL_URN,
+            self._declaration("applicant_income"),
+            feature_dataset_urn=FEATURE_TABLE_URN,
+            label_dataset_urn=None,
+        )
+
+        assert proposal.reasons[0] == "read 'churn_model_v1' from the Feast repo at ."
+        assert "excluded columns" in proposal.reasons[-1]
+        assert "prior_default_flag" in proposal.reasons[-1]
+
+    def test_a_declared_label_is_placed_on_the_table_the_caller_resolved(self):
+        conn = make_connection(_graph(schema=_default_schema()), FakeClient())
+
+        proposal = declared_proposal(
+            conn,
+            MODEL_URN,
+            self._declaration("applicant_income", label="default_status"),
+            feature_dataset_urn=FEATURE_TABLE_URN,
+            label_dataset_urn=TABLE_URN,
+        )
+
+        assert proposal.label_column_urn == str(SchemaFieldUrn(TABLE_URN, "default_status"))
+        assert proposal.complete
+
+    def test_a_declaration_the_table_disagrees_with_stops_everything(self):
+        """The failure this exists to prevent is the silent one.
+
+        Linking the intersection would declare the features that still match and
+        leave the renamed one undeclared, so the next scan would report a model
+        it cannot fully see as clean.
+        """
+        conn = make_connection(_graph(schema=_default_schema()), FakeClient())
+
+        with pytest.raises(LinkError) as caught:
+            declared_proposal(
+                conn,
+                MODEL_URN,
+                self._declaration("applicant_income", "tenure_months"),
+                feature_dataset_urn=FEATURE_TABLE_URN,
+                label_dataset_urn=None,
+            )
+
+        assert "tenure_months" in str(caught.value)

@@ -39,6 +39,7 @@ from benchmarks.inject import Trial, await_precondition, restore_baseline
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import blast_radius, finding_for
+from modelguard.detect.degraded import table_level_findings
 from modelguard.detect.governance import deprecated_input_findings, sensitive_source_findings
 from modelguard.detect.leakage import leakage_findings
 from modelguard.detect.schema_drift import schema_drift_findings
@@ -64,6 +65,13 @@ APPLIERS: dict[tuple[FindingType, RemedyKind], Callable[[DataHubConnection], obj
         FindingType.DEPRECATED_INPUT,
         RemedyKind.WITHDRAW_DEPRECATION,
     ): scenarios.revert_deprecated_input,
+    # The degraded mode's first remedy is not a fix to the data at all: declaring
+    # the link is what replaces a table-level maybe with a column-level answer,
+    # and re-declaring the model's features is that write. So this applier is the
+    # one place the benchmark checks that the mode really does stand down once
+    # somebody links the model, rather than adding a second opinion beside the
+    # detector that can prove things.
+    (FindingType.TABLE_LEVEL_RISK, RemedyKind.DECLARE_LINK): scenarios.revert_delinked_model,
 }
 
 
@@ -91,6 +99,8 @@ def findings_for(
         return sensitive_source_findings(conn, str(spec.model_urn()), config)
     if family is FindingType.DEPRECATED_INPUT:
         return deprecated_input_findings(conn, str(spec.model_urn()), config)
+    if family is FindingType.TABLE_LEVEL_RISK:
+        return table_level_findings(conn, str(spec.model_urn()), config, now_ms=now_ms)
     raise ValueError(f"no detector registered for {family}")
 
 

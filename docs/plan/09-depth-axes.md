@@ -88,6 +88,17 @@ Design:
   not connect to the vendor's service.
 - Each is an optional extra (`pip install "modelguard-datahub[feast]"`), following
   the existing `[agent]`, `[mcp]` provider-extra pattern in `pyproject.toml`.
+  Corrected by building it (D-112): *each that needs one*. The dbt adapter reads
+  `target/manifest.json`, which is JSON, so it needs no dependency at all and runs
+  against a manifest on a machine with no dbt.
+- Corrected by building it (D-112): the exclusions are not the adapter's to return.
+  A declaration states the features positively and `link` takes the complement, so
+  the two are joined against the table's real schema, which lives in DataHub and not
+  in the declaration. A declared column the table does not have stops the import
+  rather than being filtered out of it.
+- Corrected by building it (D-112): Feast *can* declare the label, through a label
+  view, and where a repo has one that is the one argument no inference reaches. dbt
+  semantic models declare none, and the adapter says so instead of guessing.
 - `modelguard link --from feast --repo ./feature_repo` proposes exactly the way
   `--infer` proposes today: it prints the derivation, says which adapter and which
   declaration each line came from, and writes nothing until the human answers.
@@ -135,14 +146,31 @@ column lineage, ModelGuard can still say that a model's training table is stale,
 deprecated, or contains a classified column. It cannot say which feature carries it.
 
 This is precisely the `table-level lineage` row of `benchmarks/baselines.py`, offered
-deliberately, with its measured precision printed next to it:
+deliberately, with its measured precision printed next to it. ~~The wording below is
+what was planned; the sentence that shipped is the one after it, corrected by
+building this (D-113).~~
 
-> Checked at table level only (no feature links declared). This mode found 4
+> ~~Checked at table level only (no feature links declared). This mode found 4
 > candidate features; measured precision for this mode is 0.25, so three of those
-> four are expected to be wrong. Run `modelguard link` to resolve which.
+> four are expected to be wrong. Run `modelguard link` to resolve which.~~
+
+Without a link the model's features are not knowable at all, so a candidate-feature
+count would be the *table's* columns presented as the model's inputs. The shipped
+finding names the table and quotes the measurement against the question it answers:
+
+> Checked at table level only (credit_risk_v3 declares no features): the table this
+> model trains on is past its freshness SLA. Which of the model's features carry the
+> stale values is not knowable without a column-level link. Asked which feature
+> carries it, table-level reasoning scores a measured precision of 0.25
+> (benchmarks/RESULTS.md, table-level baseline), which is why this finding names the
+> table and not a feature. Run `modelguard link` to get the column-level answer
+> instead.
 
 That is a tool upselling its own accurate story with its own measured numbers, and it
 means `inventory` on a stranger's catalog returns something actionable immediately.
+The number is `config.TABLE_LEVEL_PRECISION`, and `run_bench` compares it against the
+baseline it measures on every run, so the claim cannot drift from the measurement in
+silence (D-113).
 
 **Verification:** the degraded finding must never write an incident at the same
 severity as a column-level one, and the benchmark must score the two modes

@@ -429,6 +429,20 @@ CROSSWALK: dict[FindingType, CrosswalkRow] = {
         measure_id="MEASURE 2.4",
         manage_id="MANAGE 2.2",
     ),
+    FindingType.TABLE_LEVEL_RISK: CrosswalkRow(
+        detector="Table-level risk (degraded mode, no column link)",
+        evidence=(
+            "An incident on the training table naming the table-level fact, the mode "
+            "that produced it, and that mode's measured precision, so the record "
+            "states how far it can be trusted"
+        ),
+        map_id="MAP 4.1",
+        # MEASURE 2.5 for the same reason the column-level leakage row cites it,
+        # read the other way round: that row documents a limitation of the model,
+        # this one documents a limitation of the measurement.
+        measure_id="MEASURE 2.5",
+        manage_id="MANAGE 4.1",
+    ),
 }
 
 #: Printed above the table, and it is the load-bearing part of the artifact.

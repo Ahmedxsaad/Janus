@@ -44,6 +44,7 @@ from modelguard.models import (
     SchemaDriftFinding,
     SensitiveSourceFinding,
     Severity,
+    TableLevelRiskFinding,
     TrustBand,
     TrustScore,
     severity_rank,
@@ -153,6 +154,17 @@ def trust_inputs_from_findings(
     causes: dict[str, str] = {}
 
     for finding in findings:
+        if isinstance(finding, TableLevelRiskFinding):
+            # Deliberately unscored, and this is the one place it has to be said.
+            # The degraded mode cannot show that this model consumes the affected
+            # column, only that the table it trains on has one, at a measured
+            # precision of 0.25 (config.TABLE_LEVEL_PRECISION). Feeding a maybe
+            # into a number people compare release over release would put three
+            # wrong deductions in every four, and the score's own provenance
+            # sentence already asks readers to compare scores to each other.
+            # It is reported as a finding, tagged, and reported on; it just does
+            # not move the number.
+            continue
         if worst_severity is None or severity_rank(finding.severity) < severity_rank(
             worst_severity
         ):

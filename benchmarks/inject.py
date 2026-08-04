@@ -42,7 +42,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
-from datahub.metadata.schema_classes import DeprecationClass, SchemaMetadataClass
+from datahub.metadata.schema_classes import (
+    DeprecationClass,
+    MLModelPropertiesClass,
+    SchemaMetadataClass,
+)
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
@@ -53,12 +57,14 @@ from modelguard.seed import graph_spec as spec
 from modelguard.seed.scenarios import (
     BACKUP_LABEL_COLUMN,
     SENSITIVE_SOURCE_COLUMN,
+    plant_delinked_model,
     plant_deprecated_input,
     plant_leakage,
     plant_schema_drift,
     plant_second_leak_path,
     plant_sensitive_source,
     plant_stale_source,
+    revert_delinked_model,
     revert_deprecated_input,
     revert_leakage,
     revert_schema_drift,
@@ -409,6 +415,56 @@ def _deprecation_trials() -> tuple[Trial, ...]:
     )
 
 
+def _plant_degraded(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
+    """Deprecate the training input, then take the model's features away or give them back.
+
+    Both trials keep the deprecation in place, so the only thing that changes
+    between them is whether the model can be answered at column level. That is
+    the mode's whole gate, and it is what these two measure: with no features the
+    table-level finding is the only thing anybody can be told; with features it
+    must go quiet and let the column-level detector speak.
+    """
+    plant_deprecated_input(conn)
+    plant_delinked_model(conn) if trial.expected else revert_delinked_model(conn)
+
+
+def _degraded_trials() -> tuple[Trial, ...]:
+    """The degraded mode, both directions (T-07).
+
+    The negative is the one that matters, and it is a boundary rather than a
+    comfortable miss: the graph is *identical* apart from the link, and the table
+    really is deprecated, so a detector that ran this mode unconditionally would
+    report every properly linked model twice, once with proof and once with a
+    maybe.
+    """
+    return (
+        Trial(
+            name="degraded-unlinked",
+            family=FindingType.TABLE_LEVEL_RISK,
+            target=Target.MODEL,
+            expected=True,
+            detail=(
+                "the model declares no features, as it does after every mlflow "
+                "ingest, and the table it trains on is deprecated"
+            ),
+            plant=_plant_degraded,
+            boundary=True,
+        ),
+        Trial(
+            name="degraded-linked",
+            family=FindingType.TABLE_LEVEL_RISK,
+            target=Target.MODEL,
+            expected=False,
+            detail=(
+                "the same deprecated table, with the model's features declared "
+                "again: the column-level detector answers, so this mode must not"
+            ),
+            plant=_plant_degraded,
+            boundary=True,
+        ),
+    )
+
+
 def build_trials(config: ScanConfig) -> tuple[Trial, ...]:
     """Return the whole matrix, in a fixed order.
 
@@ -417,9 +473,19 @@ def build_trials(config: ScanConfig) -> tuple[Trial, ...]:
             benchmark measures the boundary the scan actually enforces rather
             than a number hardcoded here.
     """
+    # The degraded pair sits in the middle rather than at the end, and the reason
+    # is measured rather than aesthetic. It is the only family that rewrites
+    # mlModelProperties.mlFeatures, which is the last edge of the blast-radius
+    # traversal run_bench measures straight after the matrix. Left last, that
+    # walk read a relationship index still catching up and reported 0 of 1 models
+    # on a graph that plainly held one. Waiting for the model to reappear would
+    # have been waiting for the answer, which rule 7 forbids precisely because it
+    # would manufacture that recall, so the churn moves instead and the families
+    # after it give the index their own preconditions' worth of time.
     return (
         _freshness_trials(config.freshness_sla_hours)
         + _leakage_trials()
+        + _degraded_trials()
         + _drift_trials()
         + _sensitive_trials()
         + _deprecation_trials()
@@ -507,12 +573,28 @@ def _deprecation_visible(
     return deprecated == trial.expected
 
 
+def _degraded_visible(
+    conn: DataHubConnection, trial: Trial, config: ScanConfig, now_ms: int
+) -> bool:
+    """Whether the model's link is in the state this trial planted, deprecation and all.
+
+    Both halves are checked, because both are planted: a trial that waited only
+    on the features could ask the detector its question before the deprecation
+    the answer depends on had landed.
+    """
+    properties = conn.graph.get_aspect(str(spec.model_urn()), MLModelPropertiesClass)
+    unlinked = properties is None or not properties.mlFeatures
+    aspect = conn.graph.get_aspect(str(spec.feature_table_dataset_urn()), DeprecationClass)
+    return unlinked == trial.expected and bool(aspect and aspect.deprecated)
+
+
 _VISIBILITY: dict[FindingType, Callable[[DataHubConnection, Trial, ScanConfig, int], bool]] = {
     FindingType.UPSTREAM_FRESHNESS: _freshness_visible,
     FindingType.TARGET_LEAKAGE: _leakage_visible,
     FindingType.INPUT_SCHEMA_DRIFT: _drift_visible,
     FindingType.SENSITIVE_SOURCE: _sensitive_visible,
     FindingType.DEPRECATED_INPUT: _deprecation_visible,
+    FindingType.TABLE_LEVEL_RISK: _degraded_visible,
 }
 
 
@@ -558,3 +640,7 @@ def restore_baseline(conn: DataHubConnection, *, now_ms: int | None = None) -> N
     # is the exception because it *is* the seeded baseline (D-032).
     revert_sensitive_source(conn)
     revert_deprecated_input(conn)
+    # The link is part of the seeded baseline, not an anomaly: a benchmark that
+    # left the model unlinked would leave every column-level detector with
+    # nothing to read, and the next run would score them all as silent.
+    revert_delinked_model(conn)

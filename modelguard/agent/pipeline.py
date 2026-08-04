@@ -54,6 +54,7 @@ from modelguard.detect.blast_radius import (
     freshness_signal,
 )
 from modelguard.detect.coverage import Unevaluated, coverage_gaps
+from modelguard.detect.degraded import table_level_findings
 from modelguard.detect.governance import (
     deprecated_input_findings,
     model_input_datasets,
@@ -522,6 +523,10 @@ def _detect(
         findings.extend(schema_drift_findings(conn, model_urn, config))
         findings.extend(sensitive_source_findings(conn, model_urn, config))
         findings.extend(deprecated_input_findings(conn, model_urn, config))
+        # Last, and it returns nothing at all unless the four above had no column
+        # link to read. The degraded mode is what a scan can say instead of
+        # silence, never something it says as well (09 section 1.3, T-07).
+        findings.extend(table_level_findings(conn, model_urn, config, now_ms=observed_at))
 
     findings.sort(key=lambda finding: severity_rank(finding.severity))
     gaps = coverage_gaps(

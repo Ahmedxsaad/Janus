@@ -227,44 +227,87 @@ no edge from an incident to a process instance.
 09 section 1.0: every new detector multiplies a coverage number that is near zero on
 a stranger's catalog. This phase is worth more than any new check.
 
-### T-05 The adapter framework and the Feast adapter (09 section 1.1)
+### T-05 The adapter framework and the Feast adapter (09 section 1.1) [done, D-112]
 
-- [ ] New package `modelguard/adapters/`, with its own `CLAUDE.md` stating the local
+- [x] New package `modelguard/adapters/`, with its own `CLAUDE.md` stating the local
       rule: adapters are read-only, offline, and parse a declaration; they never
       connect to a vendor service.
-- [ ] One function per adapter returning exactly what `link` already takes:
+- [x] One function per adapter returning exactly what `link` already takes:
       `(feature_name, source_column)` pairs, the label column, the exclusions.
-- [ ] Feast adapter first (cleanest declaration). `datahub.ingestion.source.feast`
+      ~~the exclusions~~: a declaration states the features positively, and `link`
+      takes the complement, so the exclusions are the join of the two against the
+      table's real schema. That join is `excluded_columns` plus
+      `link_infer.declared_proposal`, not the adapter, which cannot see a schema.
+- [x] Feast adapter first (cleanest declaration). `datahub.ingestion.source.feast`
       ships with acryl-datahub `[verified]`; `feast` itself does not `[verified]`, so
-      it is an extra.
-- [ ] `feast` extra in `pyproject.toml`, following the `[agent]` / `[mcp]` pattern.
+      it is an extra. DataHub's own source is not used: it builds catalog entities,
+      where this needs the declaration.
+- [x] `feast` extra in `pyproject.toml`, following the `[agent]` / `[mcp]` pattern.
       Add to the `dev` extra too, so a clean clone does not silently skip its tests.
-- [ ] `modelguard link --from feast --repo ./feature_repo` proposes the way `--infer`
+      Floored at `>=0.65`, the version verified, because the label view the adapter
+      reads is recent.
+- [x] `modelguard link --from feast --repo ./feature_repo` proposes the way `--infer`
       does: prints each line with which declaration it came from, writes nothing
-      until the human answers.
-- [ ] A minimal Feast repo in `examples/` as the fixture.
+      until the human answers. `--select` names the feature service when a repo
+      declares several; `--from` refuses to run with `--infer` or `--all`.
+- [x] A minimal Feast repo in `examples/feature-repo/` as the fixture.
+- [x] Three things the build corrected (D-112): `parse_repo` resolves module names
+      relative to the working directory, so the adapter runs it inside the repo the
+      way Feast's own CLI does; a `FeatureService` is the unit of selection, because
+      it is what names the set one model trains on; and a Feast repo *can* declare
+      the label, through a label view, which is the one argument no inference reaches.
 
 Done when: importing the example repo produces a link byte-identical to the one a
-human would have typed, asserted in a test.
+human would have typed, asserted in a test. Asserted on the rendered command, all
+seven lines of it, in `tests/test_cli.py`.
 
-### T-06 The dbt semantic-model adapter (09 section 1.1)
+### T-06 The dbt semantic-model adapter (09 section 1.1) [done, D-112]
 
-- [ ] `[confirm]` the `semantic_model` manifest schema against the dbt version in
-      `examples/real-project/` before writing code.
-- [ ] Same interface as T-05. No new CLI surface, only a new `--from` value.
+- [x] `[confirm]` the `semantic_model` manifest schema against the dbt version in
+      `examples/real-project/` before writing code. Resolved by parsing a project
+      that declares one with dbt-core 1.12.0 (manifest schema v12) and reading the
+      artifact: `semantic_models` keyed by unique id, each with `node_relation`,
+      `entities`, `dimensions`, `measures`. The trimmed real artifact is the test
+      fixture. `examples/real-project/` pins no dbt version and declares no semantic
+      model, so current dbt-core is what it was confirmed against.
+- [x] Same interface as T-05. No new CLI surface, only a new `--from` value. And no
+      new dependency either: a manifest is JSON, so this one needs no extra at all
+      and works against a manifest somebody sent you.
+- [x] A measure whose `expr` is an expression rather than a column names no single
+      source column, and is reported as unread rather than parsed.
 
-### T-07 Table-level degraded mode (09 section 1.3)
+### T-07 Table-level degraded mode (09 section 1.3) [done, D-113]
 
-- [ ] A distinct finding type, never the same severity as a column-level finding.
-- [ ] Output states the mode and its **measured** precision from
+- [x] A distinct finding type, never the same severity as a column-level finding.
+      `FindingType.TABLE_LEVEL_RISK`, capped at MEDIUM, and it contributes nothing
+      to the trust score at all: a maybe must not move a number people compare
+      release over release.
+- [x] Output states the mode and its **measured** precision from
       `benchmarks/baselines.py`, so the tool upsells the column-level story with its
-      own numbers rather than with a claim.
-- [ ] `inventory` uses it, so a stranger's catalog returns something actionable on
-      day one instead of a wall of "not checked".
-- [ ] The benchmark scores the two modes separately (benchmarks/CLAUDE.md rule 2).
+      own numbers rather than with a claim. The number is quoted with the question
+      it answers attached, which is not 09's illustrative wording: this finding
+      names no candidate feature, so it says that table-level reasoning *asked which
+      feature carries it* scores 0.25, which is why it names the table. 09 section
+      1.3 is corrected in place per docs/CLAUDE.md rule 1.
+- [x] `inventory` uses it, so a stranger's catalog returns something actionable on
+      day one instead of a wall of "not checked". A model whose findings are all
+      table-level still counts as unlinked there, so the link advice survives.
+- [x] The benchmark scores the two modes separately (benchmarks/CLAUDE.md rule 2):
+      its own row in the detection table, from a positive and a negative trial that
+      differ only in whether the model is linked, and both marked boundary trials.
+- [x] Run it. 25 trials all correct, the degraded row at 1.00/1.00, three
+      integration tests including the idempotency rerun. One ordering correction:
+      the degraded trials are the only ones that rewrite `mlFeatures`, the last edge
+      of the blast-radius traversal measured next, so they moved into the middle of
+      the matrix rather than the walk being taught to wait for its own answer.
 
-Files: `modelguard/detect/`, `modelguard/models.py`, `modelguard/detect/coverage.py`,
-`benchmarks/inject.py`.
+Files: `modelguard/detect/degraded.py`, `modelguard/models.py`, `modelguard/config.py`,
+`modelguard/cli.py`, `modelguard/agent/pipeline.py`, `modelguard/agent/narrate.py`,
+`modelguard/writeback/documents.py`, `modelguard/detect/trust_score.py`,
+`modelguard/render.py`, `modelguard/seed/scenarios.py`, `benchmarks/inject.py`,
+`benchmarks/counterfactuals.py`, `benchmarks/run_bench.py`. ~~`detect/coverage.py`~~:
+a check that ran at table level is still a column-level check that did not run, so
+its report is unchanged and the mode's own finding carries the disclosure.
 
 ---
 

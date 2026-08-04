@@ -42,6 +42,7 @@ __all__ = [
     "ENV_SENSITIVE_TERM_URNS",
     "SCORE_PROVENANCE",
     "SCORING_VERSION",
+    "TABLE_LEVEL_PRECISION",
     "ConfigError",
     "ScanConfig",
 ]
@@ -76,6 +77,20 @@ SCORE_PROVENANCE = (
     "The weights behind this score are a stated preference ordering, not a "
     "calibrated model. Compare scores to each other, not to a threshold."
 )
+
+#: Measured precision of the table-level degraded mode, quoted wherever one of
+#: its findings is shown (:class:`~modelguard.models.TableLevelRiskFinding`).
+#:
+#: Not a knob and not an estimate: it is the precision ``benchmarks/baselines.py``
+#: measures for the table-level approach on the seeded graph, published in
+#: benchmarks/RESULTS.md. ``benchmarks/run_bench.py`` compares this constant
+#: against what it just measured on every run and says so in RESULTS.md, so a
+#: stale number here is reported rather than quietly repeated.
+#:
+#: A fact about the code, like SCORING_VERSION above, so it is not overridable
+#: from the environment: a tool that let an operator dial up the confidence it
+#: claims for itself would be worse than one that claimed none.
+TABLE_LEVEL_PRECISION = 0.25
 
 ENV_FRESHNESS_SLA_HOURS = "MODELGUARD_FRESHNESS_SLA_HOURS"
 ENV_MAX_HOPS = "MODELGUARD_MAX_HOPS"

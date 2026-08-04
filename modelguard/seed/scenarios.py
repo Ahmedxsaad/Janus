@@ -33,6 +33,7 @@ from datahub.metadata.schema_classes import (
     DeprecationClass,
     FineGrainedLineageClass,
     GlobalTagsClass,
+    MLModelPropertiesClass,
     OperationClass,
     OperationTypeClass,
     TagAssociationClass,
@@ -76,6 +77,12 @@ SECOND_LEAK_PATH = "second-leak-path"
 #: the models trained on it.
 SENSITIVE_SOURCE = "sensitive-source"
 DEPRECATED_INPUT = "deprecated-input"
+
+#: The degraded-mode scenario (T-07): the model stops declaring its features, the
+#: way it does after every mlflow ingest (D-074). Not a fault in the data at all,
+#: which is the point: it is the state a stranger's catalog is in on day one, and
+#: the only one where the table-level mode is allowed to speak.
+DELINKED_MODEL = "delinked-model"
 
 #: The tag the sensitive-source scenario applies to the label's own source table
 #: column. A tag rather than a glossary term on purpose: the leakage detector
@@ -623,6 +630,50 @@ def plant_deprecated_input(conn: DataHubConnection) -> GovernanceResult:
 def revert_deprecated_input(conn: DataHubConnection) -> GovernanceResult:
     """Withdraw the deprecation, the way a team that changed its mind would."""
     return _set_deprecation(conn, deprecated=False)
+
+
+def _set_model_features(conn: DataHubConnection, *, declared: bool) -> GovernanceResult:
+    """Drop the model's declared features, or put them back.
+
+    This is not a failure somebody plants; it is what an ordinary ingestion run
+    does. DataHub's mlflow source upserts the whole ``mlModelProperties`` aspect
+    and the features ``modelguard link`` attached are gone with it (verified live,
+    D-074). Reproducing it here is what gives the degraded mode (T-07) a graph to
+    be measured on: with the features present the column-level detectors answer,
+    and with them absent they cannot, which is the exact boundary the mode is
+    gated on.
+
+    Read-merge-emit like every other write in this project: only ``mlFeatures``
+    changes, so the training runs and the deployment that decide severity survive.
+    """
+    model_urn = str(spec.model_urn())
+    properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
+    if properties is None:
+        raise RuntimeError(
+            f"{model_urn} has no mlModelProperties; run modelguard-seed before this scenario."
+        )
+    properties.mlFeatures = (
+        [str(spec.feature_urn(name)) for name in spec.MODEL_FEATURES] if declared else []
+    )
+    conn.graph.emit(MetadataChangeProposalWrapper(entityUrn=model_urn, aspect=properties))
+    return GovernanceResult(
+        name=DELINKED_MODEL,
+        resource_urn=model_urn,
+        declared=not declared,
+        detail=(
+            "" if declared else "the model declares no features, so only table-level checks can run"
+        ),
+    )
+
+
+def plant_delinked_model(conn: DataHubConnection) -> GovernanceResult:
+    """Strip the model's features, the way the next mlflow ingest will."""
+    return _set_model_features(conn, declared=False)
+
+
+def revert_delinked_model(conn: DataHubConnection) -> GovernanceResult:
+    """Re-declare the model's features, the way ``modelguard link --all`` does."""
+    return _set_model_features(conn, declared=True)
 
 
 def _drifted_columns() -> tuple[spec.Column, ...]:

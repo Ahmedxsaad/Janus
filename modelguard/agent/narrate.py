@@ -65,6 +65,7 @@ from modelguard.models import (
     LeakageFinding,
     SchemaDriftFinding,
     SensitiveSourceFinding,
+    TableLevelRiskFinding,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,18 @@ _SENSITIVE_EXTRA = """\
 - If the model is live, say plainly that the exposure is in production today.
 """
 
+_TABLE_LEVEL_SUBJECT = (
+    "a table-level observation about a model nobody has linked to its columns: "
+    "the training table has a problem, and which feature carries it is unknown"
+)
+_TABLE_LEVEL_EXTRA = """\
+- Say plainly that this was checked at table level only, and that it cannot name
+  the feature. Never write it as if the model were known to be affected.
+- Quote the mode's measured precision from the evidence exactly, and say what it
+  means: at that rate the answer is wrong.
+- End on declaring the link, which is what replaces this with a real answer.
+"""
+
 _DEPRECATED_SUBJECT = "a model trained on a table whose own owners have marked it deprecated"
 _DEPRECATED_EXTRA = """\
 - This is a deadline, not a defect: say clearly that nothing is broken yet.
@@ -189,6 +202,11 @@ def _sensitive_prompt(finding: SensitiveSourceFinding) -> str:
 @_system_prompt.register
 def _deprecated_prompt(finding: DeprecatedInputFinding) -> str:
     return _SYSTEM_PREAMBLE.format(subject=_DEPRECATED_SUBJECT, extra=_DEPRECATED_EXTRA)
+
+
+@_system_prompt.register
+def _table_level_prompt(finding: TableLevelRiskFinding) -> str:
+    return _SYSTEM_PREAMBLE.format(subject=_TABLE_LEVEL_SUBJECT, extra=_TABLE_LEVEL_EXTRA)
 
 
 @singledispatch
@@ -316,6 +334,25 @@ def _deprecated_facts(finding: DeprecatedInputFinding) -> str:
         "flag and the model's recorded training inputs; it did not read the data.",
     ]
     return "\n".join(lines)
+
+
+@fact_block.register
+def _table_level_facts(finding: TableLevelRiskFinding) -> str:
+    model = finding.model
+    measured = "\n".join(f"{key}: {value}" for key, value in sorted(finding.measurement.items()))
+    return "\n".join(
+        [
+            f"{finding.dataset_name} is {finding.risk} and {model.name} is trained on "
+            "it, per the inputs recorded on its training run.",
+            "",
+            measured,
+            "",
+            f"Model affected: {model.name} "
+            f"[{finding.severity}] {'live' if model.is_live else 'not serving'}.",
+            "",
+            finding.mode_note,
+        ]
+    )
 
 
 @singledispatch
@@ -453,6 +490,24 @@ def _deprecated_template(finding: DeprecatedInputFinding) -> str:
     )
 
 
+@template_narrative.register
+def _table_level_template(finding: TableLevelRiskFinding) -> str:
+    model = finding.model
+    serving = (
+        f"{model.name} is behind a live endpoint, so whatever this table carries is "
+        "reaching production today."
+        if model.is_live
+        else f"{model.name} is not currently serving."
+    )
+    return (
+        f"{finding.dataset_name}, one of the tables {model.name} is trained on, is "
+        f"{finding.risk}. {serving} This was checked at table level only, because "
+        f"{model.name} declares no features, so ModelGuard cannot say which of the "
+        "model's inputs carries the problem, or whether any of them does. "
+        f"{finding.mode_note}"
+    )
+
+
 @singledispatch
 def _evidence_detail(finding: Finding) -> str:
     """Render the per-type detail the evidence mapping cannot carry.
@@ -512,6 +567,16 @@ def _sensitive_detail(finding: SensitiveSourceFinding) -> str:
 def _deprecated_detail(finding: DeprecatedInputFinding) -> str:
     model = finding.model
     return (
+        f"\n\nmodels:\n- name={model.name!r} severity={finding.severity} "
+        f"live={model.is_live} owned={model.has_owner}"
+    )
+
+
+@_evidence_detail.register
+def _table_level_detail(finding: TableLevelRiskFinding) -> str:
+    model = finding.model
+    return (
+        f"\n\nmode: table-level, precision {finding.precision:.2f}"
         f"\n\nmodels:\n- name={model.name!r} severity={finding.severity} "
         f"live={model.is_live} owned={model.has_owner}"
     )

@@ -858,6 +858,7 @@ MODELGUARD_LABEL_TERM_URN=              # honor your existing label term
     <tr><td>Input schema drift</td><td>A schema incident naming every column added, removed or retyped since the training-time snapshot recorded on the training run</td><td><code>MAP 2.3</code></td><td><code>MEASURE 2.3</code></td><td><code>MANAGE 4.1</code></td></tr>
     <tr><td>Sensitive source</td><td>A field incident naming the classification the organization applied and the path from the classified column to the feature that carries it</td><td><code>MAP 4.1</code></td><td><code>MEASURE 2.10</code></td><td><code>MANAGE 2.3</code></td></tr>
     <tr><td>Deprecated input</td><td>An incident on the deprecated dataset, quoting its owners' own note and decommission date, against the models still training on it</td><td><code>MAP 4.2</code></td><td><code>MEASURE 2.4</code></td><td><code>MANAGE 2.2</code></td></tr>
+    <tr><td>Table-level risk (degraded mode, no column link)</td><td>An incident on the training table naming the table-level fact, the mode that produced it, and that mode's measured precision, so the record states how far it can be trusted</td><td><code>MAP 4.1</code></td><td><code>MEASURE 2.5</code></td><td><code>MANAGE 4.1</code></td></tr>
   </table>
   <p>The subcategories cited above, quoted from the NIST AI RMF 1.0 Playbook:</p>
   <ul>
