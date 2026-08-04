@@ -59,6 +59,8 @@ from modelguard.agent.pipeline import (
     _persist_trust,
     _project_trust_history,
     _reconcile_stale_findings,
+    _record_reads,
+    _record_writes,
     _trust_scores,
     _with_previous_scores,
     _write_back,
@@ -72,6 +74,7 @@ from modelguard.llm import LLMConfig
 from modelguard.logs import logfmt, phase
 from modelguard.models import Finding
 from modelguard.writeback.assertions import render_assertion_yaml
+from modelguard.writeback.process_instance import scan_run
 
 logger = logging.getLogger(__name__)
 
@@ -224,36 +227,53 @@ def build_scan_graph(
         is reached with no findings too, which is the recovery case, a target
         whose problem is fixed still has an incident, a tag, and a trust score to
         clear (D-070).
+
+        The process instance is opened here rather than at the start of the graph,
+        because on this path nothing before approval writes anything: a declined
+        run wrote nothing and emitting a run for it would put a process in the
+        graph whose outputs are empty by design and indistinguishable from a
+        crashed one.
         """
-        trust_history = _project_trust_history(conn, artifacts.trust, run_id)
-        trust_by_model = {write.model_urn: write.score for write in artifacts.trust}
-        writes = tuple(
-            _write_back(
-                conn,
-                finding,
-                narrative,
-                config,
-                run_id,
-                observed_at,
-                trust_history,
-                trust_by_model,
-            )
-            for finding, narrative in zip(artifacts.findings, artifacts.narratives, strict=True)
-        )
-        # Assigned on the holder, not rebound: `artifacts` is the closure's
-        # in-process carrier, and rebinding the name here would make it a local
-        # and drop everything the earlier nodes put on it.
-        artifacts.trust = _with_previous_scores(artifacts.trust, trust_history)
-        _persist_trust(conn, artifacts.trust, trust_history)
-        _reconcile_stale_findings(
+        with scan_run(
             conn,
-            config,
+            run_id,
+            started_at_ms=observed_at,
+            dry_run=False,
             table_urn=table_urn,
             model_urn=model_urn,
-            findings=artifacts.findings,
-            run_id=run_id,
-            observed_at=observed_at,
-        )
+        ) as run:
+            _record_reads(run, artifacts.findings)
+            trust_history = _project_trust_history(conn, artifacts.trust, run_id)
+            trust_by_model = {write.model_urn: write.score for write in artifacts.trust}
+            writes = tuple(
+                _write_back(
+                    conn,
+                    finding,
+                    narrative,
+                    config,
+                    run_id,
+                    observed_at,
+                    trust_history,
+                    trust_by_model,
+                )
+                for finding, narrative in zip(artifacts.findings, artifacts.narratives, strict=True)
+            )
+            # Assigned on the holder, not rebound: `artifacts` is the closure's
+            # in-process carrier, and rebinding the name here would make it a local
+            # and drop everything the earlier nodes put on it.
+            artifacts.trust = _with_previous_scores(artifacts.trust, trust_history)
+            _persist_trust(conn, artifacts.trust, trust_history)
+            _record_writes(run, writes, artifacts.trust)
+            _reconcile_stale_findings(
+                conn,
+                config,
+                table_urn=table_urn,
+                model_urn=model_urn,
+                findings=artifacts.findings,
+                run_id=run_id,
+                observed_at=observed_at,
+                run=run,
+            )
         artifacts.report = ScanReport(
             run_id=run_id,
             table_urn=table_urn,

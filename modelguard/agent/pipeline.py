@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 from datahub.metadata.schema_classes import (
@@ -91,6 +91,7 @@ from modelguard.writeback.incidents import (
     resolve_incident,
 )
 from modelguard.writeback.labels import add_tag, ensure_tag, remove_tag
+from modelguard.writeback.process_instance import ScanRun, scan_run
 from modelguard.writeback.properties import (
     OPEN_LEAK_COLUMNS,
     RISK_FLAGS,
@@ -352,6 +353,41 @@ def _trust_scores(findings: list[Finding], config: ScanConfig) -> tuple[TrustWri
     return tuple(sorted(trust_writes, key=lambda w: (w.score.value, w.model_urn)))
 
 
+def _record_reads(run: ScanRun, findings: Sequence[Finding]) -> None:
+    """Record on the run the entities the detectors resolved out of the graph.
+
+    Deliberately the entities a finding *names*, not a trace of every read: a full
+    trace would mean threading a recorder through every lineage walk in ``detect/``
+    for an input list nobody could use. What a reader of the run needs is the set
+    of entities that explain its outputs, and that is this set plus the targets
+    :func:`start_scan_run` already recorded.
+    """
+    for finding in findings:
+        run.read(finding.resource_urn, *(model.urn for model in finding.models_at_risk))
+
+
+def _record_writes(
+    run: ScanRun,
+    writes: Sequence[FindingWrites],
+    trust: Sequence[TrustWrite],
+) -> None:
+    """Record on the run every entity this scan's findings wrote to.
+
+    Reconciliation records its own writes as it makes them: a recovery happens
+    after this and may touch entities no finding in this run named.
+    """
+    for write in writes:
+        run.wrote(
+            write.finding.resource_urn,
+            write.incident.urn if write.incident is not None else None,
+            write.assertion.urn if write.assertion is not None else None,
+            *write.tagged_models,
+            *write.termed_features,
+            *(document.urn for document in write.documents),
+        )
+    run.wrote(*(trust_write.model_urn for trust_write in trust))
+
+
 def _project_trust_history(
     conn: DataHubConnection, trust_writes: tuple[TrustWrite, ...], run_id: str
 ) -> dict[str, tuple[TrustEntry, ...]]:
@@ -509,7 +545,7 @@ def _record_recovered_assertion(
     table_urn: str,
     run_id: str,
     observed_at: int,
-) -> None:
+) -> str | None:
     """Write the passing run event for a table that is no longer stale.
 
     The guarding assertion's latest run event is the FAILURE recorded when the
@@ -526,10 +562,13 @@ def _record_recovered_assertion(
     Does nothing when the table reports no ``operation`` aspect: with no signal
     there is no measurement to record, and inventing one would assert a lag that
     was never observed.
+
+    Returns:
+        The assertion that was written, or None when nothing was.
     """
     signal = freshness_signal(conn, table_urn, config, now_ms=observed_at)
     if signal is None:
-        return
+        return None
     assertion = upsert_guarding_assertion(
         conn,
         table_urn=table_urn,
@@ -538,6 +577,7 @@ def _record_recovered_assertion(
         created_ms=observed_at,
     )
     record_assertion_result(conn, assertion_urn=assertion.urn, signal=signal, run_id=run_id)
+    return assertion.urn
 
 
 def _recorded_leak_columns(conn: DataHubConnection, model_urn: str) -> tuple[str, ...]:
@@ -609,6 +649,7 @@ def _reconcile_stale_findings(
     findings: list[Finding],
     run_id: str,
     observed_at: int,
+    run: ScanRun,
 ) -> None:
     """Resolve any stale ModelGuard incident and clear the risk it named.
 
@@ -627,6 +668,11 @@ def _reconcile_stale_findings(
     Called only from ``run_scan``'s write path: resolving an incident is a
     write, so a dry run (including ``gate`` without ``--write``) must never
     reach this.
+
+    Every write it makes is recorded on ``run``. A recovery-only scan is clean and
+    produces no findings at all, so without this its process instance would report
+    no outputs while having resolved an incident, which is the one shape of
+    "silently did something" the process instance exists to remove.
     """
     # Keyed by finding type, not by (resource, incident_type) alone. Leakage and
     # a sensitive source both raise a FIELD incident on the same column, so a
@@ -658,7 +704,11 @@ def _reconcile_stale_findings(
         incident = find_active_incident(conn, table_urn, "FRESHNESS", title)
         if incident is not None:
             resolve_incident(conn, incident, _recovery_message(run_id))
-            _record_recovered_assertion(conn, config, table_urn, run_id, observed_at)
+            run.wrote(
+                table_urn,
+                incident,
+                _record_recovered_assertion(conn, config, table_urn, run_id, observed_at),
+            )
             for at_risk in downstream_models(conn, table_urn, config):
                 record(at_risk, FindingType.UPSTREAM_FRESHNESS)
 
@@ -702,10 +752,12 @@ def _reconcile_stale_findings(
                 prefix = f"Target leakage: {field_path} derives from label "
                 for incident_urn in _active_incidents_titled(conn, source_column, prefix):
                     resolve_incident(conn, incident_urn, _recovery_message(run_id))
+                    run.wrote(source_column, incident_urn)
                     if known_feature_urn is not None:
                         # Only a feature that still exists can have its risk term
                         # taken back off; a deleted one has nothing left to clear.
                         remove_term(conn, known_feature_urn, config.leakage_risk_term_urn)
+                        run.wrote(known_feature_urn)
                     record(model, FindingType.TARGET_LEAKAGE)
 
             # A sensitive source is the same walk over the same columns with a
@@ -719,9 +771,11 @@ def _reconcile_stale_findings(
                 prefix = f"Sensitive source: {field_path} derives from "
                 for incident_urn in _active_incidents_titled(conn, source_column, prefix):
                     resolve_incident(conn, incident_urn, _recovery_message(run_id))
+                    run.wrote(source_column, incident_urn)
                     record(model, FindingType.SENSITIVE_SOURCE)
 
         _record_leak_columns(conn, model_urn, findings)
+        run.wrote(model_urn)
 
         # Schema drift: every training input with a captured snapshot, title
         # fully known (no measurement in it), so this reuses the exact dedup
@@ -736,6 +790,7 @@ def _reconcile_stale_findings(
             incident = find_active_incident(conn, dataset_urn, "DATA_SCHEMA", title)
             if incident is not None:
                 resolve_incident(conn, incident, _recovery_message(run_id))
+                run.wrote(dataset_urn, incident)
                 record(model, FindingType.INPUT_SCHEMA_DRIFT)
 
         # A deprecation that was lifted. DataHub records that as the aspect with
@@ -752,6 +807,7 @@ def _reconcile_stale_findings(
             incident = find_active_incident(conn, dataset_urn, "OPERATIONAL", title)
             if incident is not None:
                 resolve_incident(conn, incident, _recovery_message(run_id))
+                run.wrote(dataset_urn, incident)
                 record(model, FindingType.DEPRECATED_INPUT)
 
     # A risk flag is a finding type, but a model can carry one type from several
@@ -776,6 +832,7 @@ def _reconcile_stale_findings(
             continue
         existing_flags = {str(flag) for flag in read_properties(conn, urn).get(RISK_FLAGS, [])}
         remaining = existing_flags - cleared
+        run.wrote(urn)
         if remaining:
             # Flags only. The trust score is deliberately left alone: scoring the
             # remaining flags would need the findings behind them, which a scan
@@ -887,104 +944,125 @@ def run_scan(
     # perf_counter, not the clock: this measures an elapsed duration, and the
     # wall clock can step sideways under NTP mid-scan.
     started = time.perf_counter()
-    findings, warnings, gaps = _detect(conn, config, table_urn, model_urn, observed_at)
-    detect_seconds = time.perf_counter() - started
 
-    # Rendered either way: a dry run must be able to show the assertion it would
-    # have written. Only meaningful for a table target.
-    assertion_yaml = (
-        render_assertion_yaml(table_urn, config.freshness_sla_hours, config.freshness_field)
-        if table_urn is not None
-        else ""
-    )
+    # Everything below happens inside the run, including detection: a scan that
+    # dies working out what is wrong failed just as much as one that dies writing
+    # it down, and both must leave a FAILURE run event rather than nothing. On a
+    # dry run the context manager is inert and emits no entity at all.
+    with scan_run(
+        conn,
+        run_id,
+        started_at_ms=observed_at,
+        dry_run=dry_run,
+        table_urn=table_urn,
+        model_urn=model_urn,
+    ) as run:
+        # A second clock, started after the run was declared: `detect_ms` is the
+        # number an MTTD budget is built from, and folding the run's own three
+        # emits into it would charge detection for bookkeeping it did not do.
+        # `started` still spans the whole scan, which is what `total_ms` reports.
+        detect_started = time.perf_counter()
+        findings, warnings, gaps = _detect(conn, config, table_urn, model_urn, observed_at)
+        detect_seconds = time.perf_counter() - detect_started
+        _record_reads(run, findings)
 
-    trust = _trust_scores(findings, config)
+        # Rendered either way: a dry run must be able to show the assertion it would
+        # have written. Only meaningful for a table target.
+        assertion_yaml = (
+            render_assertion_yaml(table_urn, config.freshness_sla_hours, config.freshness_field)
+            if table_urn is not None
+            else ""
+        )
 
-    if dry_run:
+        trust = _trust_scores(findings, config)
+
+        if dry_run:
+            _log_scan(
+                run_id,
+                table_urn=table_urn,
+                model_urn=model_urn,
+                dry_run=True,
+                findings=len(findings),
+                warnings=len(warnings),
+                writes=0,
+                detect_seconds=detect_seconds,
+                total_seconds=time.perf_counter() - started,
+            )
+            return ScanReport(
+                run_id=run_id,
+                table_urn=table_urn,
+                model_urn=model_urn,
+                dry_run=True,
+                writes=tuple(
+                    FindingWrites(finding=finding, narrative=narrate(finding, llm))
+                    for finding in findings
+                ),
+                trust=trust,
+                assertion_yaml=assertion_yaml,
+                warnings=tuple(warnings),
+                not_evaluated=gaps,
+            )
+
+        # Projected before anything is written, so the impact report each finding
+        # publishes can carry the same trend the graph will hold a moment later.
+        trust_history = _project_trust_history(conn, trust, run_id)
+        # The same score objects that are about to be persisted, so a report's
+        # waterfall and the model's own property describe one computation.
+        trust_by_model = {write.model_urn: write.score for write in trust}
+
+        writes = tuple(
+            _write_back(
+                conn,
+                finding,
+                narrate(finding, llm),
+                config,
+                run_id,
+                observed_at,
+                trust_history,
+                trust_by_model,
+            )
+            for finding in findings
+        )
+        # After every per-finding write, so each model's risk flags are already on the
+        # graph when the trust score reads and merges alongside them.
+        trust = _with_previous_scores(trust, trust_history)
+        _persist_trust(conn, trust, trust_history)
+        _record_writes(run, writes, trust)
+
+        # After this run's own writes, so reconciliation reads risk flags that
+        # already include anything just raised above, and never fights the write
+        # it is standing next to.
+        _reconcile_stale_findings(
+            conn,
+            config,
+            table_urn=table_urn,
+            model_urn=model_urn,
+            findings=findings,
+            run_id=run_id,
+            observed_at=observed_at,
+            run=run,
+        )
+
         _log_scan(
             run_id,
             table_urn=table_urn,
             model_urn=model_urn,
-            dry_run=True,
+            dry_run=False,
             findings=len(findings),
             warnings=len(warnings),
-            writes=0,
+            writes=len(writes),
             detect_seconds=detect_seconds,
             total_seconds=time.perf_counter() - started,
         )
+
         return ScanReport(
             run_id=run_id,
             table_urn=table_urn,
             model_urn=model_urn,
-            dry_run=True,
-            writes=tuple(
-                FindingWrites(finding=finding, narrative=narrate(finding, llm))
-                for finding in findings
-            ),
+            dry_run=False,
+            writes=writes,
             trust=trust,
-            assertion_yaml=assertion_yaml,
+            assertion_yaml=written_assertion_yaml(writes),
             warnings=tuple(warnings),
             not_evaluated=gaps,
         )
-
-    # Projected before anything is written, so the impact report each finding
-    # publishes can carry the same trend the graph will hold a moment later.
-    trust_history = _project_trust_history(conn, trust, run_id)
-    # The same score objects that are about to be persisted, so a report's
-    # waterfall and the model's own property describe one computation.
-    trust_by_model = {write.model_urn: write.score for write in trust}
-
-    writes = tuple(
-        _write_back(
-            conn,
-            finding,
-            narrate(finding, llm),
-            config,
-            run_id,
-            observed_at,
-            trust_history,
-            trust_by_model,
-        )
-        for finding in findings
-    )
-    # After every per-finding write, so each model's risk flags are already on the
-    # graph when the trust score reads and merges alongside them.
-    trust = _with_previous_scores(trust, trust_history)
-    _persist_trust(conn, trust, trust_history)
-
-    # After this run's own writes, so reconciliation reads risk flags that
-    # already include anything just raised above, and never fights the write
-    # it is standing next to.
-    _reconcile_stale_findings(
-        conn,
-        config,
-        table_urn=table_urn,
-        model_urn=model_urn,
-        findings=findings,
-        run_id=run_id,
-        observed_at=observed_at,
-    )
-
-    _log_scan(
-        run_id,
-        table_urn=table_urn,
-        model_urn=model_urn,
-        dry_run=False,
-        findings=len(findings),
-        warnings=len(warnings),
-        writes=len(writes),
-        detect_seconds=detect_seconds,
-        total_seconds=time.perf_counter() - started,
-    )
-
-    return ScanReport(
-        run_id=run_id,
-        table_urn=table_urn,
-        model_urn=model_urn,
-        dry_run=False,
-        writes=writes,
-        trust=trust,
-        assertion_yaml=written_assertion_yaml(writes),
-        warnings=tuple(warnings),
-        not_evaluated=gaps,
-    )

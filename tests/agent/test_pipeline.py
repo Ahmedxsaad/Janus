@@ -50,6 +50,7 @@ from tests.conftest import (
     FakeGraph,
     active_incident,
     column_path,
+    emitted_about_the_graph,
     lineage_result,
     make_connection,
     make_schema_drift_finding,
@@ -157,7 +158,7 @@ def test_scanning_a_fresh_table_writes_nothing_and_reports_clean():
 
     assert report.clean is True
     assert report.writes == ()
-    assert graph.emitted == []
+    assert emitted_about_the_graph(graph) == []
     assert graph.graphql_calls == []
     assert client.entities.upserted == []
 

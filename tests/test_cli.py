@@ -42,6 +42,7 @@ from tests.conftest import (
     TABLE_URN,
     FakeClient,
     FakeGraph,
+    emitted_about_the_graph,
     lineage_result,
     make_connection,
 )
@@ -198,7 +199,7 @@ def test_a_healthy_target_writes_nothing_and_has_an_empty_signature():
     signature = _poll(graph, client, previous=None)
 
     assert signature == frozenset()
-    assert graph.emitted == []
+    assert emitted_about_the_graph(graph) == []
     assert graph.graphql_calls == []
 
 
