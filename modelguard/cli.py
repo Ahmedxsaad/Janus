@@ -56,6 +56,7 @@ from modelguard.models import (
     LeakageFinding,
     SchemaDriftFinding,
     Severity,
+    TableLevelRiskFinding,
 )
 from modelguard.render import (
     OutputFormat,
@@ -318,6 +319,17 @@ def _print_finding(finding: Finding) -> None:
             console.print(f"  drift        {change.describe()}")
         serving = "[red]LIVE[/red]" if finding.model.is_live else "not serving"
         console.print(f"  model        {finding.model.name} {serving}")
+
+    elif isinstance(finding, TableLevelRiskFinding):
+        console.print(f"  input        {finding.dataset_name} ({finding.risk})")
+        for key, value in sorted(finding.measurement.items()):
+            console.print(f"  {key.replace('_', ' '):<12} {value}", markup=False, highlight=False)
+        serving = "[red]LIVE[/red]" if finding.model.is_live else "not serving"
+        console.print(f"  model        {finding.model.name} {serving}")
+        # In yellow, and before the remedies, because the sentence is the finding:
+        # read without it this looks exactly like the column-level answer, which
+        # is the one way the degraded mode can mislead somebody (T-07).
+        console.print(f"  [yellow]{finding.mode_note}[/yellow]")
 
     # Printed for every finding type, including the two the branches above do not
     # detail, because it comes off the Finding contract rather than off a subclass.
@@ -1465,11 +1477,24 @@ def inventory(
         report = run_scan(conn, config, model_urn=model_urn, llm=None, dry_run=True)
         name = MlModelUrn.from_string(model_urn).name
 
+        # A model whose only findings are table-level ones is still an unlinked
+        # model: the degraded mode gave it something to act on, and the thing to
+        # act on first is the link that would replace those findings with real
+        # ones. Counting it as checked would drop exactly the advice it needs.
+        degraded = [
+            write for write in report.writes if isinstance(write.finding, TableLevelRiskFinding)
+        ]
         if report.writes:
             worst = report.severity
             titles = ", ".join(write.finding.title for write in report.writes)
             console.print(f"[red]{name}[/red]  {len(report.writes)} finding(s), worst {worst}")
             console.print(f"  {titles}")
+            if len(degraded) == len(report.writes):
+                unchecked += 1
+                console.print(
+                    "  [yellow]table level only: nothing links this model to its "
+                    "columns, so no finding here names a feature[/yellow]"
+                )
         elif report.not_evaluated:
             unchecked += 1
             checks = ", ".join(gap.check for gap in report.not_evaluated)

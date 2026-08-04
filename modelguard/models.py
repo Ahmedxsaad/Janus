@@ -65,6 +65,12 @@ class FindingType(StrEnum):
     INPUT_SCHEMA_DRIFT = "input-schema-drift"
     SENSITIVE_SOURCE = "sensitive-source"
     DEPRECATED_INPUT = "deprecated-input"
+    TABLE_LEVEL_RISK = "table-level-risk"
+    """The degraded mode: what can be said about a model with no column link.
+
+    Its own type, and never merged with the four above, because it answers a
+    weaker question with weaker evidence and a report that blurred the two would
+    be claiming precision it did not have."""
 
 
 class RemedyKind(StrEnum):
@@ -96,6 +102,9 @@ class RemedyKind(StrEnum):
     """Move the model onto whatever replaces the input it trains on."""
     WITHDRAW_DEPRECATION = "withdraw-deprecation"
     """Withdraw the deprecation, when it was set in error."""
+    DECLARE_LINK = "declare-link"
+    """Declare which columns the model trains on, so the question can be answered
+    at column level instead of at table level."""
 
 
 @dataclass(frozen=True)
@@ -946,6 +955,217 @@ class DeprecatedInputFinding(Finding):
                 ),
             )
         )
+
+
+class TableRisk(StrEnum):
+    """What a table-level check can say about a training input.
+
+    Three facts DataHub already holds about a *table*, each one readable without
+    any column-level link: it stopped refreshing, its owners retired it, or it
+    holds a column somebody classified as restricted.
+    """
+
+    STALE = "stale"
+    DEPRECATED = "deprecated"
+    CLASSIFIED = "classified"
+
+
+#: What the degraded mode can and cannot conclude, per risk. Quoted verbatim into
+#: the finding's own description, because a table-level finding read as a
+#: column-level one is a false alarm the reader was never warned about.
+_TABLE_RISK_LIMITS: dict[TableRisk, str] = {
+    TableRisk.STALE: (
+        "the table this model trains on is past its freshness SLA. Which of the "
+        "model's features carry the stale values is not knowable without a "
+        "column-level link"
+    ),
+    TableRisk.DEPRECATED: (
+        "the table this model trains on is marked deprecated by its owners. This "
+        "one is exact at table level: the deadline is on the table, not on a column"
+    ),
+    TableRisk.CLASSIFIED: (
+        "the table this model trains on holds a column the organization "
+        "classified as restricted. Whether the model actually consumes that "
+        "column is not knowable without a column-level link"
+    ),
+}
+
+
+@dataclass(frozen=True)
+class TableLevelRiskFinding(Finding):
+    """What is knowable about a model nobody has linked: the degraded mode.
+
+    ModelGuard's whole claim is column-level: the evidence is a path through the
+    column graph, and the path names the feature. A model with no declared
+    features has no such path, and today a scan of it correctly reports that it
+    checked nothing (:mod:`modelguard.detect.coverage`). Honest, and worth
+    nothing on the first day somebody points this at their own catalog.
+
+    So this is the weaker answer, offered deliberately and labelled as weak: the
+    table a model trains on is stale, deprecated, or holds a classified column.
+    Every instance says which mode produced it and what that mode cannot see, and
+    its first remedy is always to declare the link that would replace it with the
+    real answer.
+
+    Severity never reaches the column-level detectors' range. A leaking feature is
+    CRITICAL; a table that may or may not carry a problem into this model is a
+    prompt to look, and :class:`~modelguard.detect.trust_score.TrustInputs`
+    deliberately does not score it at all.
+    """
+
+    model: ModelRef
+    risk: TableRisk
+    dataset_urn: str
+    dataset_name: str
+    measurement: Mapping[str, str]
+    """What was measured about the table, per risk: the lag and its SLA, the
+    deprecation note, the classified columns. Graph facts, like every other
+    finding's evidence."""
+    precision: float
+    """The measured precision of this mode, from the benchmark's table-level
+    baseline (``modelguard.config.TABLE_LEVEL_PRECISION``). Carried on the finding
+    rather than looked up by each renderer, so every surface quotes one number."""
+
+    @property
+    def finding_type(self) -> FindingType:
+        """The degraded mode, never one of the four column-level types."""
+        return FindingType.TABLE_LEVEL_RISK
+
+    @property
+    def resource_urn(self) -> str:
+        """The training table. The only asset this mode can name precisely."""
+        return self.dataset_urn
+
+    @property
+    def incident_type(self) -> str:
+        """The type of the fact, not of the mode: a stale table is a FRESHNESS one."""
+        return "FRESHNESS" if self.risk is TableRisk.STALE else "OPERATIONAL"
+
+    @property
+    def severity(self) -> Severity:
+        """Capped at MEDIUM, always below the column-level finding it stands in for.
+
+        A live model earns MEDIUM because somebody has to go and look; one that is
+        not serving is LOW. Neither reaches HIGH, and that ceiling is the
+        substance of the mode rather than a knob: this finding cannot say the
+        model is affected, only that it might be, and a report where a maybe
+        outranks a proof is one nobody triages twice.
+        """
+        return Severity.MEDIUM if self.model.is_live else Severity.LOW
+
+    @property
+    def title(self) -> str:
+        """Names the mode, so no reader mistakes it for the column-level finding."""
+        return (
+            f"Table-level {self.risk.value} input {self.dataset_name} for {self.model.name} "
+            "(no column link)"
+        )
+
+    @property
+    def limitation(self) -> str:
+        """One sentence on what this mode saw and what it could not see."""
+        return _TABLE_RISK_LIMITS[self.risk]
+
+    @property
+    def mode_note(self) -> str:
+        """The disclosure every surface prints beside this finding.
+
+        States the mode, what it cannot see, and what the mode measures when it
+        is pushed one question further, in that order. The number is the
+        benchmark's, measured on the table-level baseline scored in
+        ``benchmarks/RESULTS.md``, and it is quoted with the question it answers
+        attached: it is the precision of table-level reasoning asked *which
+        feature* carries a problem, which is exactly the question this finding
+        declines to answer. A tool telling somebody how much to trust it should
+        quote a measurement, and quote it for the right claim.
+        """
+        return (
+            f"Checked at table level only ({self.model.name} declares no features): "
+            f"{self.limitation}. Asked which feature carries it, table-level "
+            f"reasoning scores a measured precision of {self.precision:.2f} "
+            "(benchmarks/RESULTS.md, table-level baseline), which is why this "
+            "finding names the table and not a feature. Run `modelguard link` to "
+            "get the column-level answer instead."
+        )
+
+    @property
+    def evidence(self) -> Mapping[str, str]:
+        """The measurement, plus the mode itself, which is a fact about the answer."""
+        return {
+            "mode": "table-level",
+            "risk": str(self.risk),
+            "input_table": self.dataset_name,
+            "model": self.model.name,
+            "model_is_live": str(self.model.is_live).lower(),
+            "mode_precision": f"{self.precision:.2f}",
+            "severity": str(self.severity),
+            # The disclosure travels with the facts rather than beside them, so
+            # every surface that renders evidence (the JSON, the incident body,
+            # the narrator's fact block) carries it without each one having to
+            # know that this finding type is the weak one.
+            "mode_note": self.mode_note,
+            **self.measurement,
+        }
+
+    @property
+    def models_at_risk(self) -> tuple[ModelRef, ...]:
+        """The one model that trains on this table."""
+        return (self.model,)
+
+    @property
+    def counterfactual(self) -> Counterfactual:
+        """Declaring the link comes first, and it is a different kind of remedy.
+
+        It does not fix the table; it replaces this finding with the column-level
+        one, which either names the feature that carries the problem or clears the
+        model. That is what somebody reading a maybe actually wants, so it is
+        listed first, and the table's own remedy follows it.
+        """
+        remedies = [
+            Remedy(
+                kind=RemedyKind.DECLARE_LINK,
+                summary=(
+                    f"Declare what {self.model.name} trains on (`modelguard link "
+                    f"--model {self.model.name} --features {self.dataset_name} "
+                    "--label-column <column>`, or `--from feast|dbt` if your stack "
+                    "already declares it), so this table-level guess is replaced by "
+                    "a column-level answer."
+                ),
+                targets=(self.model.urn,),
+            )
+        ]
+        if self.risk is TableRisk.STALE:
+            remedies.append(
+                Remedy(
+                    kind=RemedyKind.REFRESH_SOURCE,
+                    summary=f"Refresh {self.dataset_name} so it is inside its SLA again.",
+                    targets=(self.dataset_urn,),
+                )
+            )
+        elif self.risk is TableRisk.DEPRECATED:
+            remedies.append(
+                Remedy(
+                    kind=RemedyKind.MIGRATE_INPUT,
+                    summary=(
+                        f"Retrain {self.model.name} on whatever replaces "
+                        f"{self.dataset_name}, or have its owners withdraw the "
+                        "deprecation if it was set in error."
+                    ),
+                    targets=(self.model.urn, self.dataset_urn),
+                )
+            )
+        else:
+            remedies.append(
+                Remedy(
+                    kind=RemedyKind.STOP_CONSUMING,
+                    summary=(
+                        f"Take {self.model.name} off {self.dataset_name}, if it must "
+                        "not be trained on data derived from a restricted column."
+                    ),
+                    targets=(self.model.urn,),
+                )
+            )
+        return Counterfactual(remedies=tuple(remedies))
 
 
 class ChangeKind(StrEnum):

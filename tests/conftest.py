@@ -22,6 +22,7 @@ from datahub.metadata.urns import SchemaFieldUrn, Urn
 from datahub.sdk.lineage_client import LineagePath, LineageResult
 
 from modelguard.client import DataHubConnection
+from modelguard.config import TABLE_LEVEL_PRECISION
 from modelguard.models import (
     BlastRadius,
     ChangeKind,
@@ -37,6 +38,8 @@ from modelguard.models import (
     SchemaDriftFinding,
     SensitiveFeature,
     SensitiveSourceFinding,
+    TableLevelRiskFinding,
+    TableRisk,
     TrustBand,
     TrustScore,
 )
@@ -554,6 +557,29 @@ def make_deprecated_input_finding(
         dataset_name="ecommerce.public.customer_features",
         note=note,
         decommission_time_ms=1_800_000_000_000,
+    )
+
+
+def make_table_level_finding(
+    *,
+    risk: TableRisk = TableRisk.DEPRECATED,
+    live: bool = True,
+    has_owner: bool = False,
+) -> TableLevelRiskFinding:
+    """Build a degraded-mode finding the way the detector would, without a graph."""
+    return TableLevelRiskFinding(
+        model=ModelRef(
+            urn=MODEL_URN,
+            name="Credit Risk v3",
+            deployments=(DEPLOYMENT_URN,),
+            live_deployments=(DEPLOYMENT_URN,) if live else (),
+            has_owner=has_owner,
+        ),
+        risk=risk,
+        dataset_urn=FEATURE_TABLE_URN,
+        dataset_name="ecommerce.public.customer_features",
+        measurement={"deprecation_note": "Replaced by loans_v2 on 2026-09-01."},
+        precision=TABLE_LEVEL_PRECISION,
     )
 
 

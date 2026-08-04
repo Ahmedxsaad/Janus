@@ -52,6 +52,7 @@ from modelguard.models import (
     ModelAtRisk,
     SchemaDriftFinding,
     SensitiveSourceFinding,
+    TableLevelRiskFinding,
     TrustScore,
 )
 from modelguard.writeback.trust_history import TrustEntry
@@ -145,6 +146,11 @@ def _sensitive_subject(finding: SensitiveSourceFinding) -> str:
 
 @report_subject.register
 def _deprecated_subject(finding: DeprecatedInputFinding) -> str:
+    return finding.model.name
+
+
+@report_subject.register
+def _table_level_subject(finding: TableLevelRiskFinding) -> str:
     return finding.model.name
 
 
@@ -476,6 +482,68 @@ mistake, withdrawing it in DataHub closes this finding on the next scan.
 ModelGuard reads the `deprecation` aspect and the model's recorded inputs. It has no \
 opinion on whether the deprecation is justified, and it cannot tell whether a \
 replacement table already exists.
+"""
+
+
+@_report_body.register
+def _table_level_body(finding: TableLevelRiskFinding) -> str:
+    model = finding.model
+    serving = (
+        f"**Live**, serving through {len(model.live_deployments)} deployment(s)."
+        if model.is_live
+        else "Not currently serving."
+    )
+    owner = "Owned." if model.has_owner else "**Unowned**: nobody is on the hook to fix this."
+    measured = "\n".join(
+        f"- {key.replace('_', ' ')}: `{value}`"
+        for key, value in sorted(finding.measurement.items())
+    )
+
+    return f"""## What happened
+
+`{finding.dataset_name}`, one of the tables **{model.name}** is recorded as training \
+on, is **{finding.risk}**.
+
+{measured}
+
+## How confident this is
+
+{finding.mode_note}
+
+## Assessment
+
+{{narrative}}
+
+## Why this matters
+
+A model whose columns nobody has declared is a model no column-level check can \
+reach, so the alternative to this weaker answer is silence. It is published as the \
+weaker answer on purpose: read as a column-level finding it would be a false alarm \
+about a feature nobody has shown to exist.
+
+## Model at risk
+
+### {model.name}
+
+- URN: `{model.urn}`
+- Severity: **{finding.severity}** (capped below the column-level detectors, which \
+can prove what this one can only suggest)
+- Serving status: {serving}
+- Ownership: {owner}
+- Training input: `{finding.dataset_urn}`
+
+## What ModelGuard did
+
+1. Raised a `{finding.incident_type}` incident on the training table, which is the \
+only asset this mode can name precisely.
+2. Tagged the model and recorded the risk flag as a structured property on it.
+
+{{counterfactual}}
+## Caveats
+
+This finding was produced without column-level lineage. It cannot say which \
+feature carries the problem into the model, or whether any of them does. Declaring \
+the link (`modelguard link`) replaces it with a finding that can.
 """
 
 
