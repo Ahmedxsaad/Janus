@@ -1810,6 +1810,30 @@ def link(
         console.print("[red]link needs --model, or --all to replay every recorded link.[/red]")
         raise typer.Exit(code=2)
 
+    # Argument-shape checks need no DataHub connection, so they run before
+    # _prepare() rather than after: a live GMS being unreachable must never
+    # mask a usage error behind its own, unrelated exit code (D-114).
+    if from_ is None and (repo is not None or select is not None):
+        console.print(
+            "[red]--repo and --select say where to read a declaration; --from says "
+            f"which reader. Add --from ({'|'.join(ADAPTERS)}).[/red]"
+        )
+        raise typer.Exit(code=2)
+
+    if infer and from_ is not None:
+        # Both propose, from different evidence. Running them together would mean
+        # deciding which one wins per field, which is a decision the user is
+        # better placed to make by running the one they trust.
+        console.print(
+            "[red]--infer and --from are incompatible: --infer reads the graph, "
+            "--from reads a declaration. Run whichever you trust for this model.[/red]"
+        )
+        raise typer.Exit(code=2)
+
+    if from_ is not None and repo is None:
+        console.print(f"[red]--from {from_} needs --repo <path to the declaration>.[/red]")
+        raise typer.Exit(code=2)
+
     conn, config, _, feature_urn, model_urn = _prepare(
         table=features,
         model=model,
@@ -1830,27 +1854,11 @@ def link(
     # link is replayed regularly. Replaying it must not mean retyping it.
     previous = recorded_link(conn, model_urn)
 
-    if from_ is None and (repo is not None or select is not None):
-        console.print(
-            "[red]--repo and --select say where to read a declaration; --from says "
-            f"which reader. Add --from ({'|'.join(ADAPTERS)}).[/red]"
-        )
-        raise typer.Exit(code=2)
-
-    if infer and from_ is not None:
-        # Both propose, from different evidence. Running them together would mean
-        # deciding which one wins per field, which is a decision the user is
-        # better placed to make by running the one they trust.
-        console.print(
-            "[red]--infer and --from are incompatible: --infer reads the graph, "
-            "--from reads a declaration. Run whichever you trust for this model.[/red]"
-        )
-        raise typer.Exit(code=2)
-
     proposal: LinkProposal | None = None
     if from_ is not None:
         if repo is None:
-            console.print(f"[red]--from {from_} needs --repo <path to the declaration>.[/red]")
+            # Already refused above when --from has no --repo; this is
+            # unreachable, and only here so repo narrows to Path below.
             raise typer.Exit(code=2)
         try:
             proposal = _declared_link(

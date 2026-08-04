@@ -16,6 +16,37 @@ Entry template:
 
 ---
 
+## D-114: `link`'s usage errors no longer hide behind a connection failure (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: the three argument-shape checks in `modelguard link` (`--repo`/
+  `--select` without `--from`, `--infer` with `--from`, `--from` without
+  `--repo`) now run before `_prepare()` instead of after. They need no
+  DataHub connection, but they sat after `_prepare()`'s `connect()` call,
+  so in an environment with no reachable GMS, `connect()` raised
+  `typer.Exit(code=1)` first and the usage check never ran, turning a
+  documented exit code 2 into a 1. Caught by CI's offline test job, which
+  has no live DataHub by design (tests/CLAUDE.md rule 1): three
+  `tests/test_cli.py` tests expected 2 and got 1.
+- Options considered:
+  1. Change the tests to accept exit code 1. Rejected: 1 is this codebase's
+     "could not tell" code (`modelguard/CLAUDE.md` rule 2, gate's exit
+     codes), and a malformed `--from`/`--repo` combination is a usage
+     error the caller can see from the arguments alone, not a fact about
+     whether DataHub answered.
+  2. Move the checks ahead of `_prepare()`. Chosen: matches the pattern
+     already used by the `--all` conflict check and the `model is None`
+     check, both of which precede `_prepare()` for the same reason.
+- Result: `modelguard/cli.py`'s `link` command reorders the three checks;
+  the `repo is None` guard also moved, which caused mypy to lose the
+  narrowing between the check and `_declared_link`'s call site since they
+  are no longer the same `if` block. Re-added as an explicit (unreachable)
+  guard at the call site rather than an `assert`, consistent with the
+  `model_urn is None` check just above it, which is unreachable for the
+  same reason and already uses this idiom rather than `-O`-strippable
+  `assert`. Also fixed in the same pass: `tests/adapters/dbt_manifest.json`
+  was missing its trailing newline, failing the `end-of-file-fixer`
+  pre-commit hook in the lint/hygiene CI job.
+
 ## D-113: A model nobody linked gets the weaker answer, labelled as weaker (2026-08-04)
 - Decided by: Ghassen Naouar (asked for phase 3 of the depth plan), implemented by
   Claude. Closes T-07.
