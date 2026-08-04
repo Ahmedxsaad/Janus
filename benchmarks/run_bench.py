@@ -62,7 +62,7 @@ from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.config import TABLE_LEVEL_PRECISION, ScanConfig
 from modelguard.detect.blast_radius import blast_radius
 from modelguard.detect.leakage import leakage_findings
-from modelguard.models import FindingType
+from modelguard.models import Finding, FindingType
 from modelguard.seed import graph_spec as spec
 from modelguard.seed import scenarios
 from modelguard.seed.scenarios import plant_stale_source
@@ -326,6 +326,7 @@ _DETECTOR_LABELS = {
     FindingType.SENSITIVE_SOURCE: "Sensitive source (P5)",
     FindingType.DEPRECATED_INPUT: "Deprecated input (P6)",
     FindingType.TABLE_LEVEL_RISK: "Table-level risk (degraded mode, T-07)",
+    FindingType.PROXY_CANDIDATE: "Proxy candidate (T-11, for human review)",
 }
 
 
@@ -342,6 +343,11 @@ _BOUNDARY_MUTATIONS = {
     FindingType.TABLE_LEVEL_RISK: (
         "running the degraded mode unconditionally instead of only where no "
         "column link exists, which reports every linked model twice"
+    ),
+    FindingType.PROXY_CANDIDATE: (
+        "dropping the direct-descent exclusion, which reports a proved "
+        "derivation as a candidate and duplicates the sensitive-source "
+        "finding, or an off-by-one in the shared-ancestor hop cap"
     ),
 }
 
@@ -500,13 +506,17 @@ def measure_faithfulness(
     config: ScanConfig,
     trials: Sequence[Trial],
 ) -> FaithfulnessReport:
-    """Narrate what the graph currently holds, and check the prose against it (T-10).
+    """Narrate a real finding from every detector, and check the prose (T-10).
+
+    Each family's *positive* trial is planted, waited for, and narrated, rather
+    than narrating whatever the matrix happened to leave behind. The first
+    version did the latter and measured one narrative out of seven, because by
+    the end of the run most detectors are looking at a graph they have nothing
+    to say about. A faithfulness rate over one narrative is not a rate.
 
     Findings come from the live graph rather than a fixture, like every other
     measurement here (benchmarks/CLAUDE.md rule 6): the point is prose about
-    facts a real GMS served. Read-only, and it plants nothing: whatever state
-    the trials above left behind is a fine subject, because the check is about
-    the relationship between a finding and its prose, not about which finding.
+    facts a real GMS served.
 
     Only the template narrator is exercised unless an LLM is configured, and
     that is stated in the report rather than papered over. The template is the
@@ -514,13 +524,25 @@ def measure_faithfulness(
     to fail: its prose is written in this repo, so a violation is this project
     quoting a figure it never measured.
     """
-    now_ms = int(time.time() * 1000)
-    families = {trial.family for trial in trials}
-    findings = [
-        finding
-        for family in sorted(families, key=str)
-        for finding in findings_for(conn, config, family, now_ms)
-    ]
+    findings: list[Finding] = []
+    seen: set[FindingType] = set()
+    for trial in trials:
+        # One positive per family: enough to narrate every detector once, and
+        # a second trial of the same family would narrate the same finding.
+        if not trial.expected or trial.family in seen:
+            continue
+        seen.add(trial.family)
+
+        now_ms = int(time.time() * 1000)
+        trial.plant(conn, trial, now_ms)
+        trial_config = trial.config(config)
+        if await_precondition(conn, trial, trial_config, now_ms) is None:
+            # The planted state never became visible. An error in the harness,
+            # not a fact about the narrator, so this family is dropped from the
+            # measurement rather than counted as prose that could not be checked.
+            continue
+        findings.extend(findings_for(conn, trial_config, trial.family, now_ms))
+
     return check_template_narratives(findings, resolves=conn.graph.exists)
 
 
@@ -897,9 +919,6 @@ def main() -> None:
     print("The multi-path case: cutting one derivation of two...")
     multi_path = measure_multi_path(conn, config, trials)
 
-    print("Narrative faithfulness: does the prose quote only measured figures...")
-    faithfulness = measure_faithfulness(conn, config, trials)
-
     # Scale goes last, and the reason is a measured one rather than a preference.
     # It creates and then hard-deletes fifty models, and the index churn behind
     # that pushed the counterfactual measurement's wait for a refreshed table past
@@ -909,6 +928,12 @@ def main() -> None:
     # measurement before the index-churning one costs nothing.
     print("Scale: replicating models and sweeping the catalog...")
     scale = measure_scale(conn, config)
+
+    # Last measurement before the restore, and the ordering is load-bearing now:
+    # it plants each family's positive state to have something to narrate, so
+    # anything running after it would be reading a graph it did not set up.
+    print("Narrative faithfulness: does the prose quote only measured figures...")
+    faithfulness = measure_faithfulness(conn, config, trials)
 
     print("Restoring the seeded baseline...")
     restore_baseline(conn)

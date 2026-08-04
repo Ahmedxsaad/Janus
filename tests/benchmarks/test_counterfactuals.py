@@ -8,12 +8,21 @@ applied" in a column nobody reads as a failure.
 
 from __future__ import annotations
 
-from benchmarks.counterfactuals import APPLIERS, CounterfactualCheck, MultiPathCheck, _cleared_state
+from benchmarks.counterfactuals import (
+    APPLIERS,
+    CounterfactualCheck,
+    MultiPathCheck,
+    _cleared_state,
+    findings_for,
+)
 from benchmarks.inject import build_trials
 from benchmarks.run_bench import _counterfactual_lines
 from modelguard.config import ScanConfig
 from modelguard.models import Finding, FindingType, RemedyKind
 from tests.conftest import (
+    FakeClient,
+    FakeGraph,
+    make_connection,
     make_deprecated_input_finding,
     make_finding,
     make_leakage_finding,
@@ -47,6 +56,27 @@ def test_every_detector_has_a_counterfactual_the_benchmark_can_actually_apply():
     families = {family for family, _ in APPLIERS}
 
     assert families == set(FindingType)
+
+
+_CONN = make_connection(FakeGraph(), FakeClient())
+
+
+def test_every_detector_is_reachable_through_findings_for():
+    """A family the dispatch does not know raises rather than scoring zero.
+
+    `findings_for` is what both `_observe` and the counterfactual measurement
+    call, so a detector missing from it would be scored as one that never
+    fires: a perfect false-negative rate, published as a measurement. It
+    raises instead, which is how the proxy detector's absence was caught on
+    the first live run after it landed (D-117).
+    """
+    for family in FindingType:
+        try:
+            findings_for(_CONN, ScanConfig(), family, 0)
+        except ValueError as exc:  # the guard under test
+            raise AssertionError(f"{family} is not registered in findings_for") from exc
+        except Exception:  # noqa: BLE001 - any other failure is the fake graph
+            pass
 
 
 def test_every_applier_is_keyed_on_a_remedy_its_finding_really_offers():

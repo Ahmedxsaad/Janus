@@ -16,6 +16,40 @@ Entry template:
 
 ---
 
+## D-120: Phase 4 and 5 close-out, and two silent drops the live run found (2026-08-04)
+- Decided by: Ahmed Saad.
+- Decision: three registration gaps found by running the full benchmark rather
+  than by review, each fixed with a test that fails if it recurs.
+- Options considered: none worth recording. All three are the same class of
+  defect (a new detector reaching a surface nobody registered it in), and this
+  repo already has the rule for it: writeback/CLAUDE.md's D-096 line, "a new
+  finding type is not shipped until every dispatch table it passes through is
+  registered". The rule was written about `documents.py`; the gaps here were in
+  three tables it does not mention.
+- Why: worth a decision-log entry because the *failure modes differed*, and only
+  one of the three was loud.
+- Result:
+  1. `benchmarks/counterfactuals.findings_for` had no proxy branch and **raised**,
+     stopping the run. The loud one, and correct: it exists precisely so a
+     detector nobody registered is not scored as one that never fires, which
+     would publish a perfect false-negative rate as a measurement.
+  2. `run_bench._DETECTOR_LABELS` had no proxy entry, so the detection table
+     **silently rendered six rows for seven detectors**. Nothing failed. Four
+     proxy trials ran, passed, and vanished from the report. Now tested against
+     `set(FindingType)`.
+  3. `measure_faithfulness` narrated whatever the trial matrix happened to leave
+     behind, which by the end of a run is a graph most detectors have nothing to
+     say about: **one narrative out of seven families**, reported as a rate. It
+     now plants each family's own positive trial, waits for it, and narrates
+     that, which is four of seven live (the rest are async-index misses, dropped
+     from the measurement rather than counted). It also moved to last before
+     `restore_baseline`, because it now plants state and anything after it would
+     be reading a graph it did not set up.
+- Final numbers, all measured on a live Quickstart: 31/31 trials correct, the
+  new proxy family at 1.00 precision and recall over 4 trials (3 boundary), all
+  seven counterfactual families applied and cleared, faithfulness 1.00 over 4
+  narratives and 3 figures, 804 offline tests and 66 integration tests green.
+
 ## D-119: T-12 and T-13, two artifacts that refuse to certify anything (2026-08-04)
 - Decided by: Ahmed Saad.
 - Decision: `writeback/model_documents.py` renders two per-model documents from

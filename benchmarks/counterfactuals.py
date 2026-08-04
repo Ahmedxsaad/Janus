@@ -40,7 +40,11 @@ from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import blast_radius, finding_for
 from modelguard.detect.degraded import table_level_findings
-from modelguard.detect.governance import deprecated_input_findings, sensitive_source_findings
+from modelguard.detect.governance import (
+    deprecated_input_findings,
+    proxy_candidate_findings,
+    sensitive_source_findings,
+)
 from modelguard.detect.leakage import leakage_findings
 from modelguard.detect.schema_drift import schema_drift_findings
 from modelguard.models import Finding, FindingType, Remedy, RemedyKind
@@ -108,6 +112,8 @@ def findings_for(
         return schema_drift_findings(conn, str(spec.model_urn()), config)
     if family is FindingType.SENSITIVE_SOURCE:
         return sensitive_source_findings(conn, str(spec.model_urn()), config)
+    if family is FindingType.PROXY_CANDIDATE:
+        return proxy_candidate_findings(conn, str(spec.model_urn()), config)
     if family is FindingType.DEPRECATED_INPUT:
         return deprecated_input_findings(conn, str(spec.model_urn()), config)
     if family is FindingType.TABLE_LEVEL_RISK:
