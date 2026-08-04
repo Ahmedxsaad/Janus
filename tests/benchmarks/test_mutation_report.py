@@ -29,7 +29,7 @@ def _results(*lines: str) -> str:
 
 class TestParse:
     def test_counts_every_status(self):
-        counts, survivors = _parse(
+        counts, _survivors = _parse(
             _results(
                 "modelguard.detect.leakage.x_a__mutmut_1: killed",
                 "modelguard.detect.leakage.x_a__mutmut_2: survived",
@@ -54,10 +54,12 @@ class TestParse:
             _parse("this is not a mutmut results line\n")
 
     def test_a_status_mutmut_has_never_printed_is_still_counted(self):
-        """The parser names no closed set of statuses; mutmut's own vocabulary
-        (killed, survived, timeout, suspicious, no tests, ...) is not hard-coded
-        here, so a status this test does not know about must still be tallied
-        rather than silently dropped."""
+        """A status _parse has never seen before is still tallied, not dropped.
+
+        The parser names no closed set of statuses; mutmut's own vocabulary
+        (killed, survived, timeout, suspicious, no tests, ...) is not
+        hard-coded here.
+        """
         counts, _ = _parse(_results("modelguard.detect.leakage.x_a__mutmut_1: timeout"))
 
         assert counts == {"timeout": 1}
@@ -76,15 +78,18 @@ class TestVerifyCoverage:
         ]
 
     def test_a_survivor_with_no_matching_verdict_stops_the_render(self):
-        with pytest.raises(SystemExit, match="modelguard.detect.leakage.x_unlisted"):
+        with pytest.raises(SystemExit, match=r"modelguard\.detect\.leakage\.x_unlisted"):
             _verify_coverage(
                 ["modelguard.detect.leakage.x_unlisted__mutmut_1"],
                 verdicts=(Verdict("modelguard.detect.leakage.x_a", "gap", "because"),),
             )
 
     def test_a_prefix_that_is_a_substring_of_another_function_does_not_steal_it(self):
-        """x_a is a prefix of x_ancestor as a string; it must not swallow that
-        function's survivors just because str.startswith would match it."""
+        """x_a must not swallow x_ancestor's survivors on a naive prefix match.
+
+        x_a is a prefix of x_ancestor as a string, so this pins the exact-match
+        semantics rather than str.startswith.
+        """
         verdicts = (
             Verdict("modelguard.detect.leakage.x_a", "gap", "because"),
             Verdict("modelguard.detect.leakage.x_ancestor", "gap", "unrelated"),

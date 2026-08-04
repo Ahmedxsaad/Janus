@@ -30,9 +30,11 @@ _PREFIX_RE = re.compile(r"^(modelguard\.detect\.[a-zA-Z0-9_.ǁ]+)__mutmut_\d+$")
 
 @dataclass(frozen=True)
 class Verdict:
-    """One root cause, covering every survivor whose qualified name starts
-    with `prefix` (mutmut's dotted module path, e.g.
-    "modelguard.detect.degraded.x_training_tables")."""
+    """One root cause, covering every survivor whose qualified name starts with `prefix`.
+
+    `prefix` is mutmut's dotted module path, e.g.
+    "modelguard.detect.degraded.x_training_tables".
+    """
 
     prefix: str
     kind: str  # "gap" or "equivalent"
@@ -155,8 +157,7 @@ VERDICTS: tuple[Verdict, ...] = (
     Verdict(
         "modelguard.detect.coverage.x__sensitive_gap",
         "gap",
-        "Same pattern and the largest group: prose content plus an unasserted "
-        "`target_urn`.",
+        "Same pattern and the largest group: prose content plus an unasserted `target_urn`.",
     ),
     Verdict(
         "modelguard.detect.coverage.x_coverage_gaps",
@@ -191,7 +192,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "gap",
         "`get_lineage`'s own `max_hops=1` survives becoming `max_hops=2` "
         "(degraded mode's own docstring promises *one* hop upstream), and the "
-        "`\"urn:li:dataset:\"` entity-type filter survives having its string "
+        '`"urn:li:dataset:"` entity-type filter survives having its string '
         "content, case, or argument mutated. The fixture behind this test "
         "never mixes a non-dataset URN into the lineage response, so the "
         "filter's job is never exercised.",
@@ -336,7 +337,7 @@ VERDICTS: tuple[Verdict, ...] = (
     Verdict(
         "modelguard.detect.trust_score.x_trust_score",
         "gap",
-        "`points[DEDUCTION_SENSITIVE_SOURCE] = config.trust_weight_..." \
+        "`points[DEDUCTION_SENSITIVE_SOURCE] = config.trust_weight_..."
         "` and the deprecated-input deduction's weight both swap for `None` "
         "and survive: the trials assert which deductions exist, not the "
         "point value each one carries. A weight silently zeroed would ship "
@@ -346,13 +347,14 @@ VERDICTS: tuple[Verdict, ...] = (
 
 
 def run_results() -> str:
+    """Run `mutmut results --all=true` against the last `mutmut run` and return its stdout."""
     return subprocess.run(
         ["mutmut", "results", "--all=true"], capture_output=True, text=True, check=True
     ).stdout
 
 
 def _parse(results_text: str) -> tuple[dict[str, int], list[str]]:
-    """counts by status, and the list of surviving mutant names."""
+    """Counts by status, and the list of surviving mutant names."""
     counts: dict[str, int] = {}
     survivors: list[str] = []
     for line in results_text.splitlines():
@@ -473,6 +475,7 @@ def _splice(results_md: Path, section: str) -> str:
 
 
 def main() -> None:
+    """Entry point: render the mutation section and splice it into RESULTS.md."""
     parser = argparse.ArgumentParser(
         description="Render the mutation-score section into benchmarks/RESULTS.md, "
         "from the last 'mutmut run'."
