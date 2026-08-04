@@ -67,6 +67,137 @@ class FindingType(StrEnum):
     DEPRECATED_INPUT = "deprecated-input"
 
 
+class RemedyKind(StrEnum):
+    """The kind of change one remedy asks for.
+
+    Stable identifiers rather than prose, because something other than a human
+    reads them: the benchmark keys its appliers on this value so it can perform a
+    remedy against a real graph and check that the finding actually clears
+    (T-03). A remedy nobody can apply mechanically is still a remedy; it simply
+    has no applier registered against its kind.
+    """
+
+    CUT_LINEAGE = "cut-lineage"
+    """Remove the derivation edge, so the feature stops descending from the column."""
+    DROP_FEATURE = "drop-feature"
+    """Stop the model consuming the feature at all."""
+    CORRECT_MARK = "correct-mark"
+    """Withdraw the declaration on the ancestor column, when the declaration is
+    what is wrong rather than the derivation."""
+    REFRESH_SOURCE = "refresh-source"
+    """Make the table refresh inside its SLA again."""
+    STOP_CONSUMING = "stop-consuming"
+    """Take the models off the failing table."""
+    RESTORE_SCHEMA = "restore-schema"
+    """Put the drifted columns back the way the model was trained to read them."""
+    RETRAIN = "retrain"
+    """Retrain against what the data says now, and record the new snapshot."""
+    MIGRATE_INPUT = "migrate-input"
+    """Move the model onto whatever replaces the input it trains on."""
+    WITHDRAW_DEPRECATION = "withdraw-deprecation"
+    """Withdraw the deprecation, when it was set in error."""
+
+
+@dataclass(frozen=True)
+class Remedy:
+    """One change that, applied on its own, clears the finding.
+
+    ``targets`` names everything the change has to touch, all of it: a remedy
+    that cuts one of two derivation paths is not a remedy, it is half of one, and
+    a reader who applies half of it gets a finding that stays open with no
+    explanation. Where more than one target is listed, all of them change
+    together or the finding stands.
+    """
+
+    kind: RemedyKind
+    summary: str
+    """An imperative sentence, complete on its own and readable out of context."""
+    targets: tuple[str, ...]
+    """The URNs, columns, or edges this change touches. Every one of them."""
+
+
+@dataclass(frozen=True)
+class Counterfactual:
+    """What would have to be different for a finding not to exist.
+
+    A finding says what is wrong. This says what to change, and it is the half a
+    reader actually acts on. Each remedy is sufficient alone, so the set is a
+    genuine choice between alternatives rather than a checklist: a team drops the
+    feature, or cuts the derivation, or corrects the declaration, and any one of
+    those makes the next scan silent.
+
+    Derived from the same graph facts as the finding it belongs to. Nothing here
+    is generated, ranked, or worded by an LLM (modelguard/CLAUDE.md rule 5): a
+    suggested fix that an LLM invented is a suggested fix nobody can verify, and
+    the benchmark verifies these by applying them.
+    """
+
+    remedies: tuple[Remedy, ...]
+    paths: int = 1
+    """How many distinct derivations produced this finding.
+
+    One for every finding that is not about a lineage walk. Above one, cutting a
+    single path leaves the finding standing, which is the single most likely way
+    for somebody to think they have fixed this and be wrong, so it is said out
+    loud rather than left to be inferred from a remedy's target list."""
+
+    @property
+    def multi_path(self) -> bool:
+        """Whether more than one derivation has to be cut."""
+        return self.paths > 1
+
+    def lines(self) -> tuple[str, ...]:
+        """Render the counterfactual as plain text lines.
+
+        Returns:
+            Lines with no markup, safe in a terminal, a markdown code block, and
+            a JSON string alike, like :meth:`TrustScore.waterfall`.
+        """
+        lines = ["Any one of these clears this finding:"]
+        lines += [f"  - {remedy.summary}" for remedy in self.remedies]
+        if self.multi_path:
+            lines += [
+                "",
+                f"This finding rests on {self.paths} distinct derivation paths. Cutting one "
+                "of them leaves it standing: the cut listed above names the first edge of "
+                "every path, and all of them have to go.",
+            ]
+        return tuple(lines)
+
+
+def _collapse_repeats(column_path: tuple[str, ...]) -> list[str]:
+    """Drop consecutive repeats of one column name from a derivation chain.
+
+    A real warehouse ingested from more than one source has sibling entities for
+    the same physical table (dbt and the warehouse itself both describe
+    ``customer_features``), so lineage legitimately walks the same column twice
+    under two platforms and the chain reads "x <- x <- y". The repeat carries no
+    information a reader of the derivation can use.
+    """
+    return [
+        column
+        for index, column in enumerate(column_path)
+        if index == 0 or column != column_path[index - 1]
+    ]
+
+
+def _cuttable_edges(paths: tuple[tuple[str, ...], ...]) -> tuple[str, ...]:
+    """Return the first edge of every derivation path, or nothing.
+
+    Empty when any path is a single column, which is what a walk returns when the
+    starting column is itself the marked one: there is no derivation to cut, so
+    offering the cut would be offering a remedy that does not work. Empty is how
+    a caller is told not to offer it.
+
+    Deduplicated with insertion order preserved, because two paths can genuinely
+    share their first edge and diverge later, and listing that edge twice would
+    read as two separate things to do.
+    """
+    if any(len(path) < 2 for path in paths):
+        return ()
+    return tuple(dict.fromkeys(f"{path[0]} <- {path[1]}" for path in paths))
+
+
 @dataclass(frozen=True)
 class FreshnessSignal:
     """How stale a dataset is, measured against its freshness SLA.
@@ -261,6 +392,16 @@ class Finding(ABC):
         empty tuple and no model is touched.
         """
 
+    @property
+    @abstractmethod
+    def counterfactual(self) -> Counterfactual:
+        """What would have to change for this finding not to exist.
+
+        Abstract, and not defaulted to an empty set, on purpose: a detector that
+        can prove something is wrong and cannot say what would make it right is
+        half a detector, and a silent default would let one ship.
+        """
+
 
 @dataclass(frozen=True)
 class FreshnessFinding(Finding):
@@ -317,6 +458,42 @@ class FreshnessFinding(Finding):
         """Every model the failing table reaches, already ordered worst first."""
         return self.blast_radius.models
 
+    @property
+    def counterfactual(self) -> Counterfactual:
+        """Either the table refreshes inside its SLA, or the models stop reading it.
+
+        The second is listed because it is sometimes the right answer and nobody
+        writes it down: a model consuming a table whose owners have stopped
+        refreshing it on purpose is a dependency to remove, not an outage to
+        wait out. It is omitted when the radius reached no model, where there is
+        nothing to disconnect and the only remedy is the refresh.
+        """
+        radius = self.blast_radius
+        remedies = [
+            Remedy(
+                kind=RemedyKind.REFRESH_SOURCE,
+                summary=(
+                    f"Refresh {radius.failing_table_name} so it changes at least once "
+                    f"every {radius.signal.sla_hours:.1f} hours, the SLA it is measured "
+                    f"against."
+                ),
+                targets=(radius.failing_table_urn,),
+            )
+        ]
+        if radius.models:
+            names = ", ".join(model.name for model in radius.models)
+            remedies.append(
+                Remedy(
+                    kind=RemedyKind.STOP_CONSUMING,
+                    summary=(
+                        f"Take every model off this table ({names}), so its staleness "
+                        f"reaches nothing that serves predictions."
+                    ),
+                    targets=tuple(model.urn for model in radius.models),
+                )
+            )
+        return Counterfactual(remedies=tuple(remedies))
+
 
 @dataclass(frozen=True)
 class LeakingFeature:
@@ -341,24 +518,24 @@ class LeakingFeature:
     label_dataset_name: str
     column_path: tuple[str, ...]
     """Column names from the feature's source column back to the label, inclusive."""
+    other_paths: tuple[tuple[str, ...], ...] = ()
+    """Every *other* chain from this column to a declared label the walk found.
+
+    The shortest chain is the quoted proof and stays in ``column_path``; these
+    are the ones the walk collected and used to discard. They are kept because a
+    remedy has to account for them: cutting the quoted path and leaving one of
+    these in place fixes nothing, and a reader who is told only about the proof
+    has no way to know that."""
 
     @property
     def path_text(self) -> str:
-        """Render the leak path the way the incident and the report quote it.
+        """Render the leak path the way the incident and the report quote it."""
+        return " <- ".join(_collapse_repeats(self.column_path))
 
-        Consecutive repeats of one column name collapse to a single step. A real
-        warehouse ingested from more than one source has sibling entities for the
-        same physical table (dbt and the warehouse itself both describe
-        ``customer_features``), so lineage legitimately walks the same column
-        twice under two platforms and the chain reads "x <- x <- y". The repeat
-        carries no information a reader of the derivation can use.
-        """
-        collapsed = [
-            column
-            for index, column in enumerate(self.column_path)
-            if index == 0 or column != self.column_path[index - 1]
-        ]
-        return " <- ".join(collapsed)
+    @property
+    def all_paths(self) -> tuple[tuple[str, ...], ...]:
+        """Every chain from this column to a declared label, proof first."""
+        return (self.column_path, *self.other_paths)
 
     @property
     def origin(self) -> str:
@@ -440,6 +617,53 @@ class LeakageFinding(Finding):
         """Exactly the one model that consumes this leaking feature."""
         return (self.model,)
 
+    @property
+    def counterfactual(self) -> Counterfactual:
+        """Cut the derivation, drop the feature, or withdraw the declaration.
+
+        Three genuinely different fixes, in the order a team should consider
+        them. The last one is not a way to silence the tool: if that column is
+        not the label, the leakage finding was never true, and the graph is what
+        is wrong. Saying so is what makes the finding auditable in both
+        directions rather than only in the direction that flatters the detector.
+        """
+        leak = self.leak
+        edges = _cuttable_edges(leak.all_paths)
+
+        remedies: list[Remedy] = []
+        if edges:
+            remedies.append(
+                Remedy(
+                    kind=RemedyKind.CUT_LINEAGE,
+                    summary=(
+                        f"Rebuild {leak.source_column_name} from data known before the "
+                        f"outcome is, so it stops deriving from the label: cut "
+                        f"{', '.join(edges)}."
+                    ),
+                    targets=edges,
+                )
+            )
+        remedies += [
+            Remedy(
+                kind=RemedyKind.DROP_FEATURE,
+                summary=(
+                    f"Drop the feature {leak.feature_name} from {self.model.name} and "
+                    f"retrain, so nothing the model reads carries the answer."
+                ),
+                targets=(leak.feature_urn,),
+            ),
+            Remedy(
+                kind=RemedyKind.CORRECT_MARK,
+                summary=(
+                    f"If {leak.label_dataset_name}.{leak.label_column_name} is not this "
+                    f"model's label, remove the label declaration from it: the finding "
+                    f"rests on that declaration and is wrong without it."
+                ),
+                targets=(leak.label_column_urn,),
+            ),
+        ]
+        return Counterfactual(remedies=tuple(remedies), paths=len(leak.all_paths))
+
 
 @dataclass(frozen=True)
 class SensitiveFeature:
@@ -474,6 +698,10 @@ class SensitiveFeature:
     """
     column_path: tuple[str, ...]
     """Column names from the feature's source column back to the classified one."""
+    other_paths: tuple[tuple[str, ...], ...] = ()
+    """Every *other* chain to a classified column the walk found, for the same
+    reason :attr:`LeakingFeature.other_paths` keeps them: a remedy that cuts one
+    derivation and leaves another standing is not a remedy."""
 
     @property
     def marker_name(self) -> str:
@@ -487,19 +715,13 @@ class SensitiveFeature:
 
     @property
     def path_text(self) -> str:
-        """Render the derivation the way the incident and the report quote it.
+        """Render the derivation the way the incident and the report quote it."""
+        return " <- ".join(_collapse_repeats(self.column_path))
 
-        Consecutive repeats of one column name collapse to a single step, for the
-        same reason as :attr:`LeakingFeature.path_text`: a warehouse ingested from
-        more than one source has sibling entities for the same physical table, so
-        lineage legitimately walks the same column twice under two platforms.
-        """
-        collapsed = [
-            column
-            for index, column in enumerate(self.column_path)
-            if index == 0 or column != self.column_path[index - 1]
-        ]
-        return " <- ".join(collapsed)
+    @property
+    def all_paths(self) -> tuple[tuple[str, ...], ...]:
+        """Every chain from this column to a classified column, proof first."""
+        return (self.column_path, *self.other_paths)
 
 
 @dataclass(frozen=True)
@@ -568,6 +790,55 @@ class SensitiveSourceFinding(Finding):
     def models_at_risk(self) -> tuple[ModelRef, ...]:
         """Exactly the one model that consumes this feature."""
         return (self.model,)
+
+    @property
+    def counterfactual(self) -> Counterfactual:
+        """Cut the derivation, drop the feature, or correct the classification.
+
+        The classification remedy is worded as a correction and never as a
+        dismissal. A tool that suggested removing a PII tag to make an incident
+        go away would be teaching exactly the wrong reflex, so the sentence says
+        what it means: if the column was classified in error, the classification
+        is the thing to fix, and that is a decision for whoever owns it.
+        """
+        exposure = self.exposure
+        edges = _cuttable_edges(exposure.all_paths)
+
+        remedies: list[Remedy] = []
+        if edges:
+            remedies.append(
+                Remedy(
+                    kind=RemedyKind.CUT_LINEAGE,
+                    summary=(
+                        f"Rebuild {exposure.source_column_name} from a column carrying no "
+                        f"such constraint, so it stops deriving from "
+                        f"{exposure.marker_name} data: cut {', '.join(edges)}."
+                    ),
+                    targets=edges,
+                )
+            )
+        remedies += [
+            Remedy(
+                kind=RemedyKind.DROP_FEATURE,
+                summary=(
+                    f"Drop the feature {exposure.feature_name} from {self.model.name} and "
+                    f"retrain, so the model no longer learns from "
+                    f"{exposure.sensitive_column_name}."
+                ),
+                targets=(exposure.feature_urn,),
+            ),
+            Remedy(
+                kind=RemedyKind.CORRECT_MARK,
+                summary=(
+                    f"If {exposure.sensitive_dataset_name}."
+                    f"{exposure.sensitive_column_name} is not {exposure.marker_name}, have "
+                    f"whoever owns that classification correct it: the finding rests on "
+                    f"the classification, not on ModelGuard's opinion of the column."
+                ),
+                targets=(exposure.sensitive_column_urn,),
+            ),
+        ]
+        return Counterfactual(remedies=tuple(remedies), paths=len(exposure.all_paths))
 
 
 @dataclass(frozen=True)
@@ -638,6 +909,43 @@ class DeprecatedInputFinding(Finding):
     def models_at_risk(self) -> tuple[ModelRef, ...]:
         """Exactly the one model that trains on this input."""
         return (self.model,)
+
+    @property
+    def counterfactual(self) -> Counterfactual:
+        """Move onto the successor, or withdraw the deprecation.
+
+        The owners' own note is quoted into the migration remedy rather than
+        paraphrased, because where a successor exists that note is the only place
+        in the graph that names it. When they left no note there is nothing to
+        quote, and the remedy says to go and ask them, which is the honest
+        instruction: inventing a replacement table name would be inventing a fact.
+        """
+        successor = (
+            f' Its owners\' note reads: "{self.note}"'
+            if self.note
+            else " Its owners' note names no replacement, so ask them what does."
+        )
+        return Counterfactual(
+            remedies=(
+                Remedy(
+                    kind=RemedyKind.MIGRATE_INPUT,
+                    summary=(
+                        f"Retrain {self.model.name} on whatever replaces "
+                        f"{self.dataset_name} and record the new input on the run."
+                        f"{successor}"
+                    ),
+                    targets=(self.model.urn, self.dataset_urn),
+                ),
+                Remedy(
+                    kind=RemedyKind.WITHDRAW_DEPRECATION,
+                    summary=(
+                        f"If {self.dataset_name} was deprecated in error, have its owners "
+                        f"withdraw the deprecation in DataHub."
+                    ),
+                    targets=(self.dataset_urn,),
+                ),
+            )
+        )
 
 
 class ChangeKind(StrEnum):
@@ -757,6 +1065,39 @@ class SchemaDriftFinding(Finding):
     def models_at_risk(self) -> tuple[ModelRef, ...]:
         """Exactly the one model this training run produced."""
         return (self.model,)
+
+    @property
+    def counterfactual(self) -> Counterfactual:
+        """Put the schema back, or retrain against the one the data now has.
+
+        Both are real fixes and they mean opposite things, which is why both are
+        offered rather than one being recommended: restoring says the change was
+        a mistake, retraining says it was intended and the model is what is out
+        of date. Only the team owning the table knows which, and a tool that
+        picked for them would be guessing at an intent that is not in the graph.
+        """
+        changed = ", ".join(change.describe() for change in self.changes)
+        return Counterfactual(
+            remedies=(
+                Remedy(
+                    kind=RemedyKind.RESTORE_SCHEMA,
+                    summary=(
+                        f"Restore {self.dataset_name} to the schema {self.model.name} was "
+                        f"trained on, reversing: {changed}."
+                    ),
+                    targets=(self.dataset_urn,),
+                ),
+                Remedy(
+                    kind=RemedyKind.RETRAIN,
+                    summary=(
+                        f"Retrain {self.model.name} against {self.dataset_name} as it is "
+                        f"now, so the training-time snapshot on the run matches the "
+                        f"schema the serving path reads."
+                    ),
+                    targets=(self.model.urn, self.training_run_urn),
+                ),
+            )
+        )
 
 
 class TrustBand(StrEnum):
