@@ -16,6 +16,52 @@ Entry template:
 
 ---
 
+## D-106: The depth axes get a plan doc before any of them get code (2026-08-04)
+- Decided by: Ghassen Naouar (asked how the solution generalizes and what to add
+  on evaluation, observability, xAI and AI governance, deeply rather than
+  superficially), written up by Claude.
+- Decision: `docs/plan/09-depth-axes.md` records the whole map: generalizability
+  (adapters, continuous reconciliation, a degraded table-level mode), evaluation
+  (mutation score, confusable negatives, scoring on an ingested graph,
+  deterministic narrative faithfulness), observability (scans emitted as
+  `dataProcessInstance`, guard coverage as a trend, OTel behind an extra),
+  explainability (counterfactual remediation, feature provenance cards, the trust
+  waterfall), and governance (proxy-attribute detection, an EU AI Act Article 10
+  evidence pack, model cards, a NIST AI RMF crosswalk). Two axes nobody asked for
+  are added (FinOps, incident MTTR). Nothing is built by this entry.
+- Options considered:
+  - Start implementing the highest-value item immediately and document after.
+    Rejected: five axes with cross-dependencies (proxy detection reuses the
+    common-ancestor scenario the benchmark needs; every generalizability item is
+    verified by the same ingested-graph benchmark) would have been discovered in
+    the wrong order and built twice.
+  - One doc per axis. Rejected: the axes share a single filter and a single
+    ranked order, and splitting them would hide both.
+  - Add to 04-improvements.md. Rejected: that doc is a list of proposals against
+    the original plan; this is a forward map for a shipped product, which is the
+    same distinction that justified 06 and 07 as separate docs.
+- Why: the filter is the point, and it needed writing down before the ideas did.
+  Every good feature in the product is one primitive applied again (a marked walk
+  over column lineage, computable without touching a row), and the proposals that
+  fail that test would have cost more than their build time: SHAP and value-level
+  drift both need row access and would forfeit the no-rows-to-the-LLM property
+  outright. So section 7 records what is deliberately *not* being built and why,
+  alongside what is. The other thing that needed recording before code: coverage,
+  not detector count, is the binding constraint. F10 and F11 already rate the
+  `link` cliff High, and a new detector multiplies a number near zero on a
+  stranger's catalog, so the adapters outrank every new check.
+- Result: `docs/plan/09-depth-axes.md`. Every SDK symbol it names was introspected
+  against the installed `acryl-datahub==1.6.0.13` and marked `[verified]`, the
+  rest `[confirm]`, per root rule 7: the `DataProcessInstance*` aspect classes all
+  exist but there is no `datahub.sdk` wrapper for the entity, so 3.1 goes through
+  `MetadataChangeProposalWrapper` as `writeback/` already does, with
+  `datahub.api.entities.dataprocess.dataprocess_instance` to evaluate first.
+  `datahub.ingestion.source.feast` ships with the SDK while `feast` itself does
+  not, so 1.1 is an extra. Reading the code also shrank the flagship item:
+  `marked_ancestor` already collects every chain to the label and discards all but
+  the shortest, so the counterfactual in 4.1 is mostly a widened return type
+  rather than a new traversal.
+
 ## D-105: Every click on the dog was dying at mousedown, and the fetch never caught anything (2026-08-03)
 - Decided by: Ahmed Saad (reported the toy would not throw, then that the toy
   was too small and smooth, then that the dog never picked it up), fixed by
