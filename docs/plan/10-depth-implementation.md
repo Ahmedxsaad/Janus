@@ -542,38 +542,111 @@ The largest item, and the verification for all of Phase 3.
 
 None of these are on the critical path. Each is independently landable.
 
-### T-15 Guard coverage as a trended metric (09 section 3.2) - S
-- [ ] Aggregate `detect/coverage.py`'s per-model output to a catalog figure.
-- [ ] Trend it the way `writeback/trust_history.py` trends scores.
-- [ ] Name the single next join that would raise it most.
+### T-15 Guard coverage as a trended metric (09 section 3.2) - S [done, D-126]
+- [x] Aggregate `detect/coverage.py`'s per-model output to a catalog figure.
+      `detect/guard_coverage.py` reads nothing: it is a pure fold over gaps a
+      caller collected, which is what keeps `detect/` from importing
+      `agent/pipeline` and inverting the layering.
+- [x] Trend it the way `writeback/trust_history.py` trends scores. Same storage
+      decision, same cap, same pipe-separated line, carried on ModelGuard's own
+      `dataFlow`: a catalog figure belongs to no model or dataset, and minting a
+      synthetic entity would put a made-up asset in somebody's catalog. That a
+      `dataFlow` accepts a structured property was verified live before the
+      module was written, not assumed.
+- [x] Name the single next join that would raise it most. Keyed on the *remedy*,
+      not the check: one `link` unblocks three checks at once, and a ranking by
+      check would recommend it three times.
+- [x] Not in the checklist and corrected in place per docs/CLAUDE.md rule 1:
+      **freshness is not in the figure**. It is asked of a table, and folding one
+      table check and five model checks into one percentage divides two different
+      denominators. 09 section 3.2's illustrative sentence is corrected for it.
+- [x] `coverage.py`'s check names become constants, and `MODEL_CHECKS` is
+      asserted equal to what a bare model actually reports, so a seventh detector
+      cannot open a silent sixth row.
 
-### T-16 Incident lifecycle and MTTR (09 section 6.2) - S
-- [ ] MTTR per finding type, read from ModelGuard's own writes.
-- [ ] Reported in `RESULTS.md` and in `inventory`.
+### T-16 Incident lifecycle and MTTR (09 section 6.2) - S [done, D-127]
+- [x] MTTR per finding type, read from ModelGuard's own writes. Nothing new is
+      recorded to make it possible: `incidentInfo.created` and the resolution
+      stamp were already there.
+- [x] Reported in `RESULTS.md` and in `inventory`.
+- [x] Not in the checklist, and it decided the design: **incident search does not
+      work**. `scrollAcrossEntities(types: [INCIDENT])` fails with a GraphQL
+      non-null violation on a live GMS through every route the SDK offers, which
+      is the failure `writeback/incidents.py` already recorded for one query and
+      turns out to hold for all of them. Incidents are reached inbound over
+      `IncidentOn` from a model's resources instead.
+- [x] Caught by running it: the freshness row read "0 raised" on a graph holding
+      thirty-one, because a stale-table incident lands on the table that stopped
+      refreshing and never on a model's own input. The resource set now walks
+      upstream of the inputs too.
+- [x] RESULTS.md's section leads with what the number is **not**: on a benchmark
+      graph almost every duration is the seconds between a planted failure and
+      the next trial's restore.
 
-### T-17 OpenTelemetry behind an extra (09 section 3.3) - S
-- [ ] One exporter reading the fields `_log_scan` already assembles.
-- [ ] `[otel]` extra, off by default. Keep it small; do not oversell it.
+### T-17 OpenTelemetry behind an extra (09 section 3.3) - S [done, D-128]
+- [x] One exporter reading the fields `_log_scan` already assembles. A logging
+      handler, the way `argos/handler.py` reads the phase field, so a metric and
+      a log line cannot disagree about a scan.
+- [x] `[otel]` extra, off by default. Keep it small; do not oversell it. Three
+      instruments, no traces, and the instrumentation package that *does* provide
+      spans is named in the docs rather than reimplemented.
+- [x] `MODELGUARD_OTEL_ENDPOINT` is an address, so no default and no fallback.
+      Headers are optional rather than an all-or-nothing group (a collector in
+      the same cluster needs none) and are carried as `SecretStr`.
 
-### T-18 FinOps: pipelines feeding models nobody uses (09 section 6.1) - S/M
-- [ ] Intersect blast radius with `discovery.py`'s model list, including the
-      non-latest versions search hides (D-100).
-- [ ] A staleness window in `config.py`, defaulted and documented (root rule 6b).
+### T-18 FinOps: pipelines feeding models nobody uses (09 section 6.1) - S/M [done, D-129]
+- [x] Intersect blast radius with `discovery.py`'s model list, including the
+      non-latest versions search hides (D-100). Load-bearing here more than
+      anywhere: a hidden version is exactly the live consumer that would make
+      this recommend deleting a table something still reads.
+- [x] A staleness window in `config.py`, defaulted and documented (root rule 6b).
+      `unused_model_days`, 90, a quarter.
+- [x] Not in the checklist and it is what makes the output safe to act on: a
+      table is listed only when **every** downstream model is unused, and a model
+      with no recorded date is reported as *undated*, never as unused. In the one
+      report here whose advice is to delete something, an absence is not evidence.
+- [x] A report and not a detector: no `FindingType`, no incident, no trust
+      deduction. Nothing is broken.
 
-### T-19 Feature provenance cards (09 section 4.2) - M
-- [ ] Per `MLFeature`: derivation chain, transitive tables and their freshness,
+### T-19 Feature provenance cards (09 section 4.2) - M [done, D-130]
+- [x] Per `MLFeature`: derivation chain, transitive tables and their freshness,
       classification exposure, drift history, and its T-03 counterfactual if it
-      carries a finding.
-- [ ] Cite Pushkarna, Zaldivar and Kjartansson, *Data Cards* (FAccT 2022) in
-      `resources.md`.
+      carries a finding. Taken per *model* with a `--feature` substring filter: a
+      model is what somebody has in hand and an `mlFeature` URN is not.
+- [x] Cite Pushkarna, Zaldivar and Kjartansson, *Data Cards* (FAccT 2022) in
+      `resources.md`, with what it changed here.
+- [x] `column_marks.py` gains `derivation_chains`, the same walk asked a third
+      question: the whole derivation rather than the interesting part of it.
+- [x] Two refusals inherited from the Article 10 pack (D-119): the freshness
+      figures say they are measured *now* and not at training time, and the
+      training-time type is read from the snapshot entry for this column's own
+      table rather than a flattening of every input, which is D-070's collision
+      arriving one level down.
 
-### T-20 Continuous reconciliation (09 section 1.2) - M, blocked
-- [ ] **Blocked on the `MetadataChangeLog` consumer** that 03-production-hardening.md
-      section C.1 names as `watch`'s event-driven upgrade. Land that first; this is
-      the same consumer with a second handler.
-- [ ] Watch `mlModelProperties` upserts, re-apply the stored link arguments.
-- [ ] Verify by ingesting a model twice through DataHub's own mlflow source and
-      asserting the features survive with no human action.
+### T-20 Continuous reconciliation (09 section 1.2) - M [done, D-132]
+- [x] ~~**Blocked on** the `MetadataChangeLog` consumer~~ that
+      03-production-hardening.md section C.1 names as `watch`'s event-driven
+      upgrade. It is built: `modelguard/mcl.py`, reached through
+      `watch --events` behind a `[kafka]` extra. Not `datahub-actions`, which
+      would deliver the same records through a plugin system with its own YAML,
+      a second configuration surface beside `env.py` (root rule 6).
+- [x] Watch `mlModelProperties` upserts, re-apply the stored link arguments.
+      `modelguard/reconcile.py`, and it replays **only** what a human already
+      confirmed: an inferred join is indistinguishable from a confirmed one in
+      the graph and would make every detector downstream confident about the
+      wrong columns.
+- [x] Verify by ingesting a model twice through DataHub's own mlflow source and
+      asserting the features survive with no human action. Done against a live
+      MLflow and Quickstart: the second ingest reproduced the drop exactly, 7
+      features to 0, and the third, with `watch --events` up, put them back.
+- [x] Two things the live run corrected. `subscribe()` returns before the broker
+      assigns partitions, and `auto.offset.reset=latest` fixes the cursor at
+      *assignment*, so everything written in between was invisible; the consumer
+      now waits for the assignment and buffers what arrives meanwhile. And
+      DataHub's mlflow source names an `mlModel` per model *version*, not per
+      model, which is the entity a replay has to target.
+- [x] Polling stays the default and needs no broker, so `modelguard/CLAUDE.md`
+      rule 2's "polling by design" becomes "polling by default".
 
 ### ~~T-21 sklearn and feature-store adapters (09 section 1.1) - M each~~ [dropped, D-131]
 
@@ -626,9 +699,14 @@ Tracked here because they land inside other tasks rather than as their own.
 - [ ] **F6** (the benchmark scores itself): step 3 closed in T-14 (D-121). Steps 1
   and 2 stay open in T-08 and T-09.
 - [ ] **F7** (invented trust weights) closes inside T-01.
-- [ ] **F10 / F11** (the `link` cliff) close across T-05, T-06, T-07 and T-20.
-  T-14 verified the first three against an ingested graph and found two defects in
-  them (D-121); F10 stays open until T-20 closes the re-ingestion half.
+- [x] **F11** (the `link` cliff's re-ingestion half) **closes in T-20** (D-132), and
+  `07-weaknesses-and-remedies.md` is updated in place with the closing id. Step 4 of
+  its remedy, patching `mlModelProperties` upstream instead of upserting it, is not
+  this project's to make and stays open as feedback #14.
+- [ ] **F10** (the `link` cliff's discovery half) closes across T-05, T-06 and T-07.
+  T-14 verified all three against an ingested graph and found two defects in them
+  (D-121). What is still open there is `--infer` on a stack whose mlflow ingest
+  records no run inputs, which no task in this plan addresses.
 
 After the phase that closes each one, update `07-weaknesses-and-remedies.md` in place
 with the closing decision id. A finding that is fixed but still listed as open is the
@@ -665,3 +743,4 @@ purpose-limitation detector.
 |---|---|---|
 | 2026-08-04 | Claude (for Ghassen Naouar) | Initial version: 21 tasks across 8 phases, the standing definition of done, the cross-cutting F-number closes, and the phase gates (D-107) |
 | 2026-08-04 | Claude (for Ghassen Naouar) | Phase 6 (T-14) done and corrected in place per docs/CLAUDE.md rule 1 by building it: only leakage is scoreable on that stack, postgres is a third ingestion source the task did not name, the re-verification needed two declarations added to the example, and the degraded mode turned out to have nothing to stand on there (D-121) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Phase 7 done and corrected in place per docs/CLAUDE.md rule 1 by building it: T-15's figure excludes freshness because a table check and five model checks divide two denominators, T-16 found that incident search does not work at all on this GMS and that a freshness incident is never on a model's own input, T-18's report needed two guards nothing in the plan named before it was safe to act on, T-20 was unblocked by building the consumer the plan had it waiting for, and T-21 is struck through: sklearn retains the label column's name nowhere, which is the one argument the adapter existed to supply (D-126 to D-132) |
