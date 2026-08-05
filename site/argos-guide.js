@@ -112,16 +112,12 @@
     sit: ["sit"],
   };
 
-  const WALK = ["walk_a", "walk_b", "walk_c", "walk_d"];
-
-  const WALK_SPEED = 190;   // css pixels per second
-  const WALK_FRAME_MS = 110;
   const POSE_FRAME_MS = 420;
   const TYPE_MS = 24;       // per character
-  const SETTLE_MS = 180;    // pause between arriving and speaking
+  const SETTLE_MS = 180;    // pause between arriving at a section and speaking
   const SPRITE = 32;        // the art is 32x32
-  const ARRIVED = 1.5;      // px: closer than this counts as standing still
-  const FLOOR = 42;         // px: the drawn step, matching .companion .floor
+  const LEDGE = 16;         // px: the little step he stands on, drawn below
+  const PAD = 10;           // px: breathing room inside the corner box
 
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -210,13 +206,28 @@
     }
   }
 
+  /** The ornament palette, for the one ornament this file draws itself. */
+  const ORNAMENTS = window.ArgosSprites?.ORNAMENT_PALETTE || {};
+
+  /** The masonry tile, parsed once and remembered. */
+  let ledgeRows = null;
+  function ledge() {
+    if (ledgeRows === null) {
+      const art = window.ArgosSprites?.ORNAMENTS;
+      ledgeRows = art ? ArgosSprites.parseSprites(art).stylobate || false : false;
+    }
+    return ledgeRows;
+  }
+
   /**
-   * The one dog on the page, and where he is in walking to his current stop.
+   * The one dog on the page, parked in the corner and reporting on the section
+   * being read.
    *
    * A stop is any element carrying `data-say`. It contributes the line, the
-   * pose, the collar, and `data-x`, which is where along the strip he stands
-   * for it, as a fraction of the width. Moving him is the point: a companion
-   * who says a new thing from the same spot every time reads as a caption.
+   * pose and the collar. It used to contribute a position too, and he walked
+   * between them across the foot of the window; that put his speech bubble
+   * wherever he happened to stop, and an opaque bubble over a paragraph is
+   * worse than no bubble. He stays put now and the sections do the moving.
    */
   class Companion {
     constructor(canvas, frames) {
@@ -224,9 +235,6 @@
       this.ctx = canvas.getContext("2d");
       this.frames = frames;
       this.stop = null;
-      this.x = null;
-      this.targetX = 0;
-      this.facing = 1;
       this.pose = POSES.idle;
       this.collar = null;
       this.lines = [];
@@ -257,22 +265,24 @@
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.ctx.imageSmoothingEnabled = false;
 
-      // Big enough to read as a character, small enough that he and a bubble
-      // both fit across a laptop window.
-      this.scale = this.width < 760 ? 3 : 4;
+      // Big enough to read as a character, small enough to leave the bubble
+      // above him room to be more than two words wide.
+      this.scale = this.width < 240 ? 3 : 4;
       this.sprite = SPRITE * this.scale;
-      // He stands on the masonry course, not in front of it: his feet land a
-      // few pixels into the top of the step, which is what reads as contact.
-      // FLOOR is the drawn step's height, and has to match `.companion .floor`
-      // in the stylesheet; there is no way to ask canvas for a CSS length.
-      this.spriteY = this.height - FLOOR - this.sprite + 8;
+
+      // Parked, so this is the whole of his placement. He stands at the right
+      // of the box with his feet a few pixels into the ledge, which is what
+      // reads as contact rather than as hovering over it.
+      this.x = this.width - this.sprite - PAD;
+      this.spriteY = this.height - LEDGE - this.sprite + 6;
+      this.ledgeY = this.height - LEDGE;
 
       if (this.stop) {
         this.layout();
       }
     }
 
-    /** Take a new stop: where to stand, what to do there, and what to say. */
+    /** Take a new section: what to do, and what to say about it. */
     goTo(element) {
       if (this.stop === element) {
         return;
@@ -288,54 +298,67 @@
     }
 
     /**
-     * Place the dog and size his bubble for the current stop.
+     * Size the bubble that sits above him.
      *
-     * The bubble takes whichever side of him has more room, and the text is
-     * wrapped to that, so a narrow window gets more lines rather than a clipped
-     * sentence. More lines is a taller bubble and the strip has a fixed height,
-     * so a window that runs out of room gets smaller pixels rather than a
-     * sentence cut off at the top of the canvas.
+     * It is always in the same place, because he is: across the top of the
+     * corner box, right aligned over his head. The text is wrapped to that
+     * width, and if the result is too tall to stand above him the pixels get
+     * smaller rather than the sentence getting cut off.
      */
     layout() {
-      const margin = 24;
-      const room = this.width - this.sprite - margin * 2;
-      // data-x is a fraction of the strip he can stand across, so a stop can
-      // put him anywhere without knowing the viewport width.
-      const where = Number(this.stop.dataset.x);
-      const fraction = Number.isFinite(where) ? Math.min(1, Math.max(0, where)) : 0;
-      this.targetX = margin + room * fraction;
-      if (this.x === null || still) {
-        this.x = this.targetX;
-      }
+      const room = this.width - PAD * 2;
+      const ceiling = this.spriteY - 10;
 
-      // Speak into the open half of the strip, and face what you are saying.
-      this.bubbleRight = this.targetX < this.width / 2;
-      this.facing = this.bubbleRight ? 1 : -1;
+      // Try the biggest text first and step down until the bubble, plus the
+      // three pixels of tail hanging under it, clears his head. The smallest
+      // size is a floor rather than a failure: more lines is always better than
+      // a sentence cut off at the top of the canvas.
+      for (let scale = this.scale - 1; scale >= 1; scale -= 1) {
+        const columns = Math.max(18, Math.floor(room / scale) - 6);
+        const lines = wrap(this.message, columns);
+        const longest = lines.reduce((most, line) => Math.max(most, textWidth(line)), 0);
+        const w = Math.min(room, longest * scale + scale * 6);
+        const h = lines.length * LINE_STEP * scale + scale * 5;
+        const tail = scale * 3;
 
-      const gap = 14;
-      const budget = this.bubbleRight
-        ? this.width - (this.targetX + this.sprite) - gap - margin
-        : this.targetX - gap - margin;
-
-      for (this.textScale = this.scale - 1; this.textScale > 1; this.textScale -= 1) {
-        const columns = Math.max(30, Math.floor(budget / this.textScale) - 6);
-        this.lines = wrap(this.message, columns);
-        const longest = this.lines.reduce((most, line) => Math.max(most, textWidth(line)), 0);
-        const w = longest * this.textScale + this.textScale * 6;
-        this.box = {
-          x: this.bubbleRight ? this.targetX + this.sprite + gap : this.targetX - gap - w,
-          y: 6,
-          w,
-          h: this.lines.length * LINE_STEP * this.textScale + this.textScale * 5,
-        };
-        // The tail hangs three of its own pixels below the box, and the box
-        // must not push past the edge it grew towards.
-        const fits = this.box.y + this.box.h + this.textScale * 3 <= this.height;
-        if (fits && this.box.x >= margin && this.box.x + w <= this.width - margin) {
+        this.textScale = scale;
+        this.lines = lines;
+        this.box = { x: this.width - PAD - w, y: Math.max(4, ceiling - tail - h), w, h };
+        if (this.box.y + h + tail <= ceiling) {
           break;
         }
       }
       this.chars = this.message.length;
+    }
+
+    /**
+     * The little step he stands on.
+     *
+     * A short run of the same masonry the ornaments are drawn from, only as
+     * wide as he is. It used to be a course across the entire window, which is
+     * a lot of furniture to justify for one dog standing on one end of it.
+     */
+    drawLedge() {
+      const rows = ledge();
+      if (!rows) {
+        return;
+      }
+      const scale = 2;
+      const wide = rows[0].length * scale;
+      const from = this.x - 14;
+      const until = this.x + this.sprite + 14;
+      for (let x = from; x < until; x += wide) {
+        for (let row = 0; row < rows.length; row += 1) {
+          for (let col = 0; col < rows[row].length; col += 1) {
+            const colour = ORNAMENTS[rows[row][col]];
+            if (!colour) {
+              continue;
+            }
+            this.ctx.fillStyle = colour;
+            this.ctx.fillRect(x + col * scale, this.ledgeY + row * scale, scale, scale);
+          }
+        }
+      }
     }
 
     /** Advance by `dt` milliseconds and paint one frame. */
@@ -343,35 +366,24 @@
       const ctx = this.ctx;
       ctx.clearRect(0, 0, this.width, this.height);
       this.clock += dt;
+      this.settled += dt;
 
-      const remaining = this.targetX - this.x;
-      const walking = Math.abs(remaining) > ARRIVED;
-      if (walking) {
-        const step = Math.min(Math.abs(remaining), (WALK_SPEED * dt) / 1000);
-        this.x += Math.sign(remaining) * step;
-        // Face the way you are going, whatever you will face on arrival.
-        this.facing = Math.sign(remaining);
-        // Nothing is said mid-walk: the line belongs to the place.
-        this.settled = 0;
-      } else {
-        this.x = this.targetX;
-        this.settled += dt;
-      }
+      const frame = Math.floor(this.clock / POSE_FRAME_MS);
+      const rows = this.frames[this.pose[frame % this.pose.length]];
 
-      const frames = walking ? WALK : this.pose;
-      const frame = Math.floor(this.clock / (walking ? WALK_FRAME_MS : POSE_FRAME_MS));
-      const rows = this.frames[frames[frame % frames.length]];
-
+      this.drawLedge();
       ArgosSprites.drawFrame(ctx, rows, this.scale, {
         x: this.x,
         y: this.spriteY,
-        flip: this.facing < 0,
+        // Facing into the page rather than out of it: he is on the right, and a
+        // companion looking off the edge of the window reads as turned away.
+        flip: true,
         collar: this.collar,
         // A resting dog still breathes. Half a sprite pixel, every other frame.
-        bob: !walking && frame % 2 ? 0.5 : 0,
+        bob: frame % 2 ? 0.5 : 0,
       });
 
-      if (walking || !this.message || !this.box) {
+      if (!this.message || !this.box) {
         return;
       }
       const speaking = this.settled - SETTLE_MS;
@@ -382,8 +394,8 @@
       if (revealed <= 0) {
         return;
       }
-      // The tail points at his head, clamped so it stays under the bubble.
-      const head = this.facing > 0 ? this.x + 18 * this.scale : this.x + 8 * this.scale;
+      // The tail points down at his head, clamped so it stays under the bubble.
+      const head = this.x + 8 * this.scale;
       const tailX = Math.min(
         Math.max(head, this.box.x + this.textScale * 2),
         this.box.x + this.box.w - this.textScale * 8,

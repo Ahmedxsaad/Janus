@@ -16,6 +16,71 @@ Entry template:
 
 ---
 
+## D-141: The page explains mechanisms with diagrams, not paragraphs (2026-08-06)
+- Decided by: Ghassen Naouar.
+- Decision: Five diagrams land beside the one the page already had, each
+  replacing the prose that described the same thing, and all six move into a
+  generator, `site/art/make_diagrams.py`.
+- What each replaces: a paragraph saying detection is deterministic and the LLM
+  only words things (now a read/decide/write pipeline with the model wired only
+  to the wording); a paragraph on why table-level lineage cannot say which
+  feature leaks (now two features of one model, one descending from the label);
+  a paragraph on the multi-path counterfactual (now the two derivations and the
+  two outcomes side by side); a paragraph on the ingest that drops a link (now
+  four steps with the silent one in oxblood); and the table of run entities (now
+  their actual shape).
+- What deliberately stayed prose: every passage that argues rather than
+  describes. A diagram cannot say why a threshold is not a policy, or what the
+  benchmark still does not measure, and the caveats under each new diagram are
+  the sentences a picture would have quietly dropped.
+- Options considered: (a) leave the diagrams as inline SVG next to the first
+  one; (b) generate all of them from one module.
+- Why (b): the first draft was written straight into the HTML and every
+  sub-label in a box shorter than 46 pixels fell out through the bottom of it,
+  because the offset that fitted the one existing diagram fitted none of the new
+  ones. A box that places its own text from its own height cannot make that
+  mistake. Generating also gave the arrowhead markers per-diagram ids, and a
+  shared id across several SVGs is exactly the bug that hid the character in
+  D-139.
+- Result: `tests/test_site.py` gains two tests, both confirmed red by breaking
+  them per tests/CLAUDE.md rule 6: the page matches a rerun of the generator (a
+  hand-nudged coordinate fails), and every diagram carries alt text long enough
+  to be a sentence (a diagram labelled "pipeline" fails). Every diagram was
+  rendered and looked at rather than reviewed as markup, which is how the
+  clipped sub-labels were found in the first place.
+
+## D-140: Argos is parked in a corner the page reserves for him (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: Argos stops walking. He is fixed in the bottom right corner, `body`
+  reserves that corner with a `padding-right`, and the full-width masonry course
+  shrinks to a short ledge under his feet. He still changes pose and line with
+  the section being read.
+- The problem: his speech bubble is opaque, and it has to be, because pixel text
+  over running body text is unreadable. Walking a strip across the foot of the
+  window put that opaque box wherever he happened to stop, which was on top of
+  whatever paragraph was behind him.
+- Options considered: (a) make the bubble translucent; (b) keep him walking but
+  push the bubble to whichever side has fewer words under it; (c) park him and
+  reserve the space so the bubble has somewhere to be that the document never
+  occupies.
+- Why (c): (a) trades an unreadable paragraph for unreadable bubble text and
+  loses the pixel look, which is the point of drawing it as pixels. (b) is a
+  heuristic over a layout that reflows, so it is right until a window is resized.
+  (c) is the only one where the overlap is impossible rather than unlikely: the
+  bubble is right-aligned inside a box the page's content box stops short of, so
+  by construction it cannot reach a paragraph.
+- What it costs: 15rem of width on screens wide enough to spare it, and the
+  companion is hidden below 70rem, where reserving a sixth of the window would
+  cost the document more than he is worth. The colonnade's breakpoint moved from
+  92rem to 104rem for the same reason (the reserved gutter narrows the outer
+  margins, and the left column had started landing on the headline), and the
+  right colonnade now stops above his corner rather than standing behind him.
+- Result: the walk cycle, `data-x` on all 24 sections, and the full-width floor
+  are gone. `tests/test_site.py` no longer asserts a walk cycle exists. Verified
+  by screenshot at 1100, 1440, 1500 and 1800 px, including forcing the bubble
+  open, since headless virtual time runs too few animation frames to reach the
+  typing state on its own.
+
 ## D-139: The dog was missing for two reasons, and the page is dressed in stone (2026-08-05)
 - Decided by: Ghassen Naouar.
 - Decision: `site/` becomes self-contained (nothing above it is ever loaded),

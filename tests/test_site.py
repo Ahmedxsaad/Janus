@@ -32,16 +32,19 @@ def _font() -> dict[str, str]:
 
 
 def _pose_frames() -> dict[str, list[str]]:
-    """The frame names each pose cycles through, plus the walk cycle."""
+    """The frame names each pose cycles through.
+
+    There is no walk cycle here any more: the companion is parked in the corner
+    and the sections move past him instead, so the only animation left is the
+    pose he holds while a section is being read (D-140).
+    """
     block = re.search(r"const POSES = \{(.*?)\n  \};", GUIDE, re.S)
     assert block, "the pose table moved"
     poses = {
         name: re.findall(r'"([a-z_]+)"', frames)
         for name, frames in re.findall(r"(\w+): \[(.*?)\],", block.group(1))
     }
-    walk = re.search(r"const WALK = \[(.*?)\];", GUIDE, re.S)
-    assert walk, "the walk cycle moved"
-    poses["walk"] = re.findall(r'"([a-z_]+)"', walk.group(1))
+    assert poses, "the pose table is empty: this test cannot check anything"
     return poses
 
 
@@ -107,6 +110,36 @@ def test_the_page_loads_nothing_from_outside_its_own_directory():
     for reference in re.findall(r'(?:src|href)="([^"]+)"', PAGE):
         assert not reference.startswith("../"), f"{reference} is outside site/"
     assert "fetch(" not in GUIDE, "the page fetches art again: inline it instead"
+
+
+def test_the_diagrams_match_the_generator_that_draws_them():
+    """The page's diagrams are generated, and may not be edited in place (D-141).
+
+    Same joint as the sprite bundle above: run the generator against the
+    committed page and fail if it moves anything. A coordinate nudged by hand
+    would otherwise be silently undone by the next person who runs the script.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "_make_diagrams", SITE / "art" / "make_diagrams.py"
+    )
+    generator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generator)
+
+    assert generator.render(PAGE) == PAGE, (
+        "the diagrams are stale: run python site/art/make_diagrams.py"
+    )
+
+
+def test_every_diagram_says_what_it_shows():
+    """A diagram is a picture, so its alt text is the only version some readers get.
+
+    It also has to be a sentence rather than a name: "diagram 3" tells a reader
+    using a screen reader exactly as much as the empty string would.
+    """
+    labels = re.findall(r'<svg viewBox="[^"]*" role="img" aria-label="([^"]*)"', PAGE)
+    assert len(labels) == PAGE.count("<svg "), "a diagram is missing role or aria-label"
+    for label in labels:
+        assert len(label) > 60, f"alt text too short to describe anything: {label!r}"
 
 
 def test_every_ornament_the_page_asks_for_is_one_the_art_defines():
