@@ -8,6 +8,7 @@ in review and broken to a reader.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 from pathlib import Path
 
@@ -75,12 +76,45 @@ def test_every_glyph_is_a_rectangle_five_rows_tall():
         assert len(bitmap) % 5 == 0, f"glyph {character!r} is {len(bitmap)} pixels"
 
 
-def test_the_page_reads_the_one_copy_of_the_art():
-    # If somebody vendors a second argos.txt into site/, the window and the page
-    # start drifting apart and neither review nor the tests above would notice.
-    assert '"../argos/ui/sprites/argos.txt"' in GUIDE
-    assert '"../argos/ui/sprites.js"' in PAGE
-    assert not list(SITE.glob("**/*.txt"))
+def test_the_bundle_matches_the_art_it_was_generated_from():
+    """The page carries a copy of the art now, and it may not drift (D-139).
+
+    It used to read `../argos/` directly, which is the right source and an
+    unreachable path in production: the deployment is served with `site/` as its
+    root, so the fetch 404s and the page renders perfectly with no dog on it.
+
+    So the copy is generated rather than forbidden, and this is what the old
+    "no second copy" rule becomes: run the generator and compare. A redrawn leg
+    that never reaches the page now fails here instead of shipping.
+    """
+    # Loaded by path, not imported: `site` is a standard library module, so
+    # `import site.art` finds the interpreter's own and not this directory.
+    spec = importlib.util.spec_from_file_location("_make_pixels", SITE / "art" / "make_pixels.py")
+    generator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generator)
+
+    assert (SITE / "pixels.js").read_text() == generator.build(), (
+        "site/pixels.js is stale: run python site/art/make_pixels.py"
+    )
+
+
+def test_the_page_loads_nothing_from_outside_its_own_directory():
+    """Anything above `site/` is unreachable once deployed, so nothing may ask.
+
+    The failure this exists for is silent in both directions: the asset 404s and
+    the page still renders, so neither a reviewer nor a smoke test notices.
+    """
+    for reference in re.findall(r'(?:src|href)="([^"]+)"', PAGE):
+        assert not reference.startswith("../"), f"{reference} is outside site/"
+    assert "fetch(" not in GUIDE, "the page fetches art again: inline it instead"
+
+
+def test_every_ornament_the_page_asks_for_is_one_the_art_defines():
+    """A missing piece is a blank rectangle, which reads as a layout bug."""
+    pieces = set(re.findall(r'data-(?:piece|relic)="([a-z]+)"', PAGE))
+    assert pieces, "the page places no ornaments: this test cannot check anything"
+    drawn = set(re.findall(r"^# ([a-z]+)$", (SITE / "art" / "ornaments.txt").read_text(), re.M))
+    assert pieces <= drawn, f"the page asks for pieces nothing draws: {pieces - drawn}"
 
 
 def test_the_page_carries_a_crosswalk_row_for_every_detector():

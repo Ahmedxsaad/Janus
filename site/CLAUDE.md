@@ -1,30 +1,48 @@
 # CLAUDE.md - site
 
 The documentation and landing page for what ships to a user: the PyPI package,
-the CLI, the Python API, the MCP server, and Argos. Three static files, no
-build step, no dependency.
+the CLI, the Python API, the MCP server, and Argos. Static files, no build step
+and no dependency; `art/` holds the two generators that write the pixels.
 
-Run it with `python -m http.server` **from the repository root**, then open
-<http://localhost:8000/site/>. Not from inside this directory: the page reads
-the art out of `../argos/`, and `fetch` is blocked under `file://`.
+Open `index.html`. It needs no server and no build step: every asset it loads
+is in this directory, and the art is inlined rather than fetched.
+
+Everything outside `site/` is unreachable once deployed, because the deployment
+is served with this directory as its root. That is not a preference, it is the
+constraint the whole file layout here answers to (D-139).
 
 ## Local rules
 
-1. **No second copy of the art.** `argos-guide.js` reads
-   `argos/ui/sprites/argos.txt` through `argos/ui/sprites.js`, the same two
-   files the Tauri window, the app icon and the README animation read. A
-   vendored copy here goes stale the first time somebody redraws a leg, and
-   nothing would fail. `tests/test_site.py` enforces this.
-2. **No framework, no bundler, no web font, no CDN.** The bubble text is a
+1. **Nothing here may load anything from outside this directory, ever.** Not
+   `../argos/`, not a CDN. Such a reference works locally and 404s in
+   production, where the page still renders and the missing thing is simply
+   absent: that is how a page with no dog on it passed review and shipped
+   (D-139). `tests/test_site.py` fails on any `../` reference and on any
+   `fetch(`.
+2. **The art is generated into this directory, never authored in it.**
+   `pixels.js` is built by `art/make_pixels.py` from `argos/ui/sprites.js` and
+   `argos/ui/sprites/argos.txt`, the files the window and the README animation
+   read. It is a second copy, which the old rule forbade outright, so the
+   guarantee moved from a rule somebody remembers to a test: `test_site.py`
+   reruns the generator and compares. Redraw the dog, run the generator, commit
+   both. The ornaments work the same way: draw in `art/make_ornaments.py`, run
+   it with `--preview` and *look* at the sheet, never hand-edit `ornaments.txt`.
+3. **No framework, no bundler, no web font, no CDN.** The bubble text is a
    glyph table drawn as rects, so it is made of the same pixels the dog is.
-3. **A beat is markup, not code.** Argos says what a `<canvas class="beat">`
-   carries in `data-say`, in the pose named by `data-pose`. Adding a beat is
-   adding one element; the tests check that the pose exists and that every
-   character has a glyph.
-4. **Red is a live finding here too.** `data-collar="r"` belongs on the beat
+4. **A beat is markup, not code.** Argos says what a section carries in
+   `data-say`, in the pose named by `data-pose`, standing at `data-x`. Its
+   ornament is `data-relic`. Adding a beat is adding attributes; the tests check
+   that the pose exists, that every character has a glyph, and that the ornament
+   is one the art defines.
+5. **Red is a live finding here too.** `data-collar="r"` belongs on the beat
    about a finding and nowhere else, for the same reason the window only paints
-   it off an event (argos/CLAUDE.md rule 6).
-5. This page documents the shipped product, so what it claims has to be true of
+   it off an event (argos/CLAUDE.md rule 6). The ornaments' oxblood is held to
+   the same line: it is the crest on one helmet and nothing else.
+6. **An ornament never shares a column with content.** The rail is its own grid
+   column. Floated into the text it sits politely beside a paragraph and then
+   lands on top of the next wide table, because the prose is capped at a reading
+   measure and the tables and code blocks are not.
+7. This page documents the shipped product, so what it claims has to be true of
    the released package. When a command, a flag or an extra changes, this page
    changes in the same commit as the README.
 
@@ -43,4 +61,5 @@ the art out of `../argos/`, and `fetch` is blocked under `file://`.
 | 2026-08-05 | Claude (for Ghassen Naouar) | The watch section gains `--events`, and states the failure it exists for rather than the feature: an ingest silently drops a link, every check then reports not-evaluated on a model that was checked yesterday, and nothing errors (D-132, T-20) |
 | 2026-08-05 | Claude (for Ghassen Naouar) | Package and brand identifiers renamed repo-wide: paths, imports, and prose all match the current name and distribution name (D-136) |
 | 2026-08-05 | Claude (for Ghassen Naouar) | The page is set in autumn (ivory, dark brown, caramel, oxblood) and one Argos walks it: position, pose, collar and line are declared per section as `data-x` / `data-pose` / `data-collar` / `data-say`, replacing the nine stacked canvases. `vercel.json` at the repository root keeps rule 1 workable in the deployment, where a `site/` root would put `../argos/` outside it and the dog would silently never appear (D-137) |
-| 2026-08-05 | Claude (for Ghassen Naouar) | Rule 5's promise extended below the command level: a `#flags` section covers every option of every command, the configuration section covers all 28 `.env` keys rather than 13, and the versioned-model sweep behaviour gets the prose it never had. `tests/test_docs.py` enforces a command, nothing enforces an option, so this one is still kept by remembering (D-138) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Rule 7's promise extended below the command level: a `#flags` section covers every option of every command, the configuration section covers all 28 `.env` keys rather than 13, and the versioned-model sweep behaviour gets the prose it never had. `tests/test_docs.py` enforces a command, nothing enforces an option, so this one is still kept by remembering (D-138) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | The dog was missing in production and broken everywhere: the page fetched `../argos/`, which the `site/`-rooted deployment cannot reach, and `<canvas id="argos">` collided with `<section id="argos">` so querySelector returned the section. Art is now generated into `pixels.js` and rule 1 forbids reaching outside this directory at all. The bottom strip's translucent wash is gone, replaced by a drawn masonry course, and the page is decorated with pixel Roman ornaments placed where no content reaches (D-139) |

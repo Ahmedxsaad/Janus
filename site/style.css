@@ -15,10 +15,17 @@
  * desktop window reserves: --danger is a live finding and --ok is a check that
  * ran and passed. Nothing else may use them.
  *
- * The one gradient in the file is the floor the companion walks on. It is not
- * decoration: an opaque speech bubble drawn over running body text is
- * unreadable, so the strip the dog occupies has to stop being transparent
- * before he reaches it.
+ * There are no gradients in the file at all. The floor the companion walks on
+ * used to be one, fading the page out behind him with a translucent wash that
+ * followed the reader down the document; it is a drawn course of masonry now,
+ * opaque where he stands and ending on a hard edge. The bubble needed opacity,
+ * not a fade.
+ *
+ * The ornaments are the other thing this file places: an Ionic column, an arch,
+ * a temple, a wreath. Janus is the god of doors and beginnings, and the page is
+ * dressed as the building he would have been kept in. They fill space nothing
+ * else reaches (the rail beside a 33rem measure, the outer margins) and none of
+ * them is ever placed where a table or a code block can grow into it.
  */
 
 :root {
@@ -57,7 +64,7 @@
   /* A reading measure, in the low sixties of characters. Anything wider and
      the eye loses the line return on a serif this size. */
   --measure: 33rem;
-  --max: 64rem;
+  --max: 76rem;
 
   /* How tall the companion strip is. Referenced by the page's bottom padding
      too, so the last paragraph is never parked under the dog. */
@@ -337,6 +344,15 @@ pre code {
 
 /* --- layout -------------------------------------------------------------- */
 
+/*
+ * Three columns: the contents, the document, and the ornament rail.
+ *
+ * The rail is a real column rather than something floated into the text. The
+ * prose is capped at a reading measure but the tables and the code blocks are
+ * not, so an ornament placed in the gutter by hand would sit politely beside a
+ * paragraph and then land on top of the next wide table. Given its own column
+ * it cannot overlap anything, whatever the section is made of.
+ */
 .page {
   max-width: var(--max);
   margin: 0 auto;
@@ -344,8 +360,8 @@ pre code {
      has to be readable with the dog standing in front of it. */
   padding: 4.5rem 2rem calc(var(--floor) + 3rem);
   display: grid;
-  grid-template-columns: 13rem 1fr;
-  gap: 4rem;
+  grid-template-columns: 12rem minmax(0, 1fr) 11rem;
+  gap: 3.4rem;
   align-items: start;
 }
 
@@ -677,6 +693,14 @@ pre:hover .copy,
  *
  * pointer-events: none is load-bearing. The strip covers the bottom of every
  * screen, so without it the dog would eat the clicks on whatever is under him.
+ *
+ * There is no gradient here any more. The strip used to fade the page out
+ * behind him with a translucent wash, which followed the reader down the
+ * document as a grey smear over their own text. It is a course of masonry
+ * instead: a drawn step the character stands on, opaque where he is and ending
+ * on a hard edge rather than a fade. Opacity is what a bubble drawn over body
+ * text actually needs; the wash was only ever an apology for not drawing a
+ * floor.
  */
 .companion {
   position: fixed;
@@ -686,29 +710,155 @@ pre:hover .copy,
   height: var(--floor);
   z-index: 40;
   pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(250, 245, 234, 0) 0%,
-    rgba(250, 245, 234, 0.86) 42%,
-    var(--paper) 66%
-  );
 }
 
-/* The floor itself: one caramel hairline the character stands on, so he reads
-   as being somewhere rather than floating over the text. */
-.companion::after {
-  content: "";
+/* The step: masonry along the bottom, and the page ends on its top edge. */
+.companion .floor {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 1.4rem;
-  border-bottom: 1px solid var(--rule);
+  bottom: 0;
+  height: 2.6rem;
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
 }
 
-.companion canvas {
+.companion .floor canvas {
   display: block;
   width: 100%;
   height: 100%;
+  opacity: 0.85;
+}
+
+.companion > canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* --- the ornaments ------------------------------------------------------- */
+
+/*
+ * The rail beside the prose. Body copy is set to a 33rem measure inside a
+ * column wider than that, so every section left a vertical band of nothing
+ * down its right side; this is what now stands in it. One piece at a time,
+ * changing with the section, for the same reason there is one dog.
+ */
+.relic {
+  position: sticky;
+  top: 6rem;
+  height: 26rem;
+  pointer-events: none;
+}
+
+.relic canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* An ornament arrives rather than appearing: it rises a little and settles.
+   Cheap, and it is the same idea as the dog walking to his next stop. */
+.relic canvas.arrive {
+  animation: settle 520ms ease-out;
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A band of the running key, where a hairline used to separate two regions of
+   the page. Fixed height, because the art has one and scaling it would blur
+   the only thing a pixel border has going for it. */
+.frieze {
+  max-width: var(--max);
+  margin: 2.6rem auto 0;
+  padding: 0 2rem;
+  height: 2.6rem;
+  overflow: hidden;
+}
+
+.frieze canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * The outer margins, which no content ever reaches on a wide screen. A single
+ * column repeated down each side, turned on only once the viewport is wide
+ * enough that the strips cannot touch the text.
+ */
+.colonnade {
+  display: none;
+}
+
+@media (min-width: 92rem) {
+  .colonnade {
+    display: block;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: 7rem;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.5;
+  }
+
+  .colonnade.left {
+    left: 0;
+  }
+
+  .colonnade.right {
+    right: 0;
+  }
+
+  .colonnade canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+/* The hero's own set piece: the temple and the god, in the space the tagline's
+   measure leaves beside it. Absolute rather than a grid cell, because the hero
+   is one block of type and a second column would re-wrap the headline. */
+.hero {
+  position: relative;
+}
+
+.hero .standing {
+  position: absolute;
+  right: 2rem;
+  bottom: 2.5rem;
+  width: 21rem;
+  height: 15rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: end;
+  pointer-events: none;
+}
+
+.hero .standing canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 74rem) {
+  .hero .standing {
+    display: none;
+  }
 }
 
 /* --- footer -------------------------------------------------------------- */
@@ -737,6 +887,12 @@ footer {
   .page {
     grid-template-columns: 1fr;
     gap: 2rem;
+  }
+
+  /* No room for a rail beside the text once the contents has folded to a row
+     of links: the ornament would be a third of the width of the document. */
+  .relic {
+    display: none;
   }
 
   .toc {

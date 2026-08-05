@@ -8,17 +8,17 @@
  * sections, which meant nine dogs, eight of them talking to a reader who had
  * already scrolled past.
  *
- * The art is not copied here. It is read from `argos/ui/sprites/argos.txt`
- * through `argos/ui/sprites.js`, the same two files the desktop window and the
- * README animation read, so a redraw of a leg lands here without anybody
- * remembering that this page exists.
+ * The art is still not authored here. It is generated into `site/pixels.js`
+ * from `argos/ui/sprites/argos.txt` and `argos/ui/sprites.js`, the files the
+ * desktop window and the README animation read, and `tests/test_site.py` fails
+ * if the generated copy and the originals disagree. So a redrawn leg still
+ * lands here without anybody remembering that this page exists.
  *
- * That sharing is why the page needs a server: `fetch` of a local file is
- * blocked under `file://`. Serve the repository root (`python -m http.server`)
- * and open `/site/`. It is also why the deployed site has to be built from the
- * repository root rather than from this directory, which `vercel.json` at the
- * root is for: served with `site/` as the root, `../argos/` is outside the
- * deployment and the dog silently never appears.
+ * It is inlined rather than fetched because the deployment is served with
+ * `site/` as its root: `../argos/` is outside it, the fetch 404s, and the page
+ * renders perfectly with no dog on it, which is how it shipped that way
+ * (D-139). Inlining also means the page needs no server at all now, so opening
+ * `index.html` from disk works.
  *
  * The bubble text is drawn on the canvas rather than laid out in HTML on
  * purpose. A web font would be one more thing to ship and would still not be
@@ -26,8 +26,6 @@
  * sprite's own scale is text made of the same pixels the character is made of.
  */
 (() => {
-  const SPRITE_FILE = "../argos/ui/sprites/argos.txt";
-
   /**
    * A five-row pixel font, one row-major bitmap string per glyph.
    *
@@ -123,6 +121,7 @@
   const SETTLE_MS = 180;    // pause between arriving and speaking
   const SPRITE = 32;        // the art is 32x32
   const ARRIVED = 1.5;      // px: closer than this counts as standing still
+  const FLOOR = 42;         // px: the drawn step, matching .companion .floor
 
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -262,8 +261,11 @@
       // both fit across a laptop window.
       this.scale = this.width < 760 ? 3 : 4;
       this.sprite = SPRITE * this.scale;
-      // He stands on the hairline the strip draws at its own 1.4rem.
-      this.spriteY = this.height - this.sprite - 20;
+      // He stands on the masonry course, not in front of it: his feet land a
+      // few pixels into the top of the step, which is what reads as contact.
+      // FLOOR is the drawn step's height, and has to match `.companion .floor`
+      // in the stylesheet; there is no way to ask canvas for a CSS length.
+      this.spriteY = this.height - FLOOR - this.sprite + 8;
 
       if (this.stop) {
         this.layout();
@@ -390,19 +392,19 @@
     }
   }
 
-  async function start() {
-    const canvas = document.querySelector("#argos");
+  function start() {
+    // `#argos-dog`, not `#argos`: the section documenting Argos owns that id
+    // for the contents to link to, and a duplicate id meant querySelector
+    // handed back the section instead of the canvas, so the dog never drew
+    // at all, on any host (D-139).
+    const canvas = document.querySelector("#argos-dog");
     const stops = Array.from(document.querySelectorAll("[data-say]"));
-    if (!canvas || !stops.length) {
+    if (!canvas || !stops.length || !window.ArgosSprites?.ART) {
+      // Nothing worth breaking the page over: the documentation reads fine
+      // without the dog in it.
       return;
     }
-    const response = await fetch(SPRITE_FILE);
-    if (!response.ok) {
-      // Nothing to fall back to and nothing worth breaking the page over: the
-      // documentation reads fine without the dog in it.
-      return;
-    }
-    const frames = ArgosSprites.parseSprites(await response.text());
+    const frames = ArgosSprites.parseSprites(ArgosSprites.ART);
     const argos = new Companion(canvas, frames);
     argos.goTo(stops[0]);
 
