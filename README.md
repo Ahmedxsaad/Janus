@@ -180,6 +180,7 @@ ModelGuard can already see:
 ```bash
 modelguard inventory        # every model, and what can and cannot be checked
 modelguard coverage         # the same sweep as one catalog figure, with a trend
+modelguard finops           # tables that exist only to feed models nothing uses
 ```
 
 `inventory` answers per model; `coverage` folds the same sweep into the number a
@@ -188,6 +189,15 @@ names the single next declaration that would raise it most, and with `--write`
 records the point so the next sweep has a direction to compare against. It
 measures how much has been declared, not how healthy the models are: a catalog at
 8% is one where ModelGuard mostly cannot tell you either way.
+
+`finops` is the one command here whose reader is a budget holder rather than an
+engineer, and the only one that suggests deleting something: it lists the tables
+whose every downstream model has no deployment in service and has gone untouched
+past `MODELGUARD_UNUSED_MODEL_DAYS`. One live consumer and a table is not listed,
+because that is not a saving. A model whose catalog entry carries no date at all
+is reported separately as undated and never as unused, since in a report like
+this an absence is not evidence. It writes nothing and raises no incident:
+nothing here is broken.
 
 Expect most models to come back "not checked", and that is the honest answer
 rather than a failure. DataHub's mlflow source records a model and its training

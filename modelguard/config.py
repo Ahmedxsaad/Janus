@@ -43,6 +43,7 @@ __all__ = [
     "ENV_PROXY_MAX_HOPS",
     "ENV_SENSITIVE_TAG_URNS",
     "ENV_SENSITIVE_TERM_URNS",
+    "ENV_UNUSED_MODEL_DAYS",
     "SCORE_PROVENANCE",
     "SCORING_VERSION",
     "TABLE_LEVEL_PRECISION",
@@ -107,6 +108,7 @@ ENV_SENSITIVE_TAG_URNS = "MODELGUARD_SENSITIVE_TAG_URNS"
 ENV_PROTECTED_ATTRIBUTE_TERM_URNS = "MODELGUARD_PROTECTED_ATTRIBUTE_TERM_URNS"
 ENV_PROTECTED_ATTRIBUTE_TAG_URNS = "MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS"
 ENV_COMPANION_ENTITY_CAP = "MODELGUARD_COMPANION_ENTITY_CAP"
+ENV_UNUSED_MODEL_DAYS = "MODELGUARD_UNUSED_MODEL_DAYS"
 
 
 @dataclass(frozen=True)
@@ -286,6 +288,21 @@ class ScanConfig:
     trust_band_watch_min: float = 40.0
     """At or above this (but below healthy) a model is on watch; below it, at risk."""
 
+    unused_model_days: int = 90
+    """How long a model may go untouched, with no live deployment, before the
+    FinOps report calls the pipelines behind it candidates for retirement (T-18).
+
+    Ninety days is a quarter, which is the period a budget holder already thinks
+    in and the shortest window that survives a model retrained seasonally. An
+    algorithm parameter and not identity, so it carries a documented default and
+    is overridable (root rule 6b): a team shipping weekly will want it shorter,
+    and a team with an annual regulatory model will want it much longer.
+
+    It never decides anything on its own. A model with no recorded timestamp is
+    reported as undated rather than as unused, because detect/CLAUDE.md rule 5
+    holds here too: a model nobody instrumented is not a model nobody uses.
+    """
+
     companion_entity_cap: int = 200
     """Most owned entities `modelguard companion` inspects in one poll.
 
@@ -332,4 +349,5 @@ class ScanConfig:
             companion_entity_cap=optional_int(
                 ENV_COMPANION_ENTITY_CAP, defaults.companion_entity_cap
             ),
+            unused_model_days=optional_int(ENV_UNUSED_MODEL_DAYS, defaults.unused_model_days),
         )

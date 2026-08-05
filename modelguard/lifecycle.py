@@ -56,6 +56,7 @@ from datahub.metadata.schema_classes import (
 
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
+from modelguard.detect.blast_radius import upstream_datasets
 from modelguard.detect.governance import model_input_datasets
 from modelguard.detect.leakage import feature_source_column
 from modelguard.detect.schema_drift import schema_drift_candidate_resources
@@ -230,8 +231,8 @@ def model_resources(
     something behind it. Without this walk the freshness row read "0 raised" on a
     graph holding twenty of them, which is exactly the shape of silence the rest
     of this project exists to refuse. It is the same walk ``blast_radius`` makes
-    forwards, run backwards from the model, and it is bounded by the same
-    ``max_hops``.
+    forwards, run backwards from the model, and it reuses that module's own
+    hop-capped read rather than a second copy of it.
 
     Args:
         conn: An open connection.
@@ -252,35 +253,9 @@ def model_resources(
             resources.add(column)
 
     for dataset_urn in inputs:
-        resources.update(_upstream_datasets(conn, config, dataset_urn))
+        resources.update(upstream_datasets(conn, dataset_urn, config))
 
     return tuple(sorted(resources))
-
-
-def _upstream_datasets(
-    conn: DataHubConnection,
-    config: ScanConfig,
-    dataset_urn: str,
-) -> set[str]:
-    """The datasets behind one input, within the hop cap.
-
-    Filtered by hop count rather than trusted, for the reason
-    detect/CLAUDE.md rule 3 gives: above two hops DataHub switches to a
-    full-graph search and returns entities past the cap. Filtered to datasets
-    by URN and not by ``LineageResult.type``, which is a display string
-    (rule 4).
-    """
-    results = conn.client.lineage.get_lineage(
-        source_urn=dataset_urn,
-        direction="upstream",
-        max_hops=config.max_hops,
-        count=config.lineage_result_cap,
-    )
-    return {
-        result.urn
-        for result in results
-        if result.hops <= config.max_hops and result.urn.startswith("urn:li:dataset:")
-    }
 
 
 def read_lifecycles(

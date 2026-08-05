@@ -42,6 +42,8 @@ from modelguard.config import SCORE_PROVENANCE, SCORING_VERSION, ScanConfig
 from modelguard.detect.guard_coverage import CatalogCoverage, ModelCoverage, aggregate
 from modelguard.discovery import search_model_urns
 from modelguard.env import ConfigError, scrub
+from modelguard.finops import describe_undated
+from modelguard.finops import report as finops_report
 from modelguard.gate import (
     EXIT_ERROR,
     GatePolicy,
@@ -1551,6 +1553,73 @@ def inventory(
             "graph is silent, declare it yourself: modelguard link --model <name> "
             "--features <table> --label-column <column>[/dim]"
         )
+
+
+@app.command()
+def finops(
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Stop after this many models."),
+    ] = 200,
+    days: Annotated[
+        int | None,
+        typer.Option("--days", help="Idle window before a model counts as unused."),
+    ] = None,
+) -> None:
+    """List the tables that exist only to feed models nothing uses (T-18).
+
+    The one command here whose reader is a budget holder rather than an engineer.
+    Nothing is broken, so nothing is written and no incident is raised: a model
+    nobody deployed is a decision somebody may not have noticed they made.
+
+    A table is listed only when *every* model downstream of it is unused, and
+    "unused" means both no deployment in service and a recorded date older than
+    the window. A model whose catalog entry carries no date at all is reported
+    separately as undated, never as unused: in a report that suggests deleting
+    things, an absence is not evidence.
+    """
+    try:
+        config = ScanConfig.from_env()
+        if days is not None:
+            config = replace(config, unused_model_days=days)
+        conn = connect()
+    except (ConfigError, DataHubConnectionError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    model_urns = _model_urns(conn, limit=limit)
+    if not model_urns:
+        console.print(f"[yellow]No models in {conn.gms_url}.[/yellow] {_no_match_hint(conn)}")
+        raise typer.Exit(code=0)
+
+    result = finops_report(conn, config, model_urns, now_ms=int(time.time() * 1000))
+    console.print(
+        f"[bold]{result.examined} model(s) examined[/bold], idle window {result.window_days} days\n"
+    )
+
+    if result.unused:
+        console.print(f"[yellow]{len(result.unused)} model(s) with no live deployment[/yellow]")
+        for usage in result.unused:
+            idle = usage.idle_days(int(time.time() * 1000))
+            console.print(f"  {usage.model.name}  idle {idle:.0f} days")
+        console.print()
+
+    if result.candidates:
+        console.print(
+            f"[bold]{len(result.candidates)} table(s) feed nothing else[/bold]  "
+            "(every model downstream of these is unused)"
+        )
+        for candidate in result.candidates:
+            console.print(f"  {candidate.describe()}")
+    else:
+        console.print(
+            "[green]No table feeds only unused models.[/green] Every input reaches "
+            "something still in service, which is the usual answer on a warehouse "
+            "where marts are shared."
+        )
+
+    if result.undated:
+        console.print(f"\n[dim]{describe_undated(result.undated)}[/dim]")
 
 
 def _print_lifecycle(

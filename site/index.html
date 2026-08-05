@@ -350,6 +350,20 @@ modelguard scan --table loans_raw             # no finding, no writes
   </p>
 <pre><code>modelguard coverage --write
 </code></pre>
+
+  <h3>And the one report for a budget holder</h3>
+  <p>
+    <code>finops</code> lists the tables whose <em>every</em> downstream model
+    has no deployment in service and has gone untouched past
+    <code>MODELGUARD_UNUSED_MODEL_DAYS</code>. One live consumer and a table is
+    not listed, because that is not a saving. A model whose catalog entry
+    carries no date at all is reported separately as undated and never as
+    unused: in the one report here that suggests deleting something, an absence
+    is not evidence. It writes nothing and raises no incident, because nothing
+    here is broken.
+  </p>
+<pre><code>modelguard finops
+</code></pre>
 </section>
 
 <canvas class="beat" data-pose="tilt"
