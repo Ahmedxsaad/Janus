@@ -514,17 +514,17 @@ tr:last-child td {
 
 /* --- the join diagram ---------------------------------------------------- */
 
-.joinviz {
+.viz {
   margin: 2.2rem 0;
 }
 
-.joinviz svg {
+.viz svg {
   display: block;
   width: 100%;
   height: auto;
 }
 
-.joinviz .legend {
+.viz .legend {
   display: flex;
   flex-wrap: wrap;
   gap: 1.6rem;
@@ -533,7 +533,7 @@ tr:last-child td {
   color: var(--muted);
 }
 
-.joinviz .legend i {
+.viz .legend i {
   display: inline-block;
   width: 20px;
   height: 0;
@@ -542,8 +542,21 @@ tr:last-child td {
   border-top: 1.5px solid var(--faint);
 }
 
-.joinviz .legend i.dashed {
+.viz .legend i.dashed {
   border-top: 1.5px dashed var(--accent);
+}
+
+.viz .legend i.bad {
+  border-top: 1.5px solid var(--danger);
+}
+
+/* A diagram's own one-line note, set tighter than a caption under a figure. */
+.viz .note-line {
+  margin-top: 0.7rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: var(--measure);
 }
 
 /* --- benchmark ----------------------------------------------------------- */

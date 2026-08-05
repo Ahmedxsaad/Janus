@@ -112,6 +112,36 @@ def test_the_page_loads_nothing_from_outside_its_own_directory():
     assert "fetch(" not in GUIDE, "the page fetches art again: inline it instead"
 
 
+def test_the_diagrams_match_the_generator_that_draws_them():
+    """The page's diagrams are generated, and may not be edited in place (D-141).
+
+    Same joint as the sprite bundle above: run the generator against the
+    committed page and fail if it moves anything. A coordinate nudged by hand
+    would otherwise be silently undone by the next person who runs the script.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "_make_diagrams", SITE / "art" / "make_diagrams.py"
+    )
+    generator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generator)
+
+    assert generator.render(PAGE) == PAGE, (
+        "the diagrams are stale: run python site/art/make_diagrams.py"
+    )
+
+
+def test_every_diagram_says_what_it_shows():
+    """A diagram is a picture, so its alt text is the only version some readers get.
+
+    It also has to be a sentence rather than a name: "diagram 3" tells a reader
+    using a screen reader exactly as much as the empty string would.
+    """
+    labels = re.findall(r'<svg viewBox="[^"]*" role="img" aria-label="([^"]*)"', PAGE)
+    assert len(labels) == PAGE.count("<svg "), "a diagram is missing role or aria-label"
+    for label in labels:
+        assert len(label) > 60, f"alt text too short to describe anything: {label!r}"
+
+
 def test_every_ornament_the_page_asks_for_is_one_the_art_defines():
     """A missing piece is a blank rectangle, which reads as a layout bug."""
     pieces = set(re.findall(r'data-(?:piece|relic)="([a-z]+)"', PAGE))
