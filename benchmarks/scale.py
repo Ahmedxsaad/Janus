@@ -116,7 +116,7 @@ class ScaleMeasurement:
 
 @dataclass(frozen=True)
 class WritePathCost:
-    """What the write path costs over the read path, for one model, one finding.
+    """What the write path costs over the read path, for one scan, one finding.
 
     The sweep above is dry-run, so it measures the read path and says so. That
     leaves the more expensive half unmeasured, and it is the half a whole-catalog
@@ -261,25 +261,39 @@ def measure_scale(
         remove_replicas(conn, urns)
 
 
-def measure_write_path(
-    conn: DataHubConnection, config: ScanConfig, model_urn: str
-) -> WritePathCost:
+def measure_write_path(conn: DataHubConnection, config: ScanConfig) -> WritePathCost:
     """Measure what a write-enabled scan costs over a dry run, and where it goes.
 
-    Runs the same model twice: once dry, once writing. The write run is
+    Runs the same target twice: once dry, once writing. The write run is
     instrumented per phase, because the interesting number is not that writing
     costs more (it must) but that reconciliation, not the writes themselves,
     dominates it.
 
-    Run on the seeded model rather than on a replica: reconciliation's cost is a
-    function of how many incidents the resource already carries, and a freshly
-    created replica carries none, which would measure the cheapest possible case
-    and report it as the cost.
+    Targets the seeded model, whose target leakage is part of the baseline rather
+    than something a trial plants, and must therefore run *after*
+    ``restore_baseline``. Both halves of that sentence are load-bearing and both
+    were learned by getting them wrong:
 
-    The write run is idempotent by construction (writeback keys on
+    * Placed before the restore, it ran on a graph the counterfactuals had just
+      cleared, timed a scan with nothing to write, and published 0 reads for
+      write-back as the write path's cost.
+    * Retargeted at the table with a freshly planted lag, it measured a resource
+      carrying no incident history and reported 0 reads for reconciliation, which
+      is the opposite error: the cheapest possible case published as the cost.
+
+    What the number depends on is worth stating, because it is not a constant.
+    Reconciliation walks the incidents already attached to the resources a scan
+    touches, so its cost grows with the history the graph has accumulated and is
+    near zero on a graph seeded a moment ago. The figure here is from a graph a
+    full benchmark run has just written to, which is the realistic end of that
+    range rather than the flattering one, and the report says so.
+
+    The write is idempotent by construction (writeback keys on
     ``(resource_urn, incident_type, title)``), so this leaves the graph as it
-    found it apart from a new run_id stamp.
+    found it apart from a fresh run_id stamp.
     """
+    model_urn = str(spec.model_urn())
+
     counting = _CountingGraph(conn.graph)
     instrumented = DataHubConnection(
         graph=counting,  # type: ignore[arg-type]
@@ -289,8 +303,14 @@ def measure_write_path(
     )
 
     started = time.monotonic()
-    run_scan(instrumented, config, model_urn=model_urn, llm=None, dry_run=True)
+    dry = run_scan(instrumented, config, model_urn=model_urn, llm=None, dry_run=True)
     dry_run_seconds = time.monotonic() - started
+    if not dry.findings:
+        raise RuntimeError(
+            "the seeded model reported no finding, so there is no write path to "
+            "measure. This runs after restore_baseline, where the seeded leak is "
+            "part of the graph; a clean answer here means the restore did not land."
+        )
 
     phases: dict[str, int] = {}
     original_write_back = pipeline._write_back

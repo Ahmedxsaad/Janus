@@ -1037,8 +1037,16 @@ def render_results(
                 "`scan --all-models --write` pays more than that, and the difference is not",
                 "the writes: reconciliation walks a resource's incidents to decide what to",
                 "clear, per finding rather than per sweep. Measured on the seeded model,",
-                "which already carries incidents, because a freshly created replica carries",
-                "none and would report the cheapest possible case as the cost.",
+                "after the baseline is restored and after the lifecycle read, so the scan",
+                "has a real finding to write and its own fresh incident does not land in",
+                "somebody else's numbers.",
+                "",
+                "This figure is not a constant, and the direction it moves in is worth",
+                "knowing. Reconciliation walks the incidents already attached to the",
+                "resources a scan touches, so it costs almost nothing on a graph seeded a",
+                "moment ago and more on one with history. The number below comes from a",
+                "graph a full benchmark run has just written to, which is the realistic end",
+                "of that range rather than the flattering one.",
                 "",
                 "| Phase | Graph reads | Share |",
                 "|---|---|---|",
@@ -1193,9 +1201,6 @@ def main() -> None:
     print("Scale: replicating models and sweeping the catalog...")
     scale = measure_scale(conn, config)
 
-    print("Write path: what reconciliation costs over a dry run...")
-    write_cost = measure_write_path(conn, config, str(spec.model_urn()))
-
     # Last measurement before the restore, and the ordering is load-bearing now:
     # it plants each family's positive state to have something to narrate, so
     # anything running after it would be reading a graph it did not set up.
@@ -1210,6 +1215,14 @@ def main() -> None:
     # reading before it would report every one of them as still open.
     print("Incident lifecycle: how long this run's own findings stayed open...")
     lifecycle = measure_lifecycle(conn, config)
+
+    # Last, and after both the restore and the lifecycle read, for two separate
+    # reasons. After the restore because the seeded leak is what it scans, and
+    # the counterfactuals cleared it. After the lifecycle because this one writes
+    # a fresh incident, which would otherwise show up there as a finding that
+    # never closed.
+    print("Write path: what reconciliation costs over a dry run...")
+    write_cost = measure_write_path(conn, config)
 
     report = render_results(
         outcomes,
