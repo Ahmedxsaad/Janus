@@ -44,6 +44,7 @@ from datahub.metadata.schema_classes import (
 )
 from datahub.metadata.urns import DatasetUrn, SchemaFieldUrn
 
+from modelguard.agent.context_kit import catalog_context
 from modelguard.agent.narrate import Narrative, incident_description, narrate
 from modelguard.client import DataHubConnection
 from modelguard.config import SCORING_VERSION, ScanConfig
@@ -392,6 +393,22 @@ def _record_writes(
             *(document.urn for document in write.documents),
         )
     run.wrote(*(trust_write.model_urn for trust_write in trust))
+
+
+def _catalog_context(
+    conn: DataHubConnection, finding: Finding, llm: LLMConfig | None
+) -> str | None:
+    """Organizational context for one finding, or None.
+
+    Skipped entirely when no LLM is configured. The context exists to ground
+    prose, the template narrative does not read it, and fetching it anyway would
+    make ``--no-llm`` pay for catalog reads whose result is discarded. That also
+    keeps the promise the module docstring makes: a scan with no model configured
+    is byte-identical whether or not the Agent Context Kit is installed.
+    """
+    if llm is None:
+        return None
+    return catalog_context(conn, finding)
 
 
 def _project_trust_history(
@@ -1068,7 +1085,10 @@ def run_scan(
                 model_urn=model_urn,
                 dry_run=True,
                 writes=tuple(
-                    FindingWrites(finding=finding, narrative=narrate(finding, llm))
+                    FindingWrites(
+                        finding=finding,
+                        narrative=narrate(finding, llm, _catalog_context(conn, finding, llm)),
+                    )
                     for finding in findings
                 ),
                 trust=trust,
@@ -1088,7 +1108,7 @@ def run_scan(
             _write_back(
                 conn,
                 finding,
-                narrate(finding, llm),
+                narrate(finding, llm, _catalog_context(conn, finding, llm)),
                 config,
                 run_id,
                 observed_at,

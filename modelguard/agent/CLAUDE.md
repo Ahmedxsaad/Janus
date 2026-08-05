@@ -35,8 +35,17 @@ core that scan (default), watch, and the tests share. graph.py is the optional
 6. Use the process-local checkpointer for the synchronous approval exchange; do
    not claim cross-process replay without a durable run store. Retry/backoff and
    circuit-breaker policy around GMS calls lives here, not in detect/ or writeback/.
-7. Exact datahub-agent-context import symbols are [confirm]: introspect the
-   installed package before writing imports.
+7. datahub-agent-context symbols are [verified] against 1.7.0, not [confirm]:
+   `build_langchain_tools(client)` returns ten read-only LangChain tools and
+   defaults `include_mutations=False`; `get_entities` returns a bare list, and a
+   dataset keeps its description under `editableProperties` while an mlModel
+   keeps it at the top level. context_kit.py uses only that surface, and only as
+   a library: the kit supplies the read, never the decision to read, because
+   handing an LLM those tools would let it choose which parts of the catalog an
+   incident may mention. The kit cannot be installed alongside this project
+   (every release from 1.6.0.6 on pins acryl-datahub==1.6.0.6, this project pins
+   1.6.0.13, pip answers ResolutionImpossible), so it is absent by default and
+   every function degrades to None.
 
 ## Change Log
 
@@ -56,3 +65,4 @@ core that scan (default), watch, and the tests share. graph.py is the optional
 | 2026-08-04 | Claude (for Ghassen Naouar) | _write_back is handed the run's trust scores alongside the projected history, so each impact report's waterfall and the model's own property describe one computation rather than two reads that can disagree (D-108, T-01) |
 | 2026-08-04 | Claude (for Ghassen Naouar) | T-04 (D-111): run_scan runs inside a scan_run context manager, so detection and write-back both happen within a process instance the graph holds, and any exception leaves a FAILURE run event before it is re-raised. Reconciliation records the assets it clears on the run, because a recovery-only scan is clean and a report-derived output list would be empty for exactly the run whose outputs matter. graph.py opens its run in the write node: nothing before the approval interrupt writes, and a declined run would otherwise be indistinguishable from a crashed one |
 | 2026-08-04 | Claude (for Ghassen Naouar) | T-07 (D-113): _detect runs the degraded detector last and only where the four column-level ones had no link to read, so a scan never prints a maybe beside a proof. narrate.py's four singledispatch tables gain the table-level type, and its brief tells the narrator to say the mode out loud and never to write it as if the model were known to be affected |
+| 2026-08-05 | Claude (for Ahmed Saad) | context_kit.py lands (D-135): DataHub's own Agent Context Kit, read-only, grounding the narrator in what a detector does not collect (owners, domain, description, and the catalog's own health for the asset). Rule 7's [confirm] is closed by introspecting 1.7.0 against a live GMS. The context joins `grounding_facts` rather than the prompt alone, so the faithfulness checker sees every fact the model does; it enters inside the delimited untrusted block, because a description is catalog text anybody can edit; and it is never fetched when no LLM is configured, so `--no-llm` is byte-identical with or without the kit |
