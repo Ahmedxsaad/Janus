@@ -667,6 +667,13 @@ incident" workflow.
 > **Landed 2026-07-21** (D-041). Assembled into `docs/most-valuable-feedback.md`: the
 > 13 findings below, each with its affected package/version, symptom, minimal repro,
 > and workaround. Version strings cross-checked against the installed `acryl-datahub`.
+>
+> That count is what landed on the date and is left as written. The live document
+> has since grown to 16, each addition dated and logged: #14 (D-074, the mlflow
+> source dropping `mlFeatures`), #15 (D-121, a dbt semantic model colliding URNs
+> with its own model) and #16 (D-135, the Agent Context Kit's exact
+> `acryl-datahub` pin). `docs/most-valuable-feedback.md` is the count that
+> matters; this line is a record of a phase, not a running total.
 
 Concrete, reproducible findings from Phase 0, worth far more than generic praise:
 1. **`datahub datapack --help` crashes** (acryl-datahub 1.6.0.13): `FileNotFoundError` for

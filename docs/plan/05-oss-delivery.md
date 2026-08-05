@@ -13,7 +13,7 @@
 |---|---|
 | `datahub-ml-guard` skill | `skill/datahub-ml-guard/` (SKILL.md, scripts/, references/) |
 | `raise_incident` MCP tool + RFC | `mcp_ext/raise_incident_tool.py`, `mcp_ext/RFC-ml-incidents.md` |
-| Most Valuable Feedback survey | `docs/most-valuable-feedback.md` (13 findings) |
+| Most Valuable Feedback survey | `docs/most-valuable-feedback.md` (16 findings) |
 
 None are contributed yet. The steps below are the delivery, not the build.
 

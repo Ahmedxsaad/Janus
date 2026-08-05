@@ -843,7 +843,7 @@ Built alongside ModelGuard and offered back to the DataHub ecosystem:
 |---|---|
 | [skill/datahub-ml-guard/](https://github.com/Ahmedxsaad/DataHub/tree/main/skill/datahub-ml-guard) | The `datahub-ml-guard` skill: traces model features back to source columns to catch leakage, drift, and blast radius, and guides the write-back. Unlike the several ML-reliability skills already submitted to the registry, it is a thin wrapper around a real, tested, deterministic detection engine (this repo), not an LLM asked to eyeball a lineage graph. Destined for [datahub-project/datahub-skills](https://github.com/datahub-project/datahub-skills). |
 | [mcp_ext/raise_incident_tool.py](https://github.com/Ahmedxsaad/DataHub/blob/main/mcp_ext/raise_incident_tool.py) | A thin `raise_incident` mutation tool for [acryldata/mcp-server-datahub](https://github.com/acryldata/mcp-server-datahub), which today has no incident-write tool. Ships with [an RFC](https://github.com/Ahmedxsaad/DataHub/blob/main/mcp_ext/RFC-ml-incidents.md) for first-class ML incidents. |
-| [docs/most-valuable-feedback.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/most-valuable-feedback.md) | Fourteen concrete, reproducible bugs and doc gaps found while building, each with a repro and a workaround. |
+| [docs/most-valuable-feedback.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/most-valuable-feedback.md) | Sixteen concrete, reproducible bugs and doc gaps found while building, each with a repro and a workaround. |
 
 ## Contributing
 

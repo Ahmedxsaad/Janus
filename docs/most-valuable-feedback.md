@@ -233,3 +233,57 @@ which is a rule nobody can be expected to know and which dbt itself does not
 require. The fix upstream is to key semantic models on a URN that cannot collide
 with a model's (they are different kinds of node in the same manifest), or, at
 minimum, to warn when two manifest nodes resolve to one dataset URN.
+
+---
+
+## 16. `datahub-agent-context` pins one exact `acryl-datahub` patch, so the Agent Context Kit cannot be installed beside any project that pins a different one
+
+**Package:** `datahub-agent-context` 1.6.0.6 through 1.7.0 (every release checked
+from 1.6.0.6 on). **Severity:** high, and it is the reason a project that wanted
+to use the Agent Context Kit ended up unable to declare it as a dependency.
+
+**Symptom:** the kit declares `acryl-datahub[datahub-rest]==1.6.0.6`, an exact
+pin, and has kept declaring that same patch as its own version moved on.
+`datahub-agent-context==1.7.0` still requires `acryl-datahub==1.6.0.6`. Any
+project pinning a different `acryl-datahub` patch (this one pins 1.6.0.13, the
+version its whole suite and benchmark are verified against) cannot install the
+kit at all: pip answers `ResolutionImpossible`.
+
+The pin used to track the release. `datahub-agent-context==1.5.0.19` requires
+`acryl-datahub==1.5.0.19`, matching. From 1.6.0.6 onward the version bump stopped
+propagating into the dependency, which reads as release automation that lost a
+step rather than a deliberate compatibility statement.
+
+**Repro:**
+```bash
+pip install "acryl-datahub[datahub-rest]==1.6.0.13" "datahub-agent-context==1.7.0"
+# ERROR: ResolutionImpossible
+#   The user requested acryl-datahub==1.6.0.13
+#   datahub-agent-context 1.7.0 depends on acryl-datahub==1.6.0.6
+
+# and the pin, per release:
+#   1.7.0     -> acryl-datahub[datahub-rest]==1.6.0.6
+#   1.6.0.17  -> acryl-datahub[datahub-rest]==1.6.0.6
+#   1.6.0.13  -> acryl-datahub[datahub-rest]==1.6.0.6
+#   1.5.0.19  -> acryl-datahub[datahub-rest]==1.5.0.19   <- tracked, then stopped
+```
+Verified 2026-08-05 against PyPI in a clean venv (D-135).
+
+**Why it matters more than an ordinary pin:** the kit's whole purpose is to be
+added to somebody else's agent, and an agent that talks to DataHub almost
+certainly already depends on `acryl-datahub`. An exact pin on a single patch
+means the kit is installable only into a project that happens to have chosen the
+same patch, which for a library is close to being installable nowhere. It is the
+same failure mode this project had to fix in its own packaging: an exact `==`
+pin in a library makes it uninstallable next to anything else.
+
+**Workaround:** none that keeps a verified `acryl-datahub` version. Either pin
+the whole project down to 1.6.0.6 and re-verify against it, or do not install the
+kit. This project chose the latter and wrote the integration against the kit's
+public API anyway, so it starts working the moment the pin is loosened.
+
+**Suggested fix:** a compatible-release specifier rather than an exact one
+(`acryl-datahub[datahub-rest]~=1.6.0`), which still excludes an incompatible
+major while letting the kit sit beside an ordinary DataHub project. Failing that,
+restore whatever step used to keep the pin in step with the release, so 1.7.0
+requires a 1.7.x.

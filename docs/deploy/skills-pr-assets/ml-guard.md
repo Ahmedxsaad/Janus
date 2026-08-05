@@ -1,6 +1,6 @@
 ---
 name: ml-guard
-description: Protect production ML models — target leakage, schema drift, and upstream blast radius
+description: Protect production ML models against target leakage, schema drift, and upstream blast radius
 argument-hint: "[model, table, or ML reliability question]"
 ---
 
