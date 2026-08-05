@@ -858,7 +858,10 @@ def test_one_feature_recovering_does_not_clear_a_model_another_still_endangers()
         incident_type="FIELD",
         title="Target leakage: applicant_income derives from label default_status",
     )
-    graph.graphql_response = {"raiseIncident": "urn:li:incident:still-leaking"}
+    graph.graphql_response = {
+        "raiseIncident": "urn:li:incident:still-leaking",
+        "updateIncidentStatus": True,
+    }
     graph.emitted.clear()
     graph.graphql_calls.clear()
 

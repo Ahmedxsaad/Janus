@@ -57,7 +57,7 @@ from modelguard.detect.governance import protected_attribute_index, sensitive_in
 from modelguard.detect.leakage import feature_source_column
 from modelguard.detect.schema_drift import training_snapshot
 from modelguard.models import Finding, FreshnessSignal
-from modelguard.writeback.documents import RUN_ID_PROPERTY
+from modelguard.writeback.documents import RUN_ID_PROPERTY, urn_hash
 from modelguard.writeback.model_documents import NOT_RECORDED
 
 #: The document subtype, distinct from the model card's and the impact report's
@@ -524,16 +524,18 @@ def publish_feature_card(
 ) -> str:
     """Write the card as a document linked to the feature. Returns its URN.
 
-    Keyed on the feature alone, like the model card is keyed on the model: there
-    is one card per feature and it is meant to be current, so a rerun replaces it
-    rather than adding a second.
+    Keyed on the feature's full URN, not its bare name: MlFeatureUrn.name drops
+    the owning feature table, so two features named the same in two different
+    tables would otherwise collide on one document (D-096's collision, one
+    level down). There is one card per feature and it is meant to be current,
+    so a rerun replaces it rather than adding a second.
 
     Related to the feature *and* the model, because a reader arrives from either:
     from the model wanting to know what it trains on, or from the feature wanting
     to know where it comes from.
     """
     document = Document.create_document(
-        id=f"modelguard-feature-card-{facts.feature_name}",
+        id=f"modelguard-feature-card-{facts.feature_name}-{urn_hash(facts.feature_urn)}",
         title=f"Feature provenance: {facts.feature_name}",
         text=render_feature_card(facts),
         subtype=FEATURE_CARD_SUBTYPE,

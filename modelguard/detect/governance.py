@@ -98,6 +98,28 @@ def protected_attribute_index(conn: DataHubConnection, config: ScanConfig) -> Co
     )
 
 
+def classification_index(conn: DataHubConnection, config: ScanConfig) -> ColumnMarkIndex:
+    """Return the union of every column classification this organization configured.
+
+    Sensitive and protected-attribute are independently configured groups, and an
+    org is free to set only one: nothing here requires both. A feature that
+    directly descends from a column marked under *either* group is proved, not
+    suggested, so :func:`sensitive_source_findings` walks this union rather than
+    :func:`sensitive_index` alone. Without it, an org that classified a column
+    only as a protected attribute got no finding at all for a feature built
+    straight from it: :func:`proxy_candidate_findings` deliberately excludes that
+    same direct descent, on the assumption that this function is the one that
+    reports it (a fork is not a chain, and reporting the chain twice, once
+    weakly and once proved, would dilute the proof).
+    """
+    return ColumnMarkIndex(
+        conn,
+        terms=frozenset(config.sensitive_term_urns)
+        | frozenset(config.protected_attribute_term_urns),
+        tags=frozenset(config.sensitive_tag_urns) | frozenset(config.protected_attribute_tag_urns),
+    )
+
+
 def proxy_candidate_findings(
     conn: DataHubConnection,
     model_urn: str,
@@ -117,10 +139,10 @@ def proxy_candidate_findings(
     are not derived from each other, they are both derived from the person
     (Barocas and Selbst 2016, docs/plan/resources.md).
 
-    Direct descent is deliberately excluded and left to
-    :func:`sensitive_source_findings`, which proves it rather than suggesting
-    it. Reporting both would raise two incidents about one column, the weaker
-    of which would dilute the stronger.
+    Direct descent through either classification (see :func:`classification_index`)
+    is deliberately excluded and left to :func:`sensitive_source_findings`, which
+    proves it rather than suggesting it. Reporting both would raise two incidents
+    about one column, the weaker of which would dilute the stronger.
 
     Deterministic and read-only. Nothing here decides that a feature *is* a
     proxy: see :class:`~modelguard.models.ProxyCandidateFinding`.
@@ -147,6 +169,18 @@ def proxy_candidate_findings(
     model = model_ref(conn, model_urn, properties=properties)
     hops = config.proxy_max_hops
 
+    # sensitive_source_findings proves direct descent through the union of both
+    # classification groups (classification_index), not this detector's
+    # protected-attribute-only one: excluding on `index` (protected_attribute_index)
+    # here would only skip a column this same index already caught, not one
+    # sensitive_source_findings will catch, so a feature that derives directly
+    # from a protected attribute nobody also tagged sensitive would clear this
+    # detector's fork search on the exclusion below without being covered by
+    # sensitive_source_findings either: zero findings for the strongest case,
+    # direct use. Checking classification_index instead is what actually matches
+    # the docstring's claim that direct descent is "left to" that detector.
+    direct_descent_index = classification_index(conn, config)
+
     # Downstream walks are shared across features: two features of one model
     # very often derive from the same handful of raw columns, and re-walking a
     # shared ancestor once per feature would turn a fork into an N+1
@@ -159,8 +193,11 @@ def proxy_candidate_findings(
         if source_column is None:
             continue
 
-        # Direct descent is sensitive_source_findings' finding, not this one.
-        if marked_ancestor(conn, source_column, index, config).hit is not None:
+        # Direct descent is sensitive_source_findings' finding, not this one,
+        # but only when that detector is actually configured to catch it.
+        if direct_descent_index.configured and (
+            marked_ancestor(conn, source_column, direct_descent_index, config).hit is not None
+        ):
             continue
 
         ancestors = related_columns(
@@ -270,6 +307,11 @@ def sensitive_source_findings(
 ) -> tuple[SensitiveSourceFinding, ...]:
     """Return every feature of a model that derives from a classified column.
 
+    "Classified" is the union of both classification groups (see
+    :func:`classification_index`): a column marked sensitive or marked a
+    protected attribute is proved exposure either way, and this is the only
+    detector that reports proved descent rather than a candidate for review.
+
     Deterministic and read-only. The LLM is never asked whether a feature is
     exposed; it is told that one is and writes the prose around it.
 
@@ -284,7 +326,7 @@ def sensitive_source_findings(
         reaches a classified column, and also empty when nothing is configured to
         look for, which coverage reports separately as a check that never ran.
     """
-    index = sensitive_index(conn, config)
+    index = classification_index(conn, config)
     if not index.configured:
         return ()
 

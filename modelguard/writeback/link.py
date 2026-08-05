@@ -299,7 +299,14 @@ def _capture_training_schema(
         created=AuditStampClass(time=int(time.time() * 1000), actor="urn:li:corpuser:datahub"),
     )
     custom = dict(properties.customProperties or {})
-    custom[config.training_schema_property] = json.dumps({feature_dataset_urn: schema})
+    try:
+        snapshot = json.loads(custom.get(config.training_schema_property, "{}"))
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+    except json.JSONDecodeError:
+        snapshot = {}
+    snapshot[feature_dataset_urn] = schema
+    custom[config.training_schema_property] = json.dumps(snapshot)
     properties.customProperties = custom
     conn.graph.emit_mcp(MetadataChangeProposalWrapper(entityUrn=run_urn, aspect=properties))
 

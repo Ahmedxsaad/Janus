@@ -29,9 +29,9 @@ from modelguard.config import ScanConfig
 from modelguard.detect.blast_radius import freshness_signal
 from modelguard.detect.column_marks import WalkResult, marked_ancestor
 from modelguard.detect.governance import (
+    classification_index,
     model_input_datasets,
     protected_attribute_index,
-    sensitive_index,
 )
 from modelguard.detect.leakage import feature_source_column, label_index
 from modelguard.detect.schema_drift import schema_drift_candidate_resources
@@ -189,6 +189,25 @@ def _leakage_gap(
             "emit it; the SDK's add_lineage accepts explicit column mappings).",
         )
 
+    # A model can be partially linked: some features resolve a source column,
+    # some do not. leakage_findings() walks only the resolved ones, so a clean
+    # result here is proof the *linked* features do not leak, not proof the
+    # whole model was checked. Silently reporting this as fully evaluated is
+    # exactly the "healthy" claim over an uninstrumented asset the module
+    # docstring exists to prevent, so an incomplete link is its own gap rather
+    # than being absorbed by the cap check below, which only speaks to the
+    # columns that *were* walked.
+    unresolved = len(properties.mlFeatures) - len(source_columns)
+    if unresolved:
+        return gap(
+            f"{unresolved} of {len(properties.mlFeatures)} feature(s) have no "
+            "column-level lineage to a source column, so this check only walked "
+            "the rest: a clean result covers the linked features, not the model",
+            "Ingest column-level lineage for the remaining feature tables, or "
+            "declare it with `modelguard link --model ... --features <table> "
+            "--label-column <column>`.",
+        )
+
     # leakage_findings() already walked every one of these and found no leak,
     # which is why this function is being asked at all (module docstring): a
     # finding is proof the check ran. What it cannot tell on its own is whether
@@ -301,13 +320,15 @@ def _sensitive_gap(
             check=CHECK_SENSITIVE_SOURCE, target_urn=model_urn, reason=reason, remedy=remedy
         )
 
-    if not sensitive_index(conn, config).configured:
+    if not classification_index(conn, config).configured:
         return gap(
             "no classification is configured, so no column in this catalog counts as "
-            "sensitive and there is nothing for the check to look for",
-            "Set MODELGUARD_SENSITIVE_TERM_URNS or MODELGUARD_SENSITIVE_TAG_URNS to "
-            "the glossary terms or tags your organization already classifies columns "
-            "with (comma-separated URNs). Either one alone is enough.",
+            "sensitive or protected and there is nothing for the check to look for",
+            "Set MODELGUARD_SENSITIVE_TERM_URNS, MODELGUARD_SENSITIVE_TAG_URNS, "
+            "MODELGUARD_PROTECTED_ATTRIBUTE_TERM_URNS or "
+            "MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS to the glossary terms or tags "
+            "your organization already classifies columns with (comma-separated "
+            "URNs). Any one alone is enough.",
         )
 
     if properties is None or not properties.mlFeatures:
@@ -334,11 +355,27 @@ def _sensitive_gap(
             "emit it; the SDK's add_lineage accepts explicit column mappings).",
         )
 
+    # Same reasoning as _leakage_gap above: a partial link means a clean result
+    # only covers the features that resolved a source column, and reporting that
+    # as "checked" over the whole model is the silent healthy-claim this module
+    # exists to prevent.
+    unresolved = len(properties.mlFeatures) - len(source_columns)
+    if unresolved:
+        return gap(
+            f"{unresolved} of {len(properties.mlFeatures)} feature(s) have no "
+            "column-level lineage to a source column, so this check only walked "
+            "the rest: a clean result covers the linked features, not the model",
+            "Ingest column-level lineage for the remaining feature tables, or "
+            "declare it with `modelguard link --model ... --features <table> "
+            "--label-column <column>`.",
+        )
+
     # Same reasoning as _leakage_gap above: sensitive_source_findings() already
-    # walked every one of these, and "no exposure found" cannot be told apart
-    # from "the exposed ancestor was past a cap" without re-checking WalkResult
-    # (F1, docs/plan/07). Walked once per column, shared by both caps below.
-    index = sensitive_index(conn, config)
+    # walked every one of these, over the union of both classification groups
+    # (classification_index), and "no exposure found" cannot be told apart from
+    # "the exposed ancestor was past a cap" without re-checking WalkResult (F1,
+    # docs/plan/07). Walked once per column, shared by both caps below.
+    index = classification_index(conn, config)
     walks = [marked_ancestor(conn, column, index, config) for column in source_columns]
     cap = _cap_reason(walks, config, len(source_columns), noun="an exposure")
     if cap is not None:

@@ -57,7 +57,7 @@ def _stale() -> tuple[FakeGraph, FakeClient]:
             )
         },
     )
-    graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
+    graph.graphql_response = {"raiseIncident": "urn:li:incident:abc", "updateIncidentStatus": True}
     client = FakeClient(
         lineage_results=[
             lineage_result(FEATURE_TABLE, 1),

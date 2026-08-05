@@ -54,10 +54,11 @@ from modelguard.detect.blast_radius import (
     freshness_signal,
 )
 from modelguard.detect.coverage import Unevaluated, coverage_gaps
-from modelguard.detect.degraded import table_level_findings
+from modelguard.detect.degraded import table_level_findings, training_tables
 from modelguard.detect.governance import (
     deprecated_input_findings,
     model_input_datasets,
+    protected_attribute_index,
     proxy_candidate_findings,
     sensitive_index,
     sensitive_source_findings,
@@ -74,7 +75,10 @@ from modelguard.models import (
     FreshnessFinding,
     LeakageFinding,
     ModelRef,
+    ProxyCandidateFinding,
     Severity,
+    TableLevelRiskFinding,
+    TableRisk,
     TrustScore,
     severity_rank,
 )
@@ -622,28 +626,32 @@ def _active_incidents_titled(
     conn: DataHubConnection,
     resource_urn: str,
     title_prefix: str,
-) -> tuple[str, ...]:
-    """Return the active FIELD incidents on a column whose title starts as given.
+) -> tuple[tuple[str, str], ...]:
+    """Return the (incident, title) of active FIELD incidents whose title starts as given.
 
     Prefix matching, not the exact-title lookup ``raise_incident``'s own dedup
     uses, because a column-scoped title names what the derivation *reached* (the
-    label, or the classified column), and that is exactly the fact that no longer
-    exists once somebody has fixed the derivation. Matching on the part of the
-    title that is a function of the column alone is what lets a fixed problem be
-    recognised as fixed.
+    label, the classified column, or the protected column it forks toward), and
+    that is exactly the fact that no longer exists once somebody has fixed the
+    derivation. Matching on the part of the title that is a function of the
+    column alone is what lets a fixed problem be recognised as fixed.
 
-    The prefix is what keeps the two column detectors from resolving each
-    other's incidents: they raise on the same column with the same incident
-    type, and only the title distinguishes them.
+    The prefix is what keeps the column detectors from resolving each other's
+    incidents: they can raise on the same column with the same incident type,
+    and only the title distinguishes them. The title is returned alongside the
+    incident, not just the URN, because a proxy candidate can raise more than
+    one title on one column (one per protected attribute it forks toward), and
+    a caller resolving only some of them needs to tell them apart without a
+    second read of the aspect this function already fetched.
     """
-    matched: list[str] = []
+    matched: list[tuple[str, str]] = []
     for incident_urn in attached_incident_urns(conn, resource_urn):
         info = conn.graph.get_aspect(incident_urn, IncidentInfoClass)
         if info is None or info.status.state != IncidentStateClass.ACTIVE:
             continue
         if info.type != "FIELD" or info.title is None or not info.title.startswith(title_prefix):
             continue
-        matched.append(incident_urn)
+        matched.append((incident_urn, info.title))
     return tuple(matched)
 
 
@@ -727,6 +735,19 @@ def _reconcile_stale_findings(
         # the columns for it anyway would be a graph read per column per scan
         # buying an answer that is known in advance.
         sensitive_configured = sensitive_index(conn, config).configured
+        proxy_configured = protected_attribute_index(conn, config).configured
+
+        # A proxy candidate's title names the shared ancestor and the protected
+        # column reached, neither reconstructable once the fork is gone, so like
+        # leakage and sensitive-source it resolves by title prefix. Unlike them,
+        # one column can carry more than one proxy title at once (a fork toward
+        # several protected attributes), so the still-failing gate that works for
+        # a single-flavor finding is too coarse here: this compares the exact
+        # title of each open incident against this run's own titles instead.
+        current_proxy_titles: dict[str, set[str]] = {}
+        for finding in findings:
+            if isinstance(finding, ProxyCandidateFinding) and finding.model.urn == model_urn:
+                current_proxy_titles.setdefault(finding.resource_urn, set()).add(finding.title)
 
         # Leakage: every candidate source column, matched by title prefix rather
         # than find_active_incident's exact match, because the incident's title
@@ -757,7 +778,7 @@ def _reconcile_stale_findings(
 
             if not still_failing(FindingType.TARGET_LEAKAGE, source_column, "FIELD"):
                 prefix = f"Target leakage: {field_path} derives from label "
-                for incident_urn in _active_incidents_titled(conn, source_column, prefix):
+                for incident_urn, _title in _active_incidents_titled(conn, source_column, prefix):
                     resolve_incident(conn, incident_urn, _recovery_message(run_id))
                     run.wrote(source_column, incident_urn)
                     if known_feature_urn is not None:
@@ -776,10 +797,25 @@ def _reconcile_stale_findings(
                 FindingType.SENSITIVE_SOURCE, source_column, "FIELD"
             ):
                 prefix = f"Sensitive source: {field_path} derives from "
-                for incident_urn in _active_incidents_titled(conn, source_column, prefix):
+                for incident_urn, _title in _active_incidents_titled(conn, source_column, prefix):
                     resolve_incident(conn, incident_urn, _recovery_message(run_id))
                     run.wrote(source_column, incident_urn)
                     record(model, FindingType.SENSITIVE_SOURCE)
+
+            # A proxy candidate resolves the same way, but is matched title by
+            # title rather than gated as a whole column: two different protected
+            # attributes can each name a title on the same source column, and
+            # fixing one fork must not leave the other's incident untouched but
+            # also must not be blocked by the other still being open.
+            if proxy_configured:
+                prefix = f"Proxy candidate: {field_path} shares "
+                active_titles = current_proxy_titles.get(source_column, set())
+                for incident_urn, title in _active_incidents_titled(conn, source_column, prefix):
+                    if title in active_titles:
+                        continue
+                    resolve_incident(conn, incident_urn, _recovery_message(run_id))
+                    run.wrote(source_column, incident_urn)
+                    record(model, FindingType.PROXY_CANDIDATE)
 
         _record_leak_columns(conn, model_urn, findings)
         run.wrote(model_urn)
@@ -816,6 +852,37 @@ def _reconcile_stale_findings(
                 resolve_incident(conn, incident, _recovery_message(run_id))
                 run.wrote(dataset_urn, incident)
                 record(model, FindingType.DEPRECATED_INPUT)
+
+        # Table-level risk: the degraded mode's three checks, title fully known
+        # like drift and deprecation above (it names the risk, the table, and the
+        # model, none of which stop existing once the risk clears). Walked over
+        # training_tables rather than gated on has_column_link, because the most
+        # common way this recovers is the model graduating to a column link, at
+        # which point table_level_findings stops running entirely and every one
+        # of its incidents would otherwise never be revisited. Two of the three
+        # risks (DEPRECATED, CLASSIFIED) share the OPERATIONAL incident type, so
+        # this compares the exact title per risk rather than the still_failing
+        # gate above, which is too coarse to tell those two apart.
+        current_table_titles = {
+            finding.title
+            for finding in findings
+            if isinstance(finding, TableLevelRiskFinding) and finding.model.urn == model_urn
+        }
+        for dataset_urn in training_tables(conn, model_urn, config):
+            dataset_name = DatasetUrn.from_string(dataset_urn).name
+            for risk in TableRisk:
+                title = (
+                    f"Table-level {risk.value} input {dataset_name} for {model.name} "
+                    "(no column link)"
+                )
+                if title in current_table_titles:
+                    continue
+                incident_type = "FRESHNESS" if risk is TableRisk.STALE else "OPERATIONAL"
+                incident = find_active_incident(conn, dataset_urn, incident_type, title)
+                if incident is not None:
+                    resolve_incident(conn, incident, _recovery_message(run_id))
+                    run.wrote(dataset_urn, incident)
+                    record(model, FindingType.TABLE_LEVEL_RISK)
 
     # A risk flag is a finding type, but a model can carry one type from several
     # resources at once: two stale upstream tables, two leaking features. One of

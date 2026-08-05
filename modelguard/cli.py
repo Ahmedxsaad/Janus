@@ -948,9 +948,12 @@ def _scan_all_models(
             config = replace(config, freshness_sla_hours=sla_hours)
         llm = _resolve_llm(no_llm=no_llm, provider=llm_provider, model=llm_model)
         conn = connect()
-    except (ConfigError, DataHubConnectionError) as exc:
+    except ConfigError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from exc
+    except DataHubConnectionError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
 
     model_urns = _model_urns(conn)
     if not model_urns:
@@ -1669,9 +1672,12 @@ def inventory(
     try:
         config = ScanConfig.from_env()
         conn = connect()
-    except (ConfigError, DataHubConnectionError) as exc:
+    except ConfigError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from exc
+    except DataHubConnectionError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
 
     model_urns = _model_urns(conn, limit=limit)
     if not model_urns:
@@ -1749,9 +1755,12 @@ def finops(
         if days is not None:
             config = replace(config, unused_model_days=days)
         conn = connect()
-    except (ConfigError, DataHubConnectionError) as exc:
+    except ConfigError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from exc
+    except DataHubConnectionError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
 
     model_urns = _model_urns(conn, limit=limit)
     if not model_urns:
@@ -1839,9 +1848,12 @@ def coverage(
     try:
         config = ScanConfig.from_env()
         conn = connect()
-    except (ConfigError, DataHubConnectionError) as exc:
+    except ConfigError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from exc
+    except DataHubConnectionError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
 
     model_urns = _model_urns(conn, limit=limit)
     if not model_urns:
@@ -2010,9 +2022,12 @@ def _link_all(*, dry_run: bool, named: tuple[object, ...]) -> None:
     try:
         config = ScanConfig.from_env()
         conn = connect()
-    except (ConfigError, DataHubConnectionError) as exc:
+    except ConfigError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from exc
+    except DataHubConnectionError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
 
     recorded = models_with_recorded_link(conn)
     if not recorded:

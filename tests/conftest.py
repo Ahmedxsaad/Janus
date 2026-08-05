@@ -21,8 +21,18 @@ from datahub.metadata.schema_classes import (
 from datahub.metadata.urns import SchemaFieldUrn, Urn
 from datahub.sdk.lineage_client import LineagePath, LineageResult
 
+from modelguard.argos.events import ENV_UI_URL
+from modelguard.argos.window import ENV_BINARY
 from modelguard.client import DataHubConnection
+from modelguard.companion import ENV_OWNER
 from modelguard.config import TABLE_LEVEL_PRECISION
+from modelguard.llm import ENV_LLM_API_KEY, ENV_LLM_MODEL, ENV_LLM_PROVIDER
+from modelguard.logs import ENV_LOG_FORMAT
+from modelguard.mcl import (
+    ENV_KAFKA_BOOTSTRAP,
+    ENV_KAFKA_GROUP_ID,
+    ENV_SCHEMA_REGISTRY_URL,
+)
 from modelguard.models import (
     BlastRadius,
     ChangeKind,
@@ -46,6 +56,7 @@ from modelguard.models import (
     TrustBand,
     TrustScore,
 )
+from modelguard.telemetry import ENV_OTEL_ENDPOINT, ENV_OTEL_HEADERS
 
 
 @dataclass(frozen=True)
@@ -77,7 +88,15 @@ class FakeGraph:
         self._related = related or {}
         self._timeseries = timeseries or {}
         self._by_entity_type = by_entity_type or {}
-        self.graphql_response = graphql_response or {}
+        # updateIncidentStatus defaults to accepted: resolve_incident now raises
+        # on a rejected mutation (writeback/incidents.py), and the overwhelming
+        # majority of tests that reach a resolve are testing something else
+        # entirely (a risk flag clearing, a process instance's outputs) and never
+        # meant to exercise GMS rejecting the call. A test of the rejection path
+        # itself passes graphql_response explicitly, which still wins here.
+        self.graphql_response = (
+            graphql_response if graphql_response is not None else {"updateIncidentStatus": True}
+        )
         self.emitted: list[Any] = []
         self.graphql_calls: list[tuple[str, dict[str, Any] | None]] = []
         self.filter_calls: list[tuple[tuple[str, ...], tuple[Any, ...]]] = []
@@ -481,6 +500,54 @@ def make_schema_drift_finding(
         dataset_name="ecommerce.public.customer_features",
         changes=changes,
     )
+
+
+#: Every optional configuration group (root rule 6c). None of these is set on a
+#: machine running only the unit suite, but all of them are set on somebody's
+#: development machine, which is the whole problem: see the fixture below.
+OPTIONAL_GROUP_ENV = (
+    ENV_LLM_PROVIDER,
+    ENV_LLM_MODEL,
+    ENV_LLM_API_KEY,
+    ENV_OTEL_ENDPOINT,
+    ENV_OTEL_HEADERS,
+    ENV_KAFKA_BOOTSTRAP,
+    ENV_SCHEMA_REGISTRY_URL,
+    ENV_KAFKA_GROUP_ID,
+    ENV_LOG_FORMAT,
+    ENV_OWNER,
+    ENV_BINARY,
+    ENV_UI_URL,
+)
+
+
+@pytest.fixture(autouse=True)
+def unconfigured_environment(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hide the developer's own `.env` from the unit suite.
+
+    `env.py` calls `load_dotenv` at import, so every `*_config_from_env()` a unit
+    test calls reads whatever `.env` sits in the working directory. Three tests
+    assert that an unset group reads as `None`, and each of them passes or fails
+    according to who is running it: `test_mcl.py` is red on a machine whose `.env`
+    carries the Kafka group, `test_llm.py` is red on any machine configured to run
+    the agent at all, which is most of them. Green in CI and red locally is worse
+    than red everywhere, because the machine that disagrees is assumed to be the
+    broken one.
+
+    Clearing the groups here rather than in each test is what makes it hold for
+    the next such test too, which nobody will remember to write a `delenv` into.
+    Only the optional groups are cleared: identity variables are a different
+    question (rule 6a) and no offline test needs them.
+
+    Integration tests are exempt. They are the ones that legitimately read a real
+    configured environment, and they are already separated by this marker.
+    """
+    if "integration" in request.keywords:
+        return
+    for name in OPTIONAL_GROUP_ENV:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture
