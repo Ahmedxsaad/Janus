@@ -24,13 +24,24 @@ security and observability cross-cutting.
 ## Local rules
 
 1. Findings passed between layers are typed models (models.py), not dicts.
-2. Four triggers, one core: cli.py exposes scan (batch), watch (polling), and
-   gate (CI); mcp_server.py adds a fourth, conversational, over MCP rather than a
-   shell. All four share the identical detect -> reason -> write core in
-   agent/pipeline.py (run_scan), not in the trigger itself. watch polls and acts
-   on finding-set transitions, auto-approving because it is unattended; it is
-   polling by design (never Kafka-dependent), with the Actions/EntityChangeEvent
-   framework as the documented upgrade path.
+2. Every trigger, one core. A *trigger* is an entry point that runs detection:
+   cli.py exposes scan (batch), watch (polling or events), gate (CI), and the
+   read-only sweeps over them (inventory, coverage, finops, and the three
+   document commands); mcp_server.py adds a conversational one over MCP rather
+   than a shell; api.py adds the two functions a training script may pin to.
+   Every one of them shares the identical detect -> reason -> write core in
+   agent/pipeline.py (run_scan), never a copy in the trigger itself. Do not
+   count them here: this rule is about the sharing, and a number in it has gone
+   stale on every phase that added a command.
+   watch acts on finding-set transitions, auto-approving because it is
+   unattended; it is polling by *default*, and the core install is never
+   Kafka-dependent.
+   `watch --events` is the built upgrade (T-20, D-132): it consumes DataHub's
+   own MetadataChangeLog through mcl.py, behind the `[kafka]` extra, and adds
+   the one thing polling structurally cannot do, re-applying catalog-wide any
+   `link` an ingest drops (reconcile.py). Polling stays the documented default
+   because it depends on nothing but GMS and cannot fall behind a consumer
+   group somebody rebalanced.
    gate is the preventive one: it judges a dry-run scan against a policy and
    answers in an exit code (0 shippable, 1 blocked, 2 could not tell). It reads
    and does not write, because it runs on every push to every branch and one
@@ -100,3 +111,5 @@ security and observability cross-cutting.
 | 2026-08-05 | Claude (for Ghassen Naouar) | finops.py and `modelguard finops` land (D-129, T-18), a ninth trigger and the only one whose reader is a budget holder. It is a report and not a detector on purpose: nothing is broken, so no FindingType, no incident and no trust deduction. Two guards make it safe to act on: a table is listed only when every downstream model is unused, and a model with no recorded date is reported as undated rather than unused, because this is the one output that suggests deleting something and an absence is not evidence. detect/blast_radius.py gains upstream_datasets, the hop-capped mirror of its own walk, shared with lifecycle.py rather than copied |
 | 2026-08-05 | Claude (for Ghassen Naouar) | T-19 (D-130): `feature-card` joins the trigger list as the tenth, taken per model with a --feature substring filter because a model is what somebody has in hand and an mlFeature URN is not. Read-only like the other two document commands: generating documentation must not raise incidents |
 | 2026-08-05 | Claude (for Ghassen Naouar) | mcl.py and reconcile.py land (D-132, T-20), and rule 2's four-triggers-one-core gains its event-driven wake-up: `watch --events` consumes DataHub's own MetadataChangeLog instead of the poll timer. Rule 2's polling-by-design sentence is now polling-by-default: the poll stays the out-of-the-box path and needs no broker, and the consumer is an opt-in extra. Not datahub-actions, which would put a second configuration surface next to env.py for the same records. F11 closes: an ingest that drops a link is re-applied catalog-wide, which no poll of one target could ever see, and only what a human already confirmed is ever replayed |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Rule 2's own text updated, not only logged: "polling by design (never Kafka-dependent), with the Actions/EntityChangeEvent framework as the documented upgrade path" was stale the moment T-20 landed, because the upgrade is built. It now reads polling by *default*, names `watch --events` and says why polling stays the default anyway (D-132) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Rule 2 stops counting. It opened "Four triggers" while its own change log had been counting up to ten across three phases, which is the rule rotting one row at a time. It now states the invariant it was always about, that every entry point running detection shares run_scan and none reimplements it, and says explicitly not to put a number back |
