@@ -16,6 +16,64 @@ Entry template:
 
 ---
 
+## D-138: The page carries every flag and every setting, not only the story (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: `site/index.html` gains a flag reference covering every option of
+  every command, the fifteen `.env` keys it never showed (the parameter
+  defaults, the logging and OTLP headers, the Kafka three, the Argos and
+  companion settings), the versioned-model behaviour in `discovery.py`, and
+  rows for the MCP extension RFC and the Helm chart.
+- Options considered: (a) leave `--help` as the reference and keep the page
+  narrative; (b) add a flag table and complete the configuration section;
+  (c) generate the reference from the Typer app at build time.
+- Why (b): `tests/test_docs.py` already forces every *command* onto the page,
+  which is the check that exists because two commands shipped
+  undiscoverable. Options are the same failure one level down:
+  `scan --report-out` writes the impact report to disk for a reader with no
+  DataHub login, and nothing on the page said so. (c) is the right answer for
+  a page with a build step, and this one deliberately has none (site/CLAUDE.md
+  rule 2), so a generator would be the first dependency.
+- Result: New `#flags` section with one table per command, the configuration
+  section extended with the parameter and operational key groups and the
+  reasoning for the two separate hop caps, a subsection under `inventory` on
+  why every sweep turns off DataHub's non-latest-version hiding. Site and doc
+  tests pass. Not enforced by a test: an option can still be added without
+  landing here, which is the same promise rule 5 makes for a command and is
+  the natural next thing to make mechanical.
+
+## D-137: The page is set in autumn, and one dog walks it (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: `site/` is rebuilt on a warm autumn palette (ivory paper, dark
+  brown ink, caramel accent, oxblood for a live finding) and carries a single
+  Argos who walks along a fixed strip to a new position at each section,
+  changing pose and speaking a pixel-drawn line. `vercel.json` at the
+  repository root serves the deployment from the root rather than from
+  `site/`.
+- Options considered, palette: (a) keep the previous draft; (b) an editorial
+  autumn scheme with one accent, hairlines instead of borders and no
+  decorative gradients, glows or coloured panels.
+- Options considered, mascot: (a) the earlier draft's separate canvas between
+  every pair of sections; (b) one canvas on a fixed strip, driven by an
+  IntersectionObserver, with position, pose, collar and line declared on the
+  section as `data-x` / `data-pose` / `data-collar` / `data-say`.
+- Why (b) both times: the two earlier drafts read as a generic promotional
+  landing page, and nine stacked canvases meant nine dogs, eight of them
+  talking to a reader who had already scrolled past. One dog that moves is a
+  companion; one that says a new thing from the same spot is a caption. The
+  palette earns its two exceptions honestly: oxblood is a live finding and
+  green is a check that ran and passed, which is exactly what the desktop
+  window reserves colour for.
+- Why `vercel.json`: the page reads its art from `argos/ui/sprites/argos.txt`
+  through `argos/ui/sprites.js`, the one copy of it (site/CLAUDE.md rule 1).
+  Deployed with `site/` as the root, `../argos/` is outside the deployment,
+  `fetch` 404s, and the dog silently never appears while the page looks fine.
+- Result: Beat markup on every section, a 3x5 glyph table drawn as rects so
+  the bubble text is made of the same pixels the dog is, and the bubble
+  taking whichever side of him has more room. `tests/test_site.py` already
+  asserted the poses exist and every spoken character has a glyph, so the
+  beats were checkable as they were written. Reduced motion is honoured: he
+  is placed rather than walked, and the line is shown rather than typed.
+
 ## D-136: Package and brand identifiers renamed repo-wide (2026-08-05)
 - Decided by: Ghassen Naouar.
 - Decision: Every file, directory, package name, CLI entry point, and prose

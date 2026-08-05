@@ -1,16 +1,24 @@
 /**
  * Argos, walking the reader down the documentation page.
  *
- * Every beat on the page is one `<canvas class="beat">`: Argos walks in from
- * the edge, stops, drops into a pose, and says one line in a pixel bubble. The
- * art is not copied here. It is read from `argos/ui/sprites/argos.txt` through
- * `argos/ui/sprites.js`, the same two files the desktop window and the README
- * animation read, so a redraw of a leg lands here without anybody remembering
- * that this page exists.
+ * One dog for the whole page. He stands on a fixed strip along the bottom of
+ * the window, and every time the reader arrives at a new section he walks to a
+ * new place on that strip, drops into a new pose, and says a new line in a
+ * pixel bubble. The earlier draft put a separate canvas between every pair of
+ * sections, which meant nine dogs, eight of them talking to a reader who had
+ * already scrolled past.
+ *
+ * The art is not copied here. It is read from `argos/ui/sprites/argos.txt`
+ * through `argos/ui/sprites.js`, the same two files the desktop window and the
+ * README animation read, so a redraw of a leg lands here without anybody
+ * remembering that this page exists.
  *
  * That sharing is why the page needs a server: `fetch` of a local file is
  * blocked under `file://`. Serve the repository root (`python -m http.server`)
- * and open `/site/`.
+ * and open `/site/`. It is also why the deployed site has to be built from the
+ * repository root rather than from this directory, which `vercel.json` at the
+ * root is for: served with `site/` as the root, `../argos/` is outside the
+ * deployment and the dog silently never appears.
  *
  * The bubble text is drawn on the canvas rather than laid out in HTML on
  * purpose. A web font would be one more thing to ship and would still not be
@@ -80,15 +88,16 @@
   /**
    * The bubble, on paper.
    *
-   * A cream fill with a heavy black edge was drawn for a dark page; on the
-   * light one it reads as a sticker sitting on top of the document. White with
-   * a hairline rule is the same bubble wearing the page's own manners, and the
-   * text is the page's ink rather than a brown of its own.
+   * Ivory with a caramel hairline, drawn from the same values `style.css`
+   * holds. Canvas takes no custom properties, so these are the one place the
+   * palette is written twice; they are the page's own ink and rule rather than
+   * a scheme of the bubble's own, which is what keeps the dog looking drawn
+   * onto the document instead of pasted over it.
    */
   const COLOURS = {
-    bubble: "#ffffff",
-    bubbleEdge: "#d8d8d4",
-    bubbleText: "#16181d",
+    bubble: "#faf5ea",
+    bubbleEdge: "#c08a4a",
+    bubbleText: "#2b1d13",
   };
 
   /** Frames each pose cycles through, in order. */
@@ -107,11 +116,13 @@
 
   const WALK = ["walk_a", "walk_b", "walk_c", "walk_d"];
 
-  const WALK_SPEED = 130;   // css pixels per second
+  const WALK_SPEED = 190;   // css pixels per second
   const WALK_FRAME_MS = 110;
   const POSE_FRAME_MS = 420;
-  const TYPE_MS = 26;       // per character
-  const SETTLE_MS = 220;    // pause between arriving and speaking
+  const TYPE_MS = 24;       // per character
+  const SETTLE_MS = 180;    // pause between arriving and speaking
+  const SPRITE = 32;        // the art is 32x32
+  const ARRIVED = 1.5;      // px: closer than this counts as standing still
 
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -200,21 +211,30 @@
     }
   }
 
-  /** One beat: a canvas, its message, and where Argos is in walking it. */
-  class Beat {
+  /**
+   * The one dog on the page, and where he is in walking to his current stop.
+   *
+   * A stop is any element carrying `data-say`. It contributes the line, the
+   * pose, the collar, and `data-x`, which is where along the strip he stands
+   * for it, as a fraction of the width. Moving him is the point: a companion
+   * who says a new thing from the same spot every time reads as a caption.
+   */
+  class Companion {
     constructor(canvas, frames) {
       this.canvas = canvas;
       this.ctx = canvas.getContext("2d");
       this.frames = frames;
-      this.pose = POSES[canvas.dataset.pose] || POSES.idle;
-      this.message = canvas.dataset.say || "";
-      this.fromRight = canvas.dataset.from === "right";
-      this.collar = canvas.dataset.collar || null;
-      this.scale = Number(canvas.dataset.scale || 4);
-      this.textScale = Number(canvas.dataset.textScale || 3);
-      this.started = null;
-      this.active = false;
-      this.resize();
+      this.stop = null;
+      this.x = null;
+      this.targetX = 0;
+      this.facing = 1;
+      this.pose = POSES.idle;
+      this.collar = null;
+      this.lines = [];
+      this.message = "";
+      this.settled = 0;
+      this.clock = 0;
+      this.measure();
     }
 
     /**
@@ -223,9 +243,11 @@
      * Without the DPR step the sprite's own pixels land on half a device pixel
      * on a retina screen and the whole point of pixel art is gone.
      */
-    resize() {
+    measure() {
       const rect = this.canvas.getBoundingClientRect();
-      if (!rect.width) {
+      // Hidden by the narrow-screen media query, or measured before layout.
+      this.live = rect.width > 0 && rect.height > 0;
+      if (!this.live) {
         return;
       }
       const dpr = window.devicePixelRatio || 1;
@@ -236,69 +258,121 @@
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.ctx.imageSmoothingEnabled = false;
 
-      const sprite = 32 * this.scale;
-      this.restX = this.fromRight ? this.width - sprite - 12 : 12;
-      this.startX = this.fromRight ? this.width + 8 : -sprite - 8;
-      this.spriteY = this.height - sprite - 4;
+      // Big enough to read as a character, small enough that he and a bubble
+      // both fit across a laptop window.
+      this.scale = this.width < 760 ? 3 : 4;
+      this.sprite = SPRITE * this.scale;
+      // He stands on the hairline the strip draws at its own 1.4rem.
+      this.spriteY = this.height - this.sprite - 20;
 
-      // The bubble takes whatever the dog leaves, and the text is wrapped to
-      // that, so a narrow phone gets more lines rather than a clipped sentence.
-      // More lines is a taller bubble, though, and the strip has a fixed height,
-      // so a phone that runs out of room gets smaller pixels rather than a
-      // sentence cut off at the top of the canvas.
+      if (this.stop) {
+        this.layout();
+      }
+    }
+
+    /** Take a new stop: where to stand, what to do there, and what to say. */
+    goTo(element) {
+      if (this.stop === element) {
+        return;
+      }
+      this.stop = element;
+      this.pose = POSES[element.dataset.pose] || POSES.idle;
+      this.collar = element.dataset.collar || null;
+      this.message = element.dataset.say || "";
+      this.settled = 0;
+      if (this.live) {
+        this.layout();
+      }
+    }
+
+    /**
+     * Place the dog and size his bubble for the current stop.
+     *
+     * The bubble takes whichever side of him has more room, and the text is
+     * wrapped to that, so a narrow window gets more lines rather than a clipped
+     * sentence. More lines is a taller bubble and the strip has a fixed height,
+     * so a window that runs out of room gets smaller pixels rather than a
+     * sentence cut off at the top of the canvas.
+     */
+    layout() {
+      const margin = 24;
+      const room = this.width - this.sprite - margin * 2;
+      // data-x is a fraction of the strip he can stand across, so a stop can
+      // put him anywhere without knowing the viewport width.
+      const where = Number(this.stop.dataset.x);
+      const fraction = Number.isFinite(where) ? Math.min(1, Math.max(0, where)) : 0;
+      this.targetX = margin + room * fraction;
+      if (this.x === null || still) {
+        this.x = this.targetX;
+      }
+
+      // Speak into the open half of the strip, and face what you are saying.
+      this.bubbleRight = this.targetX < this.width / 2;
+      this.facing = this.bubbleRight ? 1 : -1;
+
       const gap = 14;
-      const room = this.width - sprite - gap - 24;
-      const wanted = Number(this.canvas.dataset.textScale || 3);
-      for (this.textScale = wanted; this.textScale > 1; this.textScale -= 1) {
-        const columns = Math.max(40, Math.floor(room / this.textScale) - 6);
+      const budget = this.bubbleRight
+        ? this.width - (this.targetX + this.sprite) - gap - margin
+        : this.targetX - gap - margin;
+
+      for (this.textScale = this.scale - 1; this.textScale > 1; this.textScale -= 1) {
+        const columns = Math.max(30, Math.floor(budget / this.textScale) - 6);
         this.lines = wrap(this.message, columns);
         const longest = this.lines.reduce((most, line) => Math.max(most, textWidth(line)), 0);
+        const w = longest * this.textScale + this.textScale * 6;
         this.box = {
-          x: this.fromRight ? 12 : sprite + gap + 12,
+          x: this.bubbleRight ? this.targetX + this.sprite + gap : this.targetX - gap - w,
           y: 6,
-          w: longest * this.textScale + this.textScale * 6,
+          w,
           h: this.lines.length * LINE_STEP * this.textScale + this.textScale * 5,
         };
-        // The tail hangs three of its own pixels below the box.
-        if (this.box.y + this.box.h + this.textScale * 3 <= this.height) {
+        // The tail hangs three of its own pixels below the box, and the box
+        // must not push past the edge it grew towards.
+        const fits = this.box.y + this.box.h + this.textScale * 3 <= this.height;
+        if (fits && this.box.x >= margin && this.box.x + w <= this.width - margin) {
           break;
         }
       }
       this.chars = this.message.length;
     }
 
-    /** Draw the beat at `elapsed` milliseconds since it came into view. */
-    render(elapsed) {
+    /** Advance by `dt` milliseconds and paint one frame. */
+    render(dt) {
       const ctx = this.ctx;
       ctx.clearRect(0, 0, this.width, this.height);
+      this.clock += dt;
 
-      const travel = Math.abs(this.restX - this.startX);
-      const walkMs = still ? 0 : (travel / WALK_SPEED) * 1000;
-      const walking = elapsed < walkMs;
-      const progress = walkMs ? Math.min(1, elapsed / walkMs) : 1;
-      const x = this.startX + (this.restX - this.startX) * progress;
+      const remaining = this.targetX - this.x;
+      const walking = Math.abs(remaining) > ARRIVED;
+      if (walking) {
+        const step = Math.min(Math.abs(remaining), (WALK_SPEED * dt) / 1000);
+        this.x += Math.sign(remaining) * step;
+        // Face the way you are going, whatever you will face on arrival.
+        this.facing = Math.sign(remaining);
+        // Nothing is said mid-walk: the line belongs to the place.
+        this.settled = 0;
+      } else {
+        this.x = this.targetX;
+        this.settled += dt;
+      }
 
-      const frames = walking
-        ? WALK
-        : this.pose;
-      const step = walking
-        ? Math.floor(elapsed / WALK_FRAME_MS)
-        : Math.floor((elapsed - walkMs) / POSE_FRAME_MS);
-      const rows = this.frames[frames[step % frames.length]];
+      const frames = walking ? WALK : this.pose;
+      const frame = Math.floor(this.clock / (walking ? WALK_FRAME_MS : POSE_FRAME_MS));
+      const rows = this.frames[frames[frame % frames.length]];
 
       ArgosSprites.drawFrame(ctx, rows, this.scale, {
-        x,
+        x: this.x,
         y: this.spriteY,
-        flip: this.fromRight,
+        flip: this.facing < 0,
         collar: this.collar,
         // A resting dog still breathes. Half a sprite pixel, every other frame.
-        bob: !walking && step % 2 ? 0.5 : 0,
+        bob: !walking && frame % 2 ? 0.5 : 0,
       });
 
-      if (!this.message) {
+      if (walking || !this.message || !this.box) {
         return;
       }
-      const speaking = elapsed - walkMs - SETTLE_MS;
+      const speaking = this.settled - SETTLE_MS;
       if (speaking < 0) {
         return;
       }
@@ -306,18 +380,20 @@
       if (revealed <= 0) {
         return;
       }
-      const head = this.fromRight ? x + 8 * this.scale : x + 18 * this.scale;
+      // The tail points at his head, clamped so it stays under the bubble.
+      const head = this.facing > 0 ? this.x + 18 * this.scale : this.x + 8 * this.scale;
       const tailX = Math.min(
         Math.max(head, this.box.x + this.textScale * 2),
         this.box.x + this.box.w - this.textScale * 8,
       );
-      drawBubble(this.ctx, this.lines, this.box, this.textScale, tailX, revealed);
+      drawBubble(ctx, this.lines, this.box, this.textScale, tailX, revealed);
     }
   }
 
   async function start() {
-    const canvases = Array.from(document.querySelectorAll("canvas.beat"));
-    if (!canvases.length) {
+    const canvas = document.querySelector("#argos");
+    const stops = Array.from(document.querySelectorAll("[data-say]"));
+    if (!canvas || !stops.length) {
       return;
     }
     const response = await fetch(SPRITE_FILE);
@@ -327,40 +403,60 @@
       return;
     }
     const frames = ArgosSprites.parseSprites(await response.text());
-    const beats = canvases.map((canvas) => new Beat(canvas, frames));
+    const argos = new Companion(canvas, frames);
+    argos.goTo(stops[0]);
 
-    // Only beats on screen animate, and each one restarts its walk when the
-    // reader comes back to it, so the page is a sequence rather than a room
-    // full of dogs that all finished talking while nobody was looking.
+    /*
+     * Which stop is he on? Whichever one is highest on screen but past the top
+     * of the viewport, which is where a reader's attention is on a long
+     * document. An IntersectionObserver alone answers "is it visible", and with
+     * sections this tall two are visible at once and the answer flickers
+     * between them; the observer here only decides which elements are worth
+     * measuring, and the top-most of those wins.
+     */
+    const visible = new Set();
     const seen = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          const beat = beats[canvases.indexOf(entry.target)];
-          beat.active = entry.isIntersecting;
-          if (entry.isIntersecting && beat.started === null) {
-            beat.started = performance.now();
-          } else if (!entry.isIntersecting) {
-            beat.started = null;
+          if (entry.isIntersecting) {
+            visible.add(entry.target);
+          } else {
+            visible.delete(entry.target);
           }
         }
+        // The lowest section whose top has still passed the trigger line: that
+        // is the one being read, not the one being left behind above it.
+        let best = null;
+        for (const element of visible) {
+          const top = element.getBoundingClientRect().top;
+          if (top < window.innerHeight * 0.55 && (!best || top > best.top)) {
+            best = { element, top };
+          }
+        }
+        if (best) {
+          argos.goTo(best.element);
+        }
       },
-      { threshold: 0.35 },
+      { rootMargin: "0px 0px -35% 0px" },
     );
-    for (const canvas of canvases) {
-      seen.observe(canvas);
+    for (const stop of stops) {
+      seen.observe(stop);
     }
 
     let resizeTimer = null;
     window.addEventListener("resize", () => {
       window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(() => beats.forEach((beat) => beat.resize()), 150);
+      resizeTimer = window.setTimeout(() => argos.measure(), 150);
     });
 
+    let last = null;
     const tick = (now) => {
-      for (const beat of beats) {
-        if (beat.active && beat.started !== null) {
-          beat.render(now - beat.started);
-        }
+      // Cap the delta: a backgrounded tab hands back one enormous frame, and an
+      // uncapped one teleports him across the strip mid-stride.
+      const dt = last === null ? 16 : Math.min(64, now - last);
+      last = now;
+      if (argos.live) {
+        argos.render(dt);
       }
       window.requestAnimationFrame(tick);
     };
