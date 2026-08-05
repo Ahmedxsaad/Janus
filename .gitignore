@@ -50,3 +50,7 @@ mutants/
 # usage id, which is per user.
 examples/real-project/churn_analytics/target/
 examples/real-project/churn_analytics/.user.yml
+
+# The ornament generator writes this only for looking at the art while
+# iterating on it; nothing ships it.
+site/art/preview.png
