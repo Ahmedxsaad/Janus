@@ -16,6 +16,28 @@ Entry template:
 
 ---
 
+## D-133: The benchmark scored a detector it had never switched on (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Found by: running `python -m benchmarks.run_bench` on a checkout whose `.env`
+  did not carry `MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS`. `proxy-planted` came
+  back WRONG in 0.00s, which is a detector that returned before it read anything.
+- Decision: `run_bench.main` supplies `protected_attribute_tag_urns` explicitly,
+  the way it has always supplied `sensitive_tag_urns`, and RESULTS.md reports
+  both classifications in its header rather than only the sensitive one.
+- Why this was latent rather than new: both governance detectors are
+  configuration-gated by design (D-079, D-117), which is right for a user and
+  wrong for a benchmark, and `run_bench` already documented that reasoning in a
+  comment above the line that supplies the sensitive list. T-11 added the second
+  detector and did not add the second line, so the proxy row was scoreable only
+  on a machine that happened to export the variable. Every published proxy number
+  so far was measured on such a machine and is correct; what was broken is
+  benchmarks/CLAUDE.md rule 1, same run same numbers, and it was broken silently.
+- Result: the run is reproducible from a clean checkout. The header now says
+  which classifications were in force for both detectors, so a reader can see
+  that a governance row was actually switched on rather than assuming it.
+
+---
+
 ## D-132: T-20, the change-log consumer, and a link that survives an ingest (2026-08-05)
 - Decided by: Ghassen Naouar.
 - Decision: `modelguard/mcl.py` consumes DataHub's `MetadataChangeLog` over the

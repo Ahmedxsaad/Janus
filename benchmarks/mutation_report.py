@@ -202,6 +202,20 @@ VERDICTS: tuple[Verdict, ...] = (
         "answers with a canned cone regardless of what was asked.",
     ),
     Verdict(
+        "modelguard.detect.column_marks.x_derivation_chains",
+        "equivalent",
+        "T-19's walk (D-130). One survivor, and it is provably equivalent: the "
+        'sort tiebreaker\'s fallback constant, `step.column_name or ""`, '
+        "mutated to any other string. The fallback exists so `sorted` never "
+        "compares None to str on a step GMS returned with no column name; which "
+        "constant stands in for the absent name cannot change an ordering, "
+        "because a chain that has one has it on every step of the comparison. "
+        "That the fallback is load-bearing *at all* is covered: mutating it to "
+        '`and ""`, which collapses every key to the same value and hands the '
+        "ordering back to the server's arrival order, is killed by a trial that "
+        "seeds two equal-length chains in reverse.",
+    ),
+    Verdict(
         "modelguard.detect.governance.x_proxy_candidate_findings",
         "gap",
         "T-11 (D-117). Two patterns, both already named elsewhere in this table: "

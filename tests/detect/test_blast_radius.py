@@ -17,6 +17,7 @@ from modelguard.detect.blast_radius import (
     blast_radius,
     finding_for,
     freshness_signal,
+    upstream_datasets,
 )
 from modelguard.models import Severity
 from tests.conftest import FakeClient, FakeGraph, lineage_result, make_connection
@@ -280,3 +281,58 @@ def test_the_finding_carries_the_measured_lag_as_evidence():
     assert evidence["lag_hours"] == "30.0"
     assert evidence["live_models_at_risk"] == "1"
     assert evidence["failing_table"] == "ecommerce.public.loans_raw"
+
+
+def test_upstream_datasets_asks_for_this_table_upstream_within_the_cap():
+    """Asserted on the call issued, not on the answer the fake happened to give.
+
+    `FakeLineage` returns its canned list whatever it is asked, so a walk that
+    queried the wrong table, ran downstream, or asked for unbounded depth
+    returns the same thing here. Two callers outside `detect/` depend on this
+    read being the read it claims to be (T-16's MTTR sweep and T-18's retirement
+    list), and the second of those recommends deleting tables.
+    """
+    config = ScanConfig(max_hops=3)
+    client = FakeClient(
+        lineage_results=[lineage_result(FEATURE_TABLE, hops=1, direction="upstream")]
+    )
+    conn = make_connection(FakeGraph(), client)
+
+    upstream_datasets(conn, TABLE, config)
+
+    call = client.lineage.lineage_calls[0]
+    assert call["source_urn"] == TABLE
+    assert call["direction"] == "upstream"
+    assert call["max_hops"] == config.max_hops
+    assert call["count"] == config.lineage_result_cap
+
+
+def test_upstream_datasets_keeps_a_dataset_exactly_at_the_hop_cap():
+    """The boundary `<= max_hops` includes and `< max_hops` would drop.
+
+    A table exactly at the cap is inside the traversal by the same rule every
+    other walk here uses, and dropping it would quietly narrow the set T-18
+    reasons about.
+    """
+    config = ScanConfig(max_hops=3)
+    client = FakeClient(
+        lineage_results=[lineage_result(FEATURE_TABLE, hops=3, direction="upstream")]
+    )
+    conn = make_connection(FakeGraph(), client)
+
+    assert upstream_datasets(conn, TABLE, config) == (FEATURE_TABLE,)
+
+
+def test_upstream_datasets_drops_a_non_dataset_and_anything_past_the_cap():
+    """Entity type comes from the URN (rule 4) and the cap is enforced (rule 3)."""
+    config = ScanConfig(max_hops=2)
+    client = FakeClient(
+        lineage_results=[
+            lineage_result(FEATURE_TABLE, hops=1, direction="upstream"),
+            lineage_result(FAR_TABLE, hops=3, direction="upstream"),
+            lineage_result(FEATURE_LEAK, hops=1, direction="upstream"),
+        ]
+    )
+    conn = make_connection(FakeGraph(), client)
+
+    assert upstream_datasets(conn, TABLE, config) == (FEATURE_TABLE,)

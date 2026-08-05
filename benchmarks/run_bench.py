@@ -797,6 +797,9 @@ def render_results(
     """Render RESULTS.md. Pure: every number comes from the arguments."""
     grouped = _by_family(outcomes)
     errors = [outcome for outcome in outcomes if outcome.errored]
+    protected = ", ".join(
+        config.protected_attribute_tag_urns + config.protected_attribute_term_urns
+    )
     lines: list[str] = []
 
     lines += [
@@ -811,6 +814,10 @@ def render_results(
         f"- Blast-radius hop cap: {config.max_hops}; leakage hop cap: {config.leakage_max_hops}",
         f"- Sensitive classifications under test: "
         f"{', '.join(config.sensitive_tag_urns + config.sensitive_term_urns) or 'none'}",
+        # Reported beside the sensitive one rather than folded into it: the two
+        # are different taxonomies on purpose (T-11), and a reader checking which
+        # detector was actually switched on needs to see both (D-133).
+        f"- Protected attributes under test: {protected or 'none'}",
         f"- Trials: {len(outcomes)} ({len(errors)} unscoreable)",
         "",
         "## Detection",
@@ -1092,13 +1099,23 @@ def main() -> None:
     except DataHubConnectionError as exc:
         raise SystemExit(f"{exc}") from exc
 
-    # The sensitive-source detector is configuration-gated by design: with no
-    # classification named it does not run, and a scan reports it as not
-    # evaluated (D-079). That is the right default for a user and the wrong one
-    # for a benchmark, which would score a detector it never let run, so the
-    # classification the scenario plants is supplied here explicitly. The report
-    # says so, and every other value still comes from the environment.
-    config = replace(ScanConfig.from_env(), sensitive_tag_urns=(scenarios.SENSITIVE_TAG_URN,))
+    # Both governance detectors are configuration-gated by design: with no
+    # classification named neither runs, and a scan reports each as not
+    # evaluated (D-079, D-117). That is the right default for a user and the
+    # wrong one for a benchmark, which would score a detector it never let run,
+    # so the classifications the scenarios plant are supplied here explicitly.
+    # The report says so, and every other value still comes from the environment.
+    #
+    # The protected-attribute list was missing here until Phase 7 and the proxy
+    # row was scoreable only on a machine that happened to export the variable,
+    # which is benchmarks/CLAUDE.md rule 1's same-run-same-numbers failing
+    # silently: on a clean checkout `proxy-planted` reported WRONG for a
+    # detector that had never been switched on (D-133).
+    config = replace(
+        ScanConfig.from_env(),
+        sensitive_tag_urns=(scenarios.SENSITIVE_TAG_URN,),
+        protected_attribute_tag_urns=(scenarios.PROTECTED_TAG_URN,),
+    )
     trials = build_trials(config)
 
     print(f"ModelGuard-Bench: {len(trials)} trials against {conn.gms_url}\n")
