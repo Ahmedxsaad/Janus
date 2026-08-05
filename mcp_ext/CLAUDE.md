@@ -13,7 +13,7 @@ lineage-write tools; gap verified July 2026).
 3. If a code PR is too large for the remaining time, file it as an RFC for a
    first-class ML incident workflow instead; that also counts as contribution.
 4. Keep the tool thin: it wraps the same GraphQL mutation used in
-   modelguard/writeback/incidents, no duplicated logic.
+   janus/writeback/incidents, no duplicated logic.
 
 ## Change Log
 
@@ -21,3 +21,4 @@ lineage-write tools; gap verified July 2026).
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: scope, gating, RFC fallback |
 | 2026-07-21 | Claude (for Ghassen Naouar) | raise_incident_tool.py lands: thin raiseIncident wrapper, gated by TOOLS_IS_MUTATION_ENABLED, offline self-check. RFC-ml-incidents.md files the mlModel-incident gap (D-041) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Package and brand identifiers renamed repo-wide: paths, imports, and prose all match the current name and distribution name (D-136) |

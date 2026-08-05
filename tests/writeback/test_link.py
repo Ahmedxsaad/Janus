@@ -22,9 +22,9 @@ from datahub.metadata.schema_classes import (
 )
 from datahub.metadata.urns import StructuredPropertyUrn
 
-from modelguard.config import ScanConfig
-from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
-from modelguard.writeback.link import (
+from janus.config import ScanConfig
+from janus.detect.leakage import SOURCE_COLUMN_PROPERTY
+from janus.writeback.link import (
     PROP_FEATURE_TABLE,
     PROP_LABEL_COLUMN,
     LinkError,

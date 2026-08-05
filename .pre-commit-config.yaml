@@ -11,7 +11,7 @@ repos:
   # mypy runs from the project environment, not an isolated one. The isolated
   # env cannot see acryl-datahub, so every datahub.* symbol degraded to Any, the
   # follow_untyped_imports override in pyproject.toml never applied, and the hook
-  # reported errors that a local `mypy modelguard/` does not. Installing the SDK
+  # reported errors that a local `mypy janus/` does not. Installing the SDK
   # into the hook env instead would download it a second time. Running the
   # project's own mypy makes the hook agree with the local run by construction.
   #
@@ -25,9 +25,9 @@ repos:
         # benchmarks/ is checked too: it is the code that produces the numbers in
         # RESULTS.md, so a type error there is a wrong published measurement, not
         # a broken script.
-        files: ^(modelguard|benchmarks)/
+        files: ^(janus|benchmarks)/
         pass_filenames: false
-        args: ["modelguard/", "benchmarks/"]
+        args: ["janus/", "benchmarks/"]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

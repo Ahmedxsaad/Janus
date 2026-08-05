@@ -15,8 +15,8 @@ from benchmarks import metrics
 from benchmarks.ingested import IngestedScore, Route, leaking_features
 from benchmarks.inject import Target, Trial
 from benchmarks.run_bench import BlastRadiusCheck, TrialOutcome, WriteBackCheck, render_results
-from modelguard.config import ScanConfig
-from modelguard.models import FindingType
+from janus.config import ScanConfig
+from janus.models import FindingType
 
 CONFIG = ScanConfig(freshness_sla_hours=6.0)
 WHEN = datetime(2026, 8, 4, 12, 0, tzinfo=UTC)

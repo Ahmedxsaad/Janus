@@ -5,12 +5,12 @@
 # Composite rather than Docker: a Docker action would rebuild or pull an image on
 # every run, and this needs a Python environment the caller very often already has.
 # Composite keeps the gate a few seconds of work on a warm runner.
-name: ModelGuard ML Guard
+name: Janus ML Guard
 description: >-
   Fail a pull request when a change would ship a model with target leakage,
   training-serving schema drift, or an unsafe upstream, judged from DataHub's
   column-level lineage.
-author: ModelGuard
+author: Janus
 
 branding:
   icon: shield
@@ -40,7 +40,7 @@ inputs:
       against an instance with metadata service authentication disabled.
     required: false
   sla-hours:
-    description: "Freshness SLA in hours. Overrides the ModelGuard default."
+    description: "Freshness SLA in hours. Overrides the Janus default."
     required: false
   write:
     description: >-
@@ -50,7 +50,7 @@ inputs:
     required: false
     default: "false"
   version:
-    description: "ModelGuard version specifier to install, for example ==0.1.0."
+    description: "Janus version specifier to install, for example ==0.1.0."
     required: false
     default: ""
 
@@ -62,12 +62,12 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Install ModelGuard
+    - name: Install Janus
       shell: bash
-      # The PyPI distribution is modelguard-datahub, not modelguard: that exact
+      # The PyPI distribution is janus-datahub, not janus: that exact
       # name was already taken by an unrelated package (D-055). The installed
-      # command is still `modelguard`, which is what every step below runs.
-      run: python -m pip install --quiet "modelguard-datahub${{ inputs.version }}"
+      # command is still `janus`, which is what every step below runs.
+      run: python -m pip install --quiet "janus-datahub${{ inputs.version }}"
 
     - name: Run the gate
       id: gate
@@ -94,7 +94,7 @@ runs:
         # reach a verdict. Both fail the build, but they are reported differently,
         # because a team that cannot tell them apart learns to ignore both.
         set +e
-        modelguard gate "${args[@]}"
+        janus gate "${args[@]}"
         code=$?
         set -e
 
@@ -105,6 +105,6 @@ runs:
 
         echo "blocked=true" >> "$GITHUB_OUTPUT"
         if [ $code -eq 2 ]; then
-          echo "::error title=ModelGuard::The gate could not reach a verdict. This is a setup or connectivity failure, not a finding about your model."
+          echo "::error title=Janus::The gate could not reach a verdict. This is a setup or connectivity failure, not a finding about your model."
         fi
         exit $code

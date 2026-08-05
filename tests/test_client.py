@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from modelguard import client as client_module
-from modelguard import env as env_module
-from modelguard.client import (
+from janus import client as client_module
+from janus import env as env_module
+from janus.client import (
     ENV_GMS_TOKEN,
     ENV_GMS_URL,
     DataHubConnectionError,
@@ -18,7 +18,7 @@ from modelguard.client import (
 def _no_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep a developer's real .env out of the unit tests.
 
-    client.py no longer loads .env itself; modelguard.env does, once. Marking it
+    client.py no longer loads .env itself; janus.env does, once. Marking it
     already loaded is what stops these tests from reading the real file.
     """
     monkeypatch.setattr(env_module, "_loaded", True)

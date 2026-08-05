@@ -2,7 +2,7 @@
 
 `churn_analytics/` declares which columns are features through the dbt semantic
 layer; this declares it through Feast. Both are ordinary files for the stack they
-belong to, and `modelguard link --from dbt` and `--from feast` each read one of
+belong to, and `janus link --from dbt` and `--from feast` each read one of
 them instead of asking a human to retype it (T-05, T-06).
 
 Two declarations of one join is not duplication for its own sake: this repo is

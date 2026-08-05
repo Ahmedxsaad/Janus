@@ -1,8 +1,8 @@
-"""ModelGuard-Bench: run the detectors against a live graph and publish the numbers.
+"""Janus-Bench: run the detectors against a live graph and publish the numbers.
 
 Run it with a DataHub Quickstart up and the ML graph seeded::
 
-    modelguard-seed
+    janus-seed
     python -m benchmarks.run_bench --out benchmarks/RESULTS.md
 
 Why a live graph
@@ -21,7 +21,7 @@ What is measured, and how each is isolated
 * **Detection latency** is the time that one detector call takes on an already
   converged graph. It is not an end-to-end MTTD: the wait for DataHub to index a
   change is reported separately, because that is DataHub's latency, not
-  ModelGuard's, and adding them would blame the wrong system.
+  Janus's, and adding them would blame the wrong system.
 * **Write-back correctness and idempotency** need real writes, so they run one
   full ``run_scan`` and then a second one, and read the graph back through
   DataHub rather than trusting the report the scan returned.
@@ -65,19 +65,19 @@ from benchmarks.scale import (
     measure_scale,
     measure_write_path,
 )
-from modelguard.agent.pipeline import run_scan
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import TABLE_LEVEL_PRECISION, ScanConfig
-from modelguard.detect.blast_radius import blast_radius
-from modelguard.detect.leakage import leakage_findings
-from modelguard.discovery import search_model_urns
-from modelguard.lifecycle import TypeLifecycle, mttr_by_type, read_lifecycles
-from modelguard.models import Finding, FindingType
-from modelguard.seed import graph_spec as spec
-from modelguard.seed import scenarios
-from modelguard.seed.scenarios import plant_stale_source
-from modelguard.writeback.incidents import attached_incident_urns
-from modelguard.writeback.properties import TRUST_BAND, TRUST_SCORE, read_properties
+from janus.agent.pipeline import run_scan
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import TABLE_LEVEL_PRECISION, ScanConfig
+from janus.detect.blast_radius import blast_radius
+from janus.detect.leakage import leakage_findings
+from janus.discovery import search_model_urns
+from janus.lifecycle import TypeLifecycle, mttr_by_type, read_lifecycles
+from janus.models import Finding, FindingType
+from janus.seed import graph_spec as spec
+from janus.seed import scenarios
+from janus.seed.scenarios import plant_stale_source
+from janus.writeback.incidents import attached_incident_urns
+from janus.writeback.properties import TRUST_BAND, TRUST_SCORE, read_properties
 
 #: The lag the write-back and idempotency checks plant. Well past any plausible
 #: SLA, because those checks are about what gets written, not about the boundary.
@@ -176,7 +176,7 @@ def measure_blast_radius(conn: DataHubConnection, config: ScanConfig) -> BlastRa
 
     Ground truth is the seed: ``credit_risk_v3`` consumes features derived from
     ``loans_raw``, and it is deployed live. A traversal that stopped at the
-    warehouse boundary would find zero, which is the whole failure mode ModelGuard
+    warehouse boundary would find zero, which is the whole failure mode Janus
     exists to fix, so it is worth stating as a number rather than assuming.
     """
     now_ms = int(time.time() * 1000)
@@ -469,7 +469,7 @@ def _counterfactual_lines(
 def _degraded_precision_lines(approaches: Sequence[ApproachScore]) -> list[str]:
     """Check the number the product quotes for its degraded mode against this run.
 
-    ``modelguard.config.TABLE_LEVEL_PRECISION`` is printed to a user beside every
+    ``janus.config.TABLE_LEVEL_PRECISION`` is printed to a user beside every
     table-level finding, as that mode's measured precision. The measurement is
     the table-level baseline above, made here. Those are two copies of one
     number, so the run compares them and says which it found: a constant that has
@@ -491,7 +491,7 @@ def _degraded_precision_lines(approaches: Sequence[ApproachScore]) -> list[str]:
         "",
         "### The number the degraded mode quotes about itself",
         "",
-        "`modelguard scan` offers this same table-level reading for a model nobody has",
+        "`janus scan` offers this same table-level reading for a model nobody has",
         "linked yet (T-07), and prints its measured precision beside every such finding,",
         "so the answer arrives with the odds it is wrong. That figure is the table-level",
         "row above.",
@@ -505,7 +505,7 @@ def _degraded_precision_lines(approaches: Sequence[ApproachScore]) -> list[str]:
     else:
         lines.append(
             "- **They disagree.** The product is quoting a precision this graph does not "
-            "support; update `TABLE_LEVEL_PRECISION` in modelguard/config.py to the "
+            "support; update `TABLE_LEVEL_PRECISION` in janus/config.py to the "
             "measured value above."
         )
     return lines
@@ -611,7 +611,7 @@ def _faithfulness_lines(faithfulness: FaithfulnessReport | None) -> list[str]:
 
 
 def measure_lifecycle(conn: DataHubConnection, config: ScanConfig) -> tuple[TypeLifecycle, ...]:
-    """Read back how long every ModelGuard incident on this graph stayed open (T-16).
+    """Read back how long every Janus incident on this graph stayed open (T-16).
 
     Measured, not planted: this reads the incidents the run above just raised and
     then resolved, plus whatever earlier runs left behind. Nothing here writes,
@@ -625,7 +625,7 @@ def _lifecycle_lines(rows: Sequence[TypeLifecycle]) -> list[str]:
     """Return the incident-lifecycle section, with what the number is not.
 
     The caveat is the load-bearing part and it goes above the table, not below
-    it. On a benchmark graph, ModelGuard raises a finding and the very next
+    it. On a benchmark graph, Janus raises a finding and the very next
     measurement reverts what caused it, so nearly every duration here is the
     few seconds between a plant and its restore. That is a real measurement of
     a real write path and it is *not* a mean time to resolution for a team. A
@@ -638,14 +638,14 @@ def _lifecycle_lines(rows: Sequence[TypeLifecycle]) -> list[str]:
         "",
         "**These are not production MTTRs, and the distinction matters.** Every number",
         "below is read straight out of the graph, from `incidentInfo.created` and the",
-        "resolution stamp GMS wrote, for incidents carrying ModelGuard's own run footer",
+        "resolution stamp GMS wrote, for incidents carrying Janus's own run footer",
         "(T-16). But the graph they are read from is the benchmark's: a trial plants a",
         "failure, the detector raises, and the next trial reverts the cause, so most of",
         "these durations are the seconds between a plant and its restore. What they do",
         "measure is that the raise-and-resolve loop closes at all, per detector, and",
         "that the timestamps a real deployment would be measured with are actually",
         "written. On a real catalog the same command prints the real figure:",
-        "`modelguard inventory`.",
+        "`janus inventory`.",
         "",
         "The median is beside the mean because a single incident left open across a",
         "weekend moves a mean by days and describes none of the others.",
@@ -663,7 +663,7 @@ def _lifecycle_lines(rows: Sequence[TypeLifecycle]) -> list[str]:
     lines.append("")
     if all(row.raised == 0 for row in rows):
         lines += [
-            "Every row is zero, which means no incident on this graph carries ModelGuard's",
+            "Every row is zero, which means no incident on this graph carries Janus's",
             "run footer. That is the expected reading of a graph nothing has ever written",
             "to, and it is reported rather than omitted: an absent section would look like",
             "a measurement that was taken and came out fine.",
@@ -684,7 +684,7 @@ def _ingested_lines(score: IngestedScore | None) -> list[str]:
         "",
         "## Against a graph this project did not build",
         "",
-        "Everything above runs on the graph `modelguard-seed` wrote, which is the graph",
+        "Everything above runs on the graph `janus-seed` wrote, which is the graph",
         "where the links the detectors read already exist. This section removes the",
         "seeder: `examples/real-project/` is a postgres warehouse holding a public",
         "dataset, a dbt project, a scikit-learn training script and an MLflow",
@@ -809,7 +809,7 @@ def render_results(
     lines: list[str] = []
 
     lines += [
-        "# ModelGuard-Bench results",
+        "# Janus-Bench results",
         "",
         "Generated by `python -m benchmarks.run_bench`. Every number here is measured,",
         "never hand-edited (benchmarks/CLAUDE.md rule 4). Rerunning on the seeded graph",
@@ -942,7 +942,7 @@ def render_results(
             "clean, and gets switched off. Recall alone would have called it excellent.",
             "",
             "Read this for what it is. These are implementations of an *approach*, written",
-            "here and handed ModelGuard's own label index and source-column resolution so",
+            "here and handed Janus's own label index and source-column resolution so",
             "nothing is won by one side starting better informed. No Great Expectations,",
             "Deequ, Evidently or NannyML process was run, and no claim is made about those",
             "products' own behaviour. The no-lineage row is true by construction rather than",
@@ -956,7 +956,7 @@ def render_results(
         "",
         "## Latency",
         "",
-        "Split deliberately. The first is ModelGuard's; the second is how long DataHub",
+        "Split deliberately. The first is Janus's; the second is how long DataHub",
         "took to index a change before the detector could see it, and blaming that on",
         "the detector would measure the wrong system.",
         "",
@@ -1006,7 +1006,7 @@ def render_results(
             "",
             "## Scale",
             "",
-            "`modelguard scan --all-models` runs one independent scan per model, so the",
+            "`janus scan --all-models` runs one independent scan per model, so the",
             "question is whether that stays linear. Each replica is a real mlModel carrying",
             "the seeded model's features and training run, so every detector does its full",
             "job on it; the replicas share one feature table, because the question is what a",
@@ -1132,7 +1132,7 @@ def _carry_mutation_section(out: Path, report: str) -> str:
 
 def main() -> None:
     """Entry point: run every measurement and write RESULTS.md."""
-    parser = argparse.ArgumentParser(description="Run ModelGuard-Bench against a live DataHub.")
+    parser = argparse.ArgumentParser(description="Run Janus-Bench against a live DataHub.")
     parser.add_argument(
         "--out",
         type=Path,
@@ -1165,7 +1165,7 @@ def main() -> None:
     )
     trials = build_trials(config)
 
-    print(f"ModelGuard-Bench: {len(trials)} trials against {conn.gms_url}\n")
+    print(f"Janus-Bench: {len(trials)} trials against {conn.gms_url}\n")
     outcomes = run_trials(conn, config, trials)
 
     print("\nBlast radius...")

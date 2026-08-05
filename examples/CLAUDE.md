@@ -6,12 +6,12 @@ committed: a Model Impact Report, a guarding-assertion YAML, an ODCS input
 data contract, an incident payload JSON.
 
 `real-project/` is different in kind: not an artifact but a runnable stack
-(dbt, MLflow, scikit-learn, DataHub recipes) that ModelGuard was validated
+(dbt, MLflow, scikit-learn, DataHub recipes) that Janus was validated
 against, kept because every other number here comes from a seeded graph.
 
 ## Local rules
 
-1. Every artifact here is real generated output from a ModelGuard run, never
+1. Every artifact here is real generated output from a Janus run, never
    handwritten mockups. Regenerate all of them whenever output formats change.
 2. Validate the ODCS contract with datacontract-cli before committing it
    (check the tool is installed first).
@@ -21,9 +21,9 @@ against, kept because every other number here comes from a seeded graph.
    impact-report-credit-risk-model.md.
 5. Regenerate the Phase 1 artifacts with a real scan against a seeded Quickstart:
 
-       modelguard-seed
-       modelguard-scenario --lag-hours 30
-       modelguard scan --table loans_raw --no-llm \
+       janus-seed
+       janus-scenario --lag-hours 30
+       janus scan --table loans_raw --no-llm \
          --report-out examples/impact-report-credit-risk-model.md \
          --assertion-out examples/guarding-assertion-loans-raw.yml
 
@@ -33,7 +33,7 @@ against, kept because every other number here comes from a seeded graph.
 
 6. Regenerate the ODCS input contract from a seeded model scan, then lint it:
 
-       modelguard scan --model credit_risk_v3 --no-llm --dry-run \
+       janus scan --model credit_risk_v3 --no-llm --dry-run \
          --contract-out examples/input-data-contract.odcs.yaml
        datacontract lint examples/input-data-contract.odcs.yaml
 
@@ -57,6 +57,6 @@ against, kept because every other number here comes from a seeded graph.
 | 2026-07-10 | Claude (for Ghassen Naouar) | Record the exact command that regenerates the Phase 1 artifacts |
 | 2026-07-16 | Claude (for Ghassen Naouar) | Add the ODCS input contract regeneration + lint command (D-038) |
 | 2026-07-22 | Claude (for Ahmed Saad) | Reword "Planned artifacts" to "Artifacts...generated and committed": all four have existed since 2026-07-13/16 |
-| 2026-08-01 | Claude (for Ghassen Naouar) | real-project/ lands: the dbt + MLflow + postgres stack ModelGuard was validated against on a real graph, with rule 7 on what it may claim and what it may not contain (D-074) |
-| 2026-08-04 | Claude (for Ghassen Naouar) | feature-repo/ lands: an ordinary Feast repo (entity, feature view, label view, feature service) that `modelguard link --from feast` imports. Unlike the artifacts above it is an input rather than generated output, and it is also the test fixture, so rule 1 does not apply to it and it must keep parsing (D-112, T-05) |
+| 2026-08-01 | Claude (for Ghassen Naouar) | real-project/ lands: the dbt + MLflow + postgres stack Janus was validated against on a real graph, with rule 7 on what it may claim and what it may not contain (D-074) |
+| 2026-08-04 | Claude (for Ghassen Naouar) | feature-repo/ lands: an ordinary Feast repo (entity, feature view, label view, feature service) that `janus link --from feast` imports. Unlike the artifacts above it is an input rather than generated output, and it is also the test fixture, so rule 1 does not apply to it and it must keep parsing (D-112, T-05) |
 | 2026-08-04 | Claude (for Ghassen Naouar) | real-project/ is a benchmark target, not only a validation exercise (D-121, T-14). It gains a dbt semantic model and a Feast repo declaring the same join two ways, so both adapters are re-verified against the graph its ingestion produced. Rule 7 still governs it, and it now also carries what the second run found, including a semantic model named after its dbt model overwriting that model in the catalog |

@@ -10,7 +10,7 @@ finding is a bug (T-03).
 
 What is applied, and what is not
 --------------------------------
-Every remedy carries a :class:`~modelguard.models.RemedyKind`, and this module
+Every remedy carries a :class:`~janus.models.RemedyKind`, and this module
 holds an applier for each kind that a metadata write can perform. Several
 remedies are real fixes that no harness can carry out: retraining a model,
 migrating onto a successor table, dropping a feature from a model somebody else
@@ -36,20 +36,20 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 
 from benchmarks.inject import Trial, await_precondition, restore_baseline
-from modelguard.client import DataHubConnection
-from modelguard.config import ScanConfig
-from modelguard.detect.blast_radius import blast_radius, finding_for
-from modelguard.detect.degraded import table_level_findings
-from modelguard.detect.governance import (
+from janus.client import DataHubConnection
+from janus.config import ScanConfig
+from janus.detect.blast_radius import blast_radius, finding_for
+from janus.detect.degraded import table_level_findings
+from janus.detect.governance import (
     deprecated_input_findings,
     proxy_candidate_findings,
     sensitive_source_findings,
 )
-from modelguard.detect.leakage import leakage_findings
-from modelguard.detect.schema_drift import schema_drift_findings
-from modelguard.models import Finding, FindingType, Remedy, RemedyKind
-from modelguard.seed import graph_spec as spec
-from modelguard.seed import scenarios
+from janus.detect.leakage import leakage_findings
+from janus.detect.schema_drift import schema_drift_findings
+from janus.models import Finding, FindingType, Remedy, RemedyKind
+from janus.seed import graph_spec as spec
+from janus.seed import scenarios
 
 #: How a remedy is performed against the seeded graph, keyed by the detector it
 #: belongs to and the kind of change it asks for. Keyed by both because one kind

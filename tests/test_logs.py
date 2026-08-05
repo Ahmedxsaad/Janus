@@ -13,8 +13,8 @@ import logging
 
 import pytest
 
-from modelguard.env import ConfigError
-from modelguard.logs import (
+from janus.env import ConfigError
+from janus.logs import (
     ENV_LOG_FORMAT,
     LOG_FIELDS,
     JsonFormatter,
@@ -26,7 +26,7 @@ from modelguard.logs import (
 
 def _record(message: str = "scan complete %s", *args: object, **extra: object) -> logging.LogRecord:
     record = logging.LogRecord(
-        name="modelguard.agent.pipeline",
+        name="janus.agent.pipeline",
         level=logging.INFO,
         pathname=__file__,
         lineno=1,
@@ -70,7 +70,7 @@ class TestJsonFormatter:
         assert parsed["run_id"] == "scan-1"
         assert parsed["findings"] == 2
         assert parsed["level"] == "INFO"
-        assert parsed["logger"] == "modelguard.agent.pipeline"
+        assert parsed["logger"] == "janus.agent.pipeline"
 
     def test_a_caller_cannot_overwrite_the_level_a_log_search_depends_on(self):
         rendered = JsonFormatter().format(_record(**{LOG_FIELDS: {"level": "DEBUG"}}))
@@ -109,7 +109,7 @@ class TestConfigureLogging:
         monkeypatch.setattr(logging.root, "handlers", [])
 
         chosen = configure_logging()
-        logging.getLogger("modelguard.test").info(
+        logging.getLogger("janus.test").info(
             "scan complete %s", "run_id=scan-9", extra={LOG_FIELDS: {"run_id": "scan-9"}}
         )
 
@@ -122,7 +122,7 @@ class TestConfigureLogging:
         monkeypatch.setattr(logging.root, "handlers", [])
 
         chosen = configure_logging()
-        logging.getLogger("modelguard.test").info("scan complete %s", "run_id=scan-9")
+        logging.getLogger("janus.test").info("scan complete %s", "run_id=scan-9")
 
         assert chosen == "text"
         captured = capsys.readouterr().err

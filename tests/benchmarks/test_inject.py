@@ -8,9 +8,9 @@ visible failure, it produces a confident, wrong RESULTS.md.
 from __future__ import annotations
 
 from benchmarks.inject import SWEEP_LAG_HOURS, Target, Trial, build_trials
-from modelguard.config import ScanConfig
-from modelguard.models import FindingType
-from modelguard.seed import graph_spec as spec
+from janus.config import ScanConfig
+from janus.models import FindingType
+from janus.seed import graph_spec as spec
 
 SLA = 6.0
 CONFIG = ScanConfig(freshness_sla_hours=SLA)

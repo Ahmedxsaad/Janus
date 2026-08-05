@@ -10,16 +10,16 @@ nothing from this runbook.
 
 ## 1. The blocker: the CLI the skill invokes must be installable
 
-The skill's frontmatter declares `allowed-tools: Bash(modelguard *)`, and every
-script under `scripts/` shells out to the `modelguard` CLI. A reviewer who
+The skill's frontmatter declares `allowed-tools: Bash(janus *)`, and every
+script under `scripts/` shells out to the `janus` CLI. A reviewer who
 installs the skill and runs it gets nothing unless that CLI is on PATH.
 
-`pip install modelguard-datahub` still returns 404: the first release has not
+`pip install janus-datahub` still returns 404: the first release has not
 been cut (see `pypi-release.md`, whose pre-tag checklist governs it). Verify
 before submitting:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://pypi.org/simple/modelguard-datahub/
+curl -s -o /dev/null -w "%{http_code}\n" https://pypi.org/simple/janus-datahub/
 # 200 = released, submit. 404 = not released, pick an option below.
 ```
 
@@ -77,7 +77,7 @@ gh repo fork datahub-project/datahub-skills --clone=true
 cd datahub-skills
 git checkout -b feat/datahub-ml-guard
 
-# 2. Copy the skill in (adjust the path to your ModelGuard checkout)
+# 2. Copy the skill in (adjust the path to your Janus checkout)
 MG=~/Applications/Datahub/DataHub
 mkdir -p skills/datahub-ml-guard
 cp -r $MG/skill/datahub-ml-guard/. skills/datahub-ml-guard/
@@ -123,7 +123,7 @@ a model's input schema has drifted since it was trained.
 
 **Why it is not another prompt over a lineage graph**
 
-Detection is deterministic Python (the `modelguard` package), and the skill is
+Detection is deterministic Python (the `janus` package), and the skill is
 the operator's guide to it. A leakage verdict is a graph traversal that carries
 the column chain as evidence, not a judgement, so it is the same answer twice and
 it survives "how do you know". The language model explains and ranks; it never
@@ -159,7 +159,7 @@ build: a dbt + MLflow + postgres stack ingested by DataHub's own sources.
 
 ## 5. After it is open
 
-- Expect a question about the `modelguard` dependency. The honest answer is
+- Expect a question about the `janus` dependency. The honest answer is
   section 1: the skill is a thin operator's guide over a separately installed,
   tested engine, which is the same relationship `datahub-connector-pr-review`
   has with its scripts.

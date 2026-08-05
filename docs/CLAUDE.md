@@ -4,7 +4,7 @@ Reference material, not code. Layers:
 - hackathon-specs/: the official hackathon rules and context captured from
   Devpost (01-08 plus their README index). Facts, do not edit except to fix
   capture errors.
-- plan/: the ModelGuard strategy, architecture, implementation plan, hardening
+- plan/: the Janus strategy, architecture, implementation plan, hardening
   plan, resources, and improvement proposals. This is the source of truth for
   what we build.
 - decision-log.md: the running log of decisions (what, options, why, result).
@@ -42,3 +42,4 @@ Reference material, not code. Layers:
 | 2026-08-04 | Claude (for Ghassen Naouar) | plan/09 section 3.1 and plan/10 T-04 corrected in place per rule 1 by building them: a dataProcessInstance's inputs and outputs accept dataset and mlModel only, models.py needed no change, and F4's cross-cutting line now says which half T-04 closes and which half stays open (D-111) |
 | 2026-08-04 | Claude (for Ghassen Naouar) | plan/09 sections 1.1 and 1.3 and plan/10 phase 3 corrected in place per rule 1 by building them: the dbt adapter needs no dependency, exclusions are the complement of a declaration against a real schema and not the adapter's to return, Feast can declare a label after all, and the degraded mode's disclosure quotes its precision against the question that precision answers (D-112, D-113) |
 | 2026-08-05 | Claude (for Ghassen Naouar) | plan/09 sections 1.1 and 3.2 and plan/10 phase 7 corrected in place per rule 1 by building them: sklearn's `get_feature_names_out()` does not give the mapping and retains the label column's name nowhere, so T-21 is struck through rather than deleted; guard coverage excludes freshness, because a table check and five model checks divide two different denominators. 07-weaknesses-and-remedies.md closes F11 with its decision id and states which of its four remedies stays open and why (D-126, D-131, D-132) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Package and brand identifiers renamed repo-wide: paths, imports, and prose all match the current name and distribution name (D-136) |

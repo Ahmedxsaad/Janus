@@ -1,5 +1,5 @@
 # A Feast repository, small enough to read in one screen and complete enough to
-# import: `modelguard link --from feast --repo examples/feature-repo/feature_repo`
+# import: `janus link --from feast --repo examples/feature-repo/feature_repo`
 # reads the join out of it. Nothing here connects anywhere; the adapter parses
 # the declaration and never talks to a store.
 project: churn

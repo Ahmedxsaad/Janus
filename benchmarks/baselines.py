@@ -1,6 +1,6 @@
 """What the same graph looks like to tools that lack column-level lineage.
 
-ModelGuard's central claim is that only cross-boundary, *column-level* lineage
+Janus's central claim is that only cross-boundary, *column-level* lineage
 both roots a failure to the exact upstream column and names the model at risk.
 Everywhere else that claim is argued. Here it is measured, by running the same
 trials through the approaches a team would otherwise reach for and scoring all of
@@ -10,9 +10,9 @@ Writing your own opposition
 ---------------------------
 A baseline built to lose proves nothing, so these are written as the honest
 version of each approach rather than as strawmen. The table-level detector reuses
-ModelGuard's own label index and its own source-column resolution: it is handed
+Janus's own label index and its own source-column resolution: it is handed
 exactly the same facts, and differs in one respect only, that it asks lineage
-questions of *tables* where ModelGuard asks them of *columns*. Every advantage
+questions of *tables* where Janus asks them of *columns*. Every advantage
 that could be shared is shared.
 
 What these are not
@@ -33,10 +33,10 @@ from datahub.metadata.schema_classes import (
 )
 from datahub.metadata.urns import DatasetUrn, SchemaFieldUrn
 
-from modelguard.client import DataHubConnection
-from modelguard.config import ScanConfig
-from modelguard.detect.column_marks import ColumnMarkIndex
-from modelguard.detect.leakage import feature_source_column, label_index
+from janus.client import DataHubConnection
+from janus.config import ScanConfig
+from janus.detect.column_marks import ColumnMarkIndex
+from janus.detect.leakage import feature_source_column, label_index
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,7 @@ class Approach:
 
 COLUMN_LEVEL = Approach(
     key="column-level",
-    name="ModelGuard (column-level lineage)",
+    name="Janus (column-level lineage)",
     sees_column_lineage=True,
     note="follows each feature's own column cone to the declared label column",
 )
@@ -115,7 +115,7 @@ def table_level_leakage(
     flagged: list[str] = []
 
     for feature_urn in properties.mlFeatures:
-        # The same resolution ModelGuard uses, so the comparison is not decided by
+        # The same resolution Janus uses, so the comparison is not decided by
         # one approach being handed a better starting point than the other.
         source_column = feature_source_column(conn, feature_urn)
         if source_column is None:
@@ -131,7 +131,7 @@ def table_level_leakage(
                 count=config.lineage_result_cap,
             )
             # Above two hops DataHub switches to a full-graph search and returns
-            # entities past the cap (D-020), and ModelGuard's own leakage detector
+            # entities past the cap (D-020), and Janus's own leakage detector
             # filters them out. The baseline gets the same guard: letting it drown
             # in distant tables would manufacture false positives out of a DataHub
             # quirk this repo already knows about, and score them against the

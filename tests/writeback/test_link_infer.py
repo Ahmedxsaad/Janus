@@ -28,10 +28,10 @@ from datahub.metadata.schema_classes import (
 )
 from datahub.metadata.urns import SchemaFieldUrn
 
-from modelguard.adapters import DeclaredFeature, DeclaredLink
-from modelguard.config import ScanConfig
-from modelguard.writeback.link import LinkError
-from modelguard.writeback.link_infer import InferenceError, declared_proposal, infer_link
+from janus.adapters import DeclaredFeature, DeclaredLink
+from janus.config import ScanConfig
+from janus.writeback.link import LinkError
+from janus.writeback.link_infer import InferenceError, declared_proposal, infer_link
 from tests.conftest import (
     FEATURE_TABLE_URN,
     LABEL_COLUMN_URN,
@@ -406,7 +406,7 @@ class TestRenderedCommand:
 
         command = infer_link(conn, CONFIG, MODEL_URN).command()
 
-        assert "modelguard link" in command
+        assert "janus link" in command
         assert "--model credit_risk_v3" in command
         assert "--features ecommerce.public.customer_features" in command
         assert "--label-column default_status" in command

@@ -1,7 +1,7 @@
 """Render T-08's mutation-score section of RESULTS.md from mutmut's own output.
 
 Detection is the claim this project makes, so this only ever scopes
-`modelguard/detect/` (pyproject.toml's `[tool.mutmut]` `only_mutate`). Counts
+`janus/detect/` (pyproject.toml's `[tool.mutmut]` `only_mutate`). Counts
 and survivor names come from `mutmut results --all=true`, mutmut's own
 documented CLI (its `export-cicd-stats` gives aggregate counts only, no
 per-mutant detail, so it cannot drive the survivor table below).
@@ -24,8 +24,8 @@ from pathlib import Path
 START_MARKER = "<!-- MUTATION:START -->"
 END_MARKER = "<!-- MUTATION:END -->"
 
-_NAME_RE = re.compile(r"^\s*(modelguard\.detect\.[a-zA-Z0-9_.ǁ]+__mutmut_\d+):\s*(\w[\w ]*)\s*$")
-_PREFIX_RE = re.compile(r"^(modelguard\.detect\.[a-zA-Z0-9_.ǁ]+)__mutmut_\d+$")
+_NAME_RE = re.compile(r"^\s*(janus\.detect\.[a-zA-Z0-9_.ǁ]+__mutmut_\d+):\s*(\w[\w ]*)\s*$")
+_PREFIX_RE = re.compile(r"^(janus\.detect\.[a-zA-Z0-9_.ǁ]+)__mutmut_\d+$")
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class Verdict:
     """One root cause, covering every survivor whose qualified name starts with `prefix`.
 
     `prefix` is mutmut's dotted module path, e.g.
-    "modelguard.detect.degraded.x_training_tables".
+    "janus.detect.degraded.x_training_tables".
     """
 
     prefix: str
@@ -41,12 +41,12 @@ class Verdict:
     note: str
 
 
-# Ordered by file, matching modelguard/detect/'s own listing. A survivor's
+# Ordered by file, matching janus/detect/'s own listing. A survivor's
 # prefix must start with exactly one of these, checked by _verify_coverage.
 VERDICTS: tuple[Verdict, ...] = (
     # --- blast_radius.py ---------------------------------------------------
     Verdict(
-        "modelguard.detect.blast_radius.x__downstream_traversal",
+        "janus.detect.blast_radius.x__downstream_traversal",
         "gap",
         "Two things this function does are unobserved: the min-hops-per-model "
         "reduction (`model_hops.get(r.urn, ...)` mutated to `.get(None, ...)` "
@@ -58,14 +58,14 @@ VERDICTS: tuple[Verdict, ...] = (
         "one with two at-risk models, would kill both.",
     ),
     Verdict(
-        "modelguard.detect.blast_radius.x__model_at_risk",
+        "janus.detect.blast_radius.x__model_at_risk",
         "gap",
         "`model_ref(conn, model_urn, properties=properties)` mutated to pass "
         "`None`/drop the kwarg survives: nothing asserts the built `ModelAtRisk` "
         "carries the model's own display name rather than a fallback.",
     ),
     Verdict(
-        "modelguard.detect.blast_radius.x__now_ms",
+        "janus.detect.blast_radius.x__now_ms",
         "gap",
         "`time.time() * 1000` mutated to `/ 1000` or `* 1001` survives: no test "
         "pins this helper's arithmetic directly, and nothing downstream "
@@ -74,7 +74,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "comparisons are relative), but a two-line direct test is cheap.",
     ),
     Verdict(
-        "modelguard.detect.blast_radius.x_blast_radius",
+        "janus.detect.blast_radius.x_blast_radius",
         "gap",
         "The traversal's own source argument (`failing_table_urn`) swapped for "
         "`None` survives: no fixture asserts which URN `_downstream_traversal` "
@@ -83,20 +83,20 @@ VERDICTS: tuple[Verdict, ...] = (
         "graph write).",
     ),
     Verdict(
-        "modelguard.detect.blast_radius.x_downstream_models",
+        "janus.detect.blast_radius.x_downstream_models",
         "gap",
         "Same as x_blast_radius: the source URN argument to "
         "`_downstream_traversal` is swapped for `None` and nothing notices.",
     ),
     Verdict(
-        "modelguard.detect.blast_radius.x_freshness_signal",
+        "janus.detect.blast_radius.x_freshness_signal",
         "gap",
         "The timeseries query's filter argument (`{}`) swapped for `None` "
         "survives: the fixture's canned response does not depend on it.",
     ),
     # --- column_marks.py -----------------------------------------------------
     Verdict(
-        "modelguard.detect.column_marks.x_marked_ancestor",
+        "janus.detect.column_marks.x_marked_ancestor",
         "gap",
         "T-09 (D-115) killed two of the original six survivors here: the "
         "boundary trial this group already named (the `>` in `result.hops "
@@ -114,7 +114,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "real GMS call could tell a wrong argument from a right one here.",
     ),
     Verdict(
-        "modelguard.detect.column_marks.xǁColumnMarkIndexǁ_editable_marks",
+        "janus.detect.column_marks.xǁColumnMarkIndexǁ_editable_marks",
         "gap",
         "`next((...), None)` mutated to `next((...),)` survives: dropping the "
         "fallback turns 'no matching term' from a graceful `None` into an "
@@ -123,12 +123,12 @@ VERDICTS: tuple[Verdict, ...] = (
         "its own trial, not because the two forms behave the same.",
     ),
     Verdict(
-        "modelguard.detect.column_marks.xǁColumnMarkIndexǁmarker",
+        "janus.detect.column_marks.xǁColumnMarkIndexǁmarker",
         "gap",
         "Same `next(..., None)` pattern as _editable_marks, same reason.",
     ),
     Verdict(
-        "modelguard.detect.column_marks.xǁColumnMarkIndexǁ_marks_in",
+        "janus.detect.column_marks.xǁColumnMarkIndexǁ_marks_in",
         "equivalent",
         "`cached = self._by_dataset.get(dataset_urn)` mutated to `cached = "
         "None` unconditionally defeats the memoization (every call re-reads "
@@ -139,7 +139,7 @@ VERDICTS: tuple[Verdict, ...] = (
     ),
     # --- coverage.py ---------------------------------------------------------
     Verdict(
-        "modelguard.detect.coverage.x__deprecated_input_gap",
+        "janus.detect.coverage.x__deprecated_input_gap",
         "gap",
         "Prose-content mutations (case, XX-wrapping) in the `reason`/`remedy` "
         "strings this Unevaluated carries are the majority of this group's "
@@ -149,28 +149,28 @@ VERDICTS: tuple[Verdict, ...] = (
         "swapped for `None`, unasserted.",
     ),
     Verdict(
-        "modelguard.detect.coverage.x__drift_gap",
+        "janus.detect.coverage.x__drift_gap",
         "gap",
         "Same split as x__deprecated_input_gap: mostly prose content, plus an "
         "unasserted `target_urn`.",
     ),
     Verdict(
-        "modelguard.detect.coverage.x__freshness_gap",
+        "janus.detect.coverage.x__freshness_gap",
         "gap",
         "Same pattern: prose content plus an unasserted `target_urn`.",
     ),
     Verdict(
-        "modelguard.detect.coverage.x__leakage_gap",
+        "janus.detect.coverage.x__leakage_gap",
         "gap",
         "Same pattern: prose content plus an unasserted `target_urn`.",
     ),
     Verdict(
-        "modelguard.detect.coverage.x__sensitive_gap",
+        "janus.detect.coverage.x__sensitive_gap",
         "gap",
         "Same pattern and the largest group: prose content plus an unasserted `target_urn`.",
     ),
     Verdict(
-        "modelguard.detect.coverage.x_coverage_gaps",
+        "janus.detect.coverage.x_coverage_gaps",
         "gap",
         "The `needs_leakage or needs_drift or needs_sensitive or "
         "needs_deprecation` guard survives every single `or`-to-`and` swap "
@@ -180,7 +180,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "identically on every fixture used today.",
     ),
     Verdict(
-        "modelguard.detect.coverage.x__cap_reason",
+        "janus.detect.coverage.x__cap_reason",
         "gap",
         "T-09's own helper (D-115), landed after the run T-08's verdicts were "
         "written against. Two patterns: prose content in the reason/remedy "
@@ -192,7 +192,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "count or casing.",
     ),
     Verdict(
-        "modelguard.detect.column_marks.x_related_columns",
+        "janus.detect.column_marks.x_related_columns",
         "gap",
         "T-11's own walk (D-117), landed after the run these verdicts were first "
         "written against. `get_lineage`'s `max_hops`/`count` arguments swap for "
@@ -202,7 +202,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "answers with a canned cone regardless of what was asked.",
     ),
     Verdict(
-        "modelguard.detect.column_marks.x_derivation_chains",
+        "janus.detect.column_marks.x_derivation_chains",
         "equivalent",
         "T-19's walk (D-130). One survivor, and it is provably equivalent: the "
         'sort tiebreaker\'s fallback constant, `step.column_name or ""`, '
@@ -216,7 +216,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "seeds two equal-length chains in reverse.",
     ),
     Verdict(
-        "modelguard.detect.governance.x_proxy_candidate_findings",
+        "janus.detect.governance.x_proxy_candidate_findings",
         "gap",
         "T-11 (D-117). Two patterns, both already named elsewhere in this table: "
         "the `properties is None or not properties.mlFeatures` guard mutated to "
@@ -229,14 +229,14 @@ VERDICTS: tuple[Verdict, ...] = (
         "before they could fail.",
     ),
     Verdict(
-        "modelguard.detect.governance.x__proxy_finding",
+        "janus.detect.governance.x__proxy_finding",
         "gap",
         "T-11 (D-117). The built `ProxyCandidate`'s identifying fields swap for "
         "`None` and survive, the single biggest class in this whole table: a "
         "trial checks that a candidate exists without checking what it says.",
     ),
     Verdict(
-        "modelguard.detect.governance.x__first_per_pair",
+        "janus.detect.governance.x__first_per_pair",
         "gap",
         "T-11 (D-117). `current is None or _distance(...) < _distance(...)` "
         "mutated to `and` survives: with `current` None the `and` short-circuits "
@@ -246,7 +246,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "covers the ordering does not.",
     ),
     Verdict(
-        "modelguard.detect.coverage.x__proxy_gap",
+        "janus.detect.coverage.x__proxy_gap",
         "gap",
         "T-11 (D-117), and the largest single group here. Prose content in the "
         "reason and remedy sentences, the same class as the five `_gap` "
@@ -256,24 +256,24 @@ VERDICTS: tuple[Verdict, ...] = (
     ),
     # --- degraded.py -----------------------------------------------------
     Verdict(
-        "modelguard.detect.degraded.x__classified",
+        "janus.detect.degraded.x__classified",
         "gap",
         "Prose content in the finding's reason/remedy text, the same class as "
         "coverage.py's _gap functions, plus one unasserted field.",
     ),
     Verdict(
-        "modelguard.detect.degraded.x__deprecated",
+        "janus.detect.degraded.x__deprecated",
         "gap",
         "Same pattern as x__classified: prose content plus an unasserted "
         "field on the returned finding.",
     ),
     Verdict(
-        "modelguard.detect.degraded.x__stale",
+        "janus.detect.degraded.x__stale",
         "gap",
         "Same pattern: prose content plus an unasserted field.",
     ),
     Verdict(
-        "modelguard.detect.degraded.x__upstream_datasets",
+        "janus.detect.degraded.x__upstream_datasets",
         "gap",
         "`get_lineage`'s own `max_hops=1` survives becoming `max_hops=2` "
         "(degraded mode's own docstring promises *one* hop upstream), and the "
@@ -283,14 +283,14 @@ VERDICTS: tuple[Verdict, ...] = (
         "filter's job is never exercised.",
     ),
     Verdict(
-        "modelguard.detect.degraded.x_table_level_findings",
+        "janus.detect.degraded.x_table_level_findings",
         "gap",
         "`model_ref(conn, model_urn, properties=properties)` swapped for "
         "`None`/dropped survives: the same unasserted-model-reference pattern "
         "as blast_radius.x__model_at_risk.",
     ),
     Verdict(
-        "modelguard.detect.degraded.x_training_tables",
+        "janus.detect.degraded.x_training_tables",
         "gap",
         "The model_urn argument threaded into `_upstream_datasets` swaps for "
         "`None` and survives: the union with `model_input_datasets` masks it "
@@ -299,14 +299,14 @@ VERDICTS: tuple[Verdict, ...] = (
     ),
     # --- governance.py ---------------------------------------------------
     Verdict(
-        "modelguard.detect.governance.x__sensitive_finding",
+        "janus.detect.governance.x__sensitive_finding",
         "gap",
         "The built `SensitiveFeature`'s `feature_urn`/`feature_name` fields "
         "swap for `None` and survive: nothing asserts them on the finding "
         "this constructs, only the finding's presence.",
     ),
     Verdict(
-        "modelguard.detect.governance.x_deprecated_input_findings",
+        "janus.detect.governance.x_deprecated_input_findings",
         "gap",
         "The dominant survivor here is `continue` mutated to `break` in the "
         "loop over a model's input datasets: with every seeded model having "
@@ -317,14 +317,14 @@ VERDICTS: tuple[Verdict, ...] = (
         "unasserted.",
     ),
     Verdict(
-        "modelguard.detect.governance.x_model_input_datasets",
+        "janus.detect.governance.x_model_input_datasets",
         "equivalent",
         "`seen.setdefault(dataset_urn, None)` mutated to `seen.setdefault"
         "(dataset_urn,)` is `dict.setdefault`'s own default parameter value, "
         "not a behaviour change: the two calls are identical for every input.",
     ),
     Verdict(
-        "modelguard.detect.governance.x_sensitive_source_findings",
+        "janus.detect.governance.x_sensitive_source_findings",
         "gap",
         "Two patterns here: the guard `properties is None or not "
         "properties.mlFeatures` mutated to `and` survives (no trial has "
@@ -334,14 +334,14 @@ VERDICTS: tuple[Verdict, ...] = (
     ),
     # --- graph_reads.py ----------------------------------------------------
     Verdict(
-        "modelguard.detect.graph_reads.x_live_deployments",
+        "janus.detect.graph_reads.x_live_deployments",
         "gap",
         "`entity_type(deployment_urns[0])` swapped for `None` in the "
         "`get_entities` call survives: the fixture's canned response does not "
         "depend on the argument actually sent.",
     ),
     Verdict(
-        "modelguard.detect.graph_reads.x_model_ref",
+        "janus.detect.graph_reads.x_model_ref",
         "gap",
         "`properties.name if properties and properties.name else None` "
         "mutated to `properties or properties.name` survives: no trial has "
@@ -350,14 +350,14 @@ VERDICTS: tuple[Verdict, ...] = (
     ),
     # --- leakage.py --------------------------------------------------------
     Verdict(
-        "modelguard.detect.leakage.x__finding",
+        "janus.detect.leakage.x__finding",
         "gap",
         "The built `LeakingFeature`'s `feature_name` field swaps for `None` "
         "and survives, unasserted, the same pattern as governance's "
         "_sensitive_finding.",
     ),
     Verdict(
-        "modelguard.detect.leakage.x_leakage_findings",
+        "janus.detect.leakage.x_leakage_findings",
         "gap",
         "`model_ref(conn, model_urn, properties=properties)`'s `properties` "
         "argument swaps for `None` and survives, unasserted on the finding "
@@ -365,7 +365,7 @@ VERDICTS: tuple[Verdict, ...] = (
     ),
     # --- schema_drift.py -----------------------------------------------------
     Verdict(
-        "modelguard.detect.schema_drift.x__run_findings",
+        "janus.detect.schema_drift.x__run_findings",
         "gap",
         "`continue` mutated to `break` in the loop over a model's training "
         "runs survives: the same single-item-fixture blind spot as "
@@ -374,34 +374,34 @@ VERDICTS: tuple[Verdict, ...] = (
         "would kill it.",
     ),
     Verdict(
-        "modelguard.detect.schema_drift.x_training_snapshot",
+        "janus.detect.schema_drift.x_training_snapshot",
         "gap",
         "The guard `properties is None or not properties.customProperties` "
         "mutated to `and` survives: no trial reaches this line with "
         "`properties is None` to notice the `and` form would crash on it.",
     ),
     Verdict(
-        "modelguard.detect.schema_drift.x_diff_schema",
+        "janus.detect.schema_drift.x_diff_schema",
         "gap",
         "An ADDED `SchemaChange`'s `current_type` field swaps for `None` and "
         "survives: nothing asserts the change record itself carries the new "
         "type, only that a change of kind ADDED exists.",
     ),
     Verdict(
-        "modelguard.detect.schema_drift.x_schema_drift_candidate_resources",
+        "janus.detect.schema_drift.x_schema_drift_candidate_resources",
         "gap",
         "`continue` mutated to `break` in the loop over training runs "
         "survives, the same single-item-fixture pattern as x__run_findings.",
     ),
     Verdict(
-        "modelguard.detect.schema_drift.x_schema_drift_findings",
+        "janus.detect.schema_drift.x_schema_drift_findings",
         "gap",
         "`model_ref(conn, model_urn, properties=properties)`'s `properties` "
         "argument swaps for `None` and survives, unasserted.",
     ),
     # --- trust_score.py ------------------------------------------------------
     Verdict(
-        "modelguard.detect.trust_score.x__band",
+        "janus.detect.trust_score.x__band",
         "gap",
         "Both band thresholds' `>=` mutate to `>` and survive: no trial plants "
         "a score at exactly `trust_band_healthy_min` or `trust_band_watch_min` "
@@ -410,7 +410,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "yet run for the bands themselves.",
     ),
     Verdict(
-        "modelguard.detect.trust_score.x_trust_inputs_from_findings",
+        "janus.detect.trust_score.x_trust_inputs_from_findings",
         "equivalent",
         "Every survivor here is one of the five `has_*` flags' `False` "
         "initializer mutated to `None`. Each field is declared `bool` on the "
@@ -420,7 +420,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "mypy strict before it could ever reach a review, let alone a trial.",
     ),
     Verdict(
-        "modelguard.detect.trust_score.x_trust_score",
+        "janus.detect.trust_score.x_trust_score",
         "gap",
         "`points[DEDUCTION_SENSITIVE_SOURCE] = config.trust_weight_..."
         "` and the deprecated-input deduction's weight both swap for `None` "
@@ -500,7 +500,7 @@ def render_mutation_section(results_text: str, *, verdicts: tuple[Verdict, ...] 
         "",
         "Generated by `python -m benchmarks.mutation_report` from `mutmut "
         "results --all=true`, after `mutmut run` (pyproject.toml's "
-        "`[tool.mutmut]`). Scoped to `modelguard/detect/` only: the claim "
+        "`[tool.mutmut]`). Scoped to `janus/detect/` only: the claim "
         "under test is detection, and mutating the rest of the package would "
         "measure something this task never claimed. Logging calls are "
         "excluded from mutation entirely (`do_not_mutate_patterns`): a "
@@ -533,7 +533,7 @@ def render_mutation_section(results_text: str, *, verdicts: tuple[Verdict, ...] 
         if not names:
             continue
         kind_label = "real gap" if v.kind == "gap" else "provably equivalent"
-        short = v.prefix.removeprefix("modelguard.detect.")
+        short = v.prefix.removeprefix("janus.detect.")
         lines.append(f"| `{short}` | {len(names)} | {kind_label} | {v.note} |")
 
     gap_total = sum(len(by_verdict[v.prefix]) for v in verdicts if v.kind == "gap")

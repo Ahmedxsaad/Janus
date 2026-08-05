@@ -23,8 +23,8 @@ from datahub.metadata.schema_classes import (
     SubTypesClass,
 )
 
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.seed_ml_graph import (
+from janus.seed import graph_spec as spec
+from janus.seed.seed_ml_graph import (
     TRAINING_RUN_SUBTYPE,
     seed_column_lineage,
     seed_deployment,

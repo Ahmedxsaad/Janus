@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datahub.metadata.schema_classes import GlobalTagsClass, TagAssociationClass
 
-from modelguard.writeback.labels import add_tag, ensure_tag, read_tags
+from janus.writeback.labels import add_tag, ensure_tag, read_tags
 from tests.conftest import FakeClient, FakeGraph, make_connection
 
 MODEL = "urn:li:mlModel:(urn:li:dataPlatform:mlflow,credit_risk_v3,PROD)"

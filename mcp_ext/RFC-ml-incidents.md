@@ -2,7 +2,7 @@
 
 **Status:** proposal
 **Affects:** `acryldata/mcp-server-datahub` (v0.6.0), DataHub GMS (observed 1.5.0.6)
-**Author:** ModelGuard (Build with DataHub: The Agent Hackathon)
+**Author:** Janus (Build with DataHub: The Agent Hackathon)
 
 ## Summary
 
@@ -46,7 +46,7 @@ first-class in the graph (models, model groups, features, feature tables,
 deployments) but second-class in the incident model: the one entity a reliability
 incident is most naturally *about*, the model in production, cannot carry one.
 
-The current workaround (which ModelGuard uses) is to attach the incident to the
+The current workaround (which Janus uses) is to attach the incident to the
 offending dataset or `schemaField` and carry model-level risk as structured
 properties on the model. That split is defensible, an incident is about a broken
 data asset while a trust score is a property of the model, but it should be a

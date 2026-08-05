@@ -1,6 +1,6 @@
-# ModelGuard - Depth Axes
+# Janus - Depth Axes
 
-> Where ModelGuard goes deep next, on the axes 03-production-hardening.md does not
+> Where Janus goes deep next, on the axes 03-production-hardening.md does not
 > cover: generalizability, evaluation beyond self-scoring, observability of the agent
 > itself, explainability, and AI governance. Each item states what it is, why it
 > belongs in *this* product rather than another one, the design, what already exists
@@ -21,7 +21,7 @@ installed `acryl-datahub==1.6.0.13` unless marked otherwise.
 
 ## 0. The filter: what earns a place here
 
-ModelGuard's moat is one primitive:
+Janus's moat is one primitive:
 
 > **The evidence is a path in the column graph, and the path is computable without
 > touching a row.**
@@ -46,12 +46,12 @@ much as the ones it admits.
 
 ### 1.0 The honest current answer
 
-ModelGuard generalizes today to any project that has all three of:
+Janus generalizes today to any project that has all three of:
 
 1. column-level lineage on the warehouse side (dbt, Spark, and the warehouse
    connectors produce this well),
 2. an `mlModel` entity (the mlflow source produces this),
-3. **a human who ran `modelguard link`.**
+3. **a human who ran `janus link`.**
 
 The first two are common. The third is the cliff. F10 and F11 in
 07-weaknesses-and-remedies.md already rate it High severity, adoption class, and
@@ -76,17 +76,17 @@ time.
 |---|---|---|
 | **Feast** | `FeatureView` declares its source and per-field mapping; the source's `field_mapping` names the underlying column | `datahub.ingestion.source.feast` ships with acryl-datahub `[verified]`; the `feast` package itself is not installed `[verified]`, so this is an extra |
 | **dbt semantic models** | `semantic_model` declares entities, dimensions and measures against source columns | `[confirm]` against the dbt manifest schema in use |
-| ~~**sklearn `ColumnTransformer`**~~ | ~~`get_feature_names_out()` maps derived feature to input column, in memory, at fit time~~ | **Confirmed against scikit-learn 1.9.0 and it does not** (D-131). It returns transformed names (`num__tenure_months`), never source columns; `PCA` returns `pca0` and destroys the mapping; the label column's *name* is retained nowhere, which is the one argument no inference reaches; and reading any of it needs a fitted estimator in memory, so an adapter would have to unpickle a file, which this package's own rule forbids. `modelguard.api.link_model`, called from the training script, already serves this need |
+| ~~**sklearn `ColumnTransformer`**~~ | ~~`get_feature_names_out()` maps derived feature to input column, in memory, at fit time~~ | **Confirmed against scikit-learn 1.9.0 and it does not** (D-131). It returns transformed names (`num__tenure_months`), never source columns; `PCA` returns `pca0` and destroys the mapping; the label column's *name* is retained nowhere, which is the one argument no inference reaches; and reading any of it needs a fitted estimator in memory, so an adapter would have to unpickle a file, which this package's own rule forbids. `janus.api.link_model`, called from the training script, already serves this need |
 | **SageMaker / Vertex feature stores** | Feature group definitions carry source column references | `[confirm]` |
 
 Design:
 
-- A new package `modelguard/adapters/`, one module per source, each exposing a single
+- A new package `janus/adapters/`, one module per source, each exposing a single
   function returning the same structure `link` already takes: a list of
   `(feature_name, source_column)` pairs plus the label column and the exclusions.
 - The adapters are read-only and offline. They parse a repo or a manifest; they do
   not connect to the vendor's service.
-- Each is an optional extra (`pip install "modelguard-datahub[feast]"`), following
+- Each is an optional extra (`pip install "janus-datahub[feast]"`), following
   the existing `[agent]`, `[mcp]` provider-extra pattern in `pyproject.toml`.
   Corrected by building it (D-112): *each that needs one*. The dbt adapter reads
   `target/manifest.json`, which is JSON, so it needs no dependency at all and runs
@@ -99,7 +99,7 @@ Design:
 - Corrected by building it (D-112): Feast *can* declare the label, through a label
   view, and where a repo has one that is the one argument no inference reaches. dbt
   semantic models declare none, and the adapter says so instead of guessing.
-- `modelguard link --from feast --repo ./feature_repo` proposes exactly the way
+- `janus link --from feast --repo ./feature_repo` proposes exactly the way
   `--infer` proposes today: it prints the derivation, says which adapter and which
   declaration each line came from, and writes nothing until the human answers.
 
@@ -142,7 +142,7 @@ Where no link exists at all, a scan currently checks nothing and `coverage.py`
 correctly reports why. That is honest but it returns no value on day one.
 
 Add a **table-level degraded mode**, labelled as such in its own output: without
-column lineage, ModelGuard can still say that a model's training table is stale,
+column lineage, Janus can still say that a model's training table is stale,
 deprecated, or contains a classified column. It cannot say which feature carries it.
 
 This is precisely the `table-level lineage` row of `benchmarks/baselines.py`, offered
@@ -152,7 +152,7 @@ building this (D-113).~~
 
 > ~~Checked at table level only (no feature links declared). This mode found 4
 > candidate features; measured precision for this mode is 0.25, so three of those
-> four are expected to be wrong. Run `modelguard link` to resolve which.~~
+> four are expected to be wrong. Run `janus link` to resolve which.~~
 
 Without a link the model's features are not knowable at all, so a candidate-feature
 count would be the *table's* columns presented as the model's inputs. The shipped
@@ -163,7 +163,7 @@ finding names the table and quotes the measurement against the question it answe
 > stale values is not knowable without a column-level link. Asked which feature
 > carries it, table-level reasoning scores a measured precision of 0.25
 > (benchmarks/RESULTS.md, table-level baseline), which is why this finding names the
-> table and not a feature. Run `modelguard link` to get the column-level answer
+> table and not a feature. Run `janus link` to get the column-level answer
 > instead.
 
 That is a tool upselling its own accurate story with its own measured numbers, and it
@@ -205,7 +205,7 @@ SLA. Make that systematic and publish the number.
 Design:
 
 - `mutmut` (3.7.0 on PyPI `[verified]`, not installed) or `cosmic-ray` (8.4.6
-  `[verified]`), scoped to `modelguard/detect/` only. Mutating the whole package
+  `[verified]`), scoped to `janus/detect/` only. Mutating the whole package
   measures the wrong thing: the claim is about detection.
 - Run the offline suite plus the benchmark trials as the test command.
 - One generated line in RESULTS.md: mutants generated, killed, survived, with every
@@ -237,7 +237,7 @@ a case a real warehouse actually produces:
 | Column **named** like the label, carrying no label term | No | Matching on name instead of on the declared term |
 | Leak at exactly `leakage_max_hops`, and at `+1` | Yes, then no, and the scan must say the cap was reached | Off-by-one in the hop cap, plus F1's silent truncation |
 
-Each is a scenario in `modelguard/seed/scenarios.py` plus a trial in
+Each is a scenario in `janus/seed/scenarios.py` plus a trial in
 `benchmarks/inject.py`, following the existing pattern where the benchmark drives the
 same reversible scenarios the demo uses (benchmarks/CLAUDE.md rule 1).
 
@@ -301,7 +301,7 @@ as the soft metric it is.
 ## 3. Observability
 
 **What exists:** one logfmt or JSON line per scan carrying `run_id`, both targets,
-`dry_run`, counts and phase timings (`modelguard/logs.py`, D-073). An SLO in C.4
+`dry_run`, counts and phase timings (`janus/logs.py`, D-073). An SLO in C.4
 whose three terms are measured rather than estimated. C.3 names OpenTelemetry,
 Prometheus and Grafana as the unbuilt upgrade.
 
@@ -309,17 +309,17 @@ Assessment: **OTel and Prometheus are the obvious move and the low-differentiati
 one.** Build them, they are cheap, one exporter reading the fields `_log_scan`
 already assembles. Do not expect them to score. Two other things on this axis will.
 
-### 3.1 Emit ModelGuard's own runs into DataHub as entities
+### 3.1 Emit Janus's own runs into DataHub as entities
 
 **The best idea in this document for the Use of DataHub criterion.**
 
 DataHub models processes: `dataFlow`, `dataJob`, and `dataProcessInstance` with
-inputs and outputs. ModelGuard already reads `dataProcessInstanceInput` in
+inputs and outputs. Janus already reads `dataProcessInstanceInput` in
 `link --infer`, so the shape is familiar.
 
 So represent each scan as what it is: a process run.
 
-- A `dataJob` for ModelGuard's scan, under a `dataFlow` for the agent.
+- A `dataJob` for Janus's scan, under a `dataFlow` for the agent.
 - One `dataProcessInstance` per scan, keyed by the `run_id` every write is already
   stamped with (D-013).
 - **Inputs**: the entities the scan read. **Outputs**: the aspects it wrote.
@@ -349,7 +349,7 @@ What this buys, and it is disproportionate to the effort:
   to run.
 - Every incident becomes traceable to the run that produced it, in the UI, by
   clicking, rather than by grepping a log for a `run_id`.
-- **ModelGuard becomes subject to its own thesis**: a process whose inputs and
+- **Janus becomes subject to its own thesis**: a process whose inputs and
   outputs are catalogued, whose freshness can be checked, and which is visible to
   anyone auditing the graph. That is the product's own argument, applied to itself.
 - It is the strongest available evidence of composing DataHub's shipped features
@@ -376,7 +376,7 @@ trust_history.py` already trends scores:
 
 This is the number a data platform lead reports upward, and nothing in the ecosystem
 produces it. It also reframes the adoption cliff from an embarrassment into the
-product's own roadmap: ModelGuard measures how observable your ML estate is, then
+product's own roadmap: Janus measures how observable your ML estate is, then
 tells you the specific next join that would raise it most.
 
 **Effort:** S. The per-model computation exists; this is aggregation plus a history
@@ -401,11 +401,11 @@ data and model access. That would:
 
 - break the property that no row-level data ever leaves DataHub, currently one of the
   strongest and most quotable things in the README,
-- put ModelGuard in direct competition with mature tools, while abandoning the one
+- put Janus in direct competition with mature tools, while abandoning the one
   thing only it can do,
 - and require a warehouse connection the security model explicitly rules out.
 
-It would be a strictly negative trade. The reframe is that ModelGuard does not
+It would be a strictly negative trade. The reframe is that Janus does not
 explain a model's *prediction*; it explains a **finding** and a **feature**,
 structurally, from provenance. That is an under-served form of explanation with real
 literature behind it, and it is computable from the graph alone.
@@ -440,14 +440,14 @@ Why it is on-thesis:
   wrong, but what to change, with a proof that changing it works.
 - It closes the loop with the headline benchmark column. RESULTS.md's money column is
   "still alerting after the fix". A counterfactual **is** the fix, stated in advance.
-  ModelGuard would be the tool that names the remediation and then verifies it
+  Janus would be the tool that names the remediation and then verifies it
   cleared. No table-level approach can even express this, because it never saw the
   column edge.
 - The "there is one other path" clause advertises the moat inside every incident a
   user reads.
 
 **The design is smaller than it looks.** `marked_ancestor`
-(`modelguard/detect/column_marks.py:179`) already collects **every** chain from a
+(`janus/detect/column_marks.py:179`) already collects **every** chain from a
 feature's source column to a marked ancestor and returns only the shortest, sorting
 deterministically so the quoted proof is stable. The other chains are computed and
 then discarded. So:
@@ -591,7 +591,7 @@ Article 10 requires, for high-risk systems, documented training-data provenance,
 governance, and examination for bias. Article 12 requires record-keeping. The Act's
 obligations phase in through 2026, so this is live rather than hypothetical.
 
-ModelGuard already computes most of the required evidence: training data sources,
+Janus already computes most of the required evidence: training data sources,
 column-level provenance, classification exposures, freshness at training time, schema
 at training time, deprecated inputs, ownership. Assemble it per model into a
 generated document written back into DataHub.
@@ -642,9 +642,9 @@ budget holder rather than an engineer. High value per line of code.
 
 **Effort:** S to M.
 
-### 6.2 Incident lifecycle: MTTR from ModelGuard's own writes
+### 6.2 Incident lifecycle: MTTR from Janus's own writes
 
-ModelGuard raises incidents and resolves them (D-067, D-069). It does not measure how
+Janus raises incidents and resolves them (D-067, D-069). It does not measure how
 long they stayed open. Mean time to resolution per finding type, read straight from
 the writes already in the graph, closes the SRE loop C.4 opened and costs almost
 nothing. It also produces the evidence that the tool works over weeks rather than in

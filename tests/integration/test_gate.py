@@ -16,16 +16,16 @@ import time
 
 import pytest
 
-from modelguard.agent.pipeline import run_scan
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.gate import GatePolicy, evaluate
-from modelguard.models import Severity
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.scenarios import plant_leakage, revert_leakage
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.incidents import attached_incident_urns
-from modelguard.writeback.properties import read_properties
+from janus.agent.pipeline import run_scan
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.gate import GatePolicy, evaluate
+from janus.models import Severity
+from janus.seed import graph_spec as spec
+from janus.seed.scenarios import plant_leakage, revert_leakage
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.incidents import attached_incident_urns
+from janus.writeback.properties import read_properties
 
 pytestmark = pytest.mark.integration
 
@@ -67,7 +67,7 @@ def _gate(conn: DataHubConnection, config: ScanConfig, policy: GatePolicy) -> in
 
 def _await_leakage(conn: DataHubConnection, config: ScanConfig, *, expected: bool) -> None:
     """Wait for the index to show the leakage state just planted."""
-    from modelguard.detect.leakage import leakage_findings
+    from janus.detect.leakage import leakage_findings
 
     deadline = time.monotonic() + _INDEX_SETTLE_SECONDS
     while time.monotonic() < deadline:

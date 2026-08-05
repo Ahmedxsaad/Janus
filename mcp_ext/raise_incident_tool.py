@@ -6,8 +6,8 @@ it. This module is the thin write tool that closes the incident half of that gap
 proposed for upstream (see ``RFC-ml-incidents.md``).
 
 It is deliberately minimal and standalone: it targets a different repository and so
-does not import ``modelguard``. The one non-trivial behaviour, building and
-validating the ``raiseIncident`` payload, mirrors ``modelguard/writeback/incidents.py``
+does not import ``janus``. The one non-trivial behaviour, building and
+validating the ``raiseIncident`` payload, mirrors ``janus/writeback/incidents.py``
 exactly (same GraphQL, same allowed-set derivation from the installed metadata
 model), because both talk to the same GMS.
 
@@ -33,7 +33,7 @@ from datahub.metadata.urns import Urn
 #: The environment flag the upstream server uses to enable every mutation tool.
 MUTATION_ENABLED_ENV = "TOOLS_IS_MUTATION_ENABLED"
 
-# The exact mutation modelguard/writeback/incidents.py uses. raiseIncident returns
+# The exact mutation janus/writeback/incidents.py uses. raiseIncident returns
 # the new incident's URN as a scalar string.
 _RAISE_INCIDENT = """
 mutation raiseIncident($input: RaiseIncidentInput!) {

@@ -1,6 +1,6 @@
 # The DataHub write surface
 
-Every write ModelGuard makes is idempotent and uses an OSS-native primitive. This is the exact
+Every write Janus makes is idempotent and uses an OSS-native primitive. This is the exact
 shape of each, verified against acryl-datahub 1.6.0.13 and a local GMS. The language model
 never composes any of these payloads: it selects a fixed, parameterized function and supplies
 validated arguments.
@@ -34,9 +34,9 @@ mutation { updateIncidentStatus(urn:"<incident urn>", input:{ state: RESOLVED, m
 ## Structured properties (model-level risk)
 
 Emitted as aspects: the `StructuredPropertyDefinitionClass` on the property URN, then a
-`StructuredPropertiesClass` assignment on the entity. ModelGuard defines four on the mlModel:
-`modelguard.trust_score` (number), `modelguard.trust_band` (string),
-`modelguard.risk_flags` (multiple string), `modelguard.run_id` (string). A value is written
+`StructuredPropertiesClass` assignment on the entity. Janus defines four on the mlModel:
+`janus.trust_score` (number), `janus.trust_band` (string),
+`janus.risk_flags` (multiple string), `janus.run_id` (string). A value is written
 only when a detector computed it: no number is invented.
 
 ## Tags, terms, owners
@@ -49,14 +49,14 @@ is an upsert of the whole list and would drop tags or terms someone else applied
 ## Guarding assertion
 
 Rendered as open-assertions YAML and also emitted as an `assertionInfo` entity so it appears in
-the Quality tab, plus an `assertionRunEvent` carrying the result ModelGuard actually measured.
+the Quality tab, plus an `assertionRunEvent` carrying the result Janus actually measured.
 
 ```yaml
 version: 1
 assertions:
   - entity: urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.loans_raw,PROD)
     type: freshness
-    id_raw: modelguard.freshness.ecommerce.public.loans_raw   # stable -> stable assertion guid
+    id_raw: janus.freshness.ecommerce.public.loans_raw   # stable -> stable assertion guid
     lookback_interval: "6 hours"
     last_modified_field: updated_at
     schedule: { type: interval, interval: "6 hours" }
@@ -66,7 +66,7 @@ Three traps: `DataHubClient.assertions` is Cloud only (parse the YAML back throu
 `AssertionsConfigSpec` and emit `assertionInfo` yourself on OSS); never call
 `get_assertion_info_aspect()`, which restamps `source.created` with now so the aspect never
 converges; and `FixedIntervalFreshnessAssertion` reads `timedelta.seconds`, not
-`total_seconds()`, so an SLA of a day or more is silently truncated (ModelGuard refuses it).
+`total_seconds()`, so an SLA of a day or more is silently truncated (Janus refuses it).
 
 ## Documents (Model Impact Report)
 
@@ -76,9 +76,9 @@ A first-class `datahub.sdk.document.Document` entity linked to the model through
 ## ODCS input contract (optional extra)
 
 For a model's input tables, an Open Data Contract Standard v3.1.0 YAML capturing the schema and
-the freshness SLA ModelGuard guards, validated with `datacontract-cli`. Read-and-render only;
+the freshness SLA Janus guards, validated with `datacontract-cli`. Read-and-render only;
 it never mutates the graph, so it runs on a clean or dry-run scan
-(`modelguard scan --model <m> --contract-out <path>`).
+(`janus scan --model <m> --contract-out <path>`).
 
 ## Idempotency, in one line
 

@@ -1,4 +1,4 @@
-# Runs ModelGuard against a DataHub Quickstart, not instead of one.
+# Runs Janus against a DataHub Quickstart, not instead of one.
 #
 # `datahub docker quickstart` already builds and maintains DataHub's own
 # multi-container stack (GMS, MySQL, Kafka, OpenSearch, frontend) on a network
@@ -6,16 +6,16 @@
 # `datahub-gms:8080`. Reimplementing that stack here would be exactly the thing
 # the hackathon's own Originality criterion warns against ("rebuilding shipped
 # features from scratch isn't"), and it would drift the moment DataHub's compose
-# changes upstream. This file only adds ModelGuard to that existing network.
+# changes upstream. This file only adds Janus to that existing network.
 #
 # One-time setup, then this file works every time after:
 #   datahub docker quickstart
 #
 # Usage:
-#   docker compose run --rm modelguard-seed
-#   docker compose run --rm modelguard scan --table loans_raw
-#   docker compose run --rm modelguard gate --model credit_risk_v3 --block-at-or-above high
-#   docker compose up modelguard-mcp                    # long-running, stdio
+#   docker compose run --rm janus-seed
+#   docker compose run --rm janus scan --table loans_raw
+#   docker compose run --rm janus gate --model credit_risk_v3 --block-at-or-above high
+#   docker compose up janus-mcp                    # long-running, stdio
 #
 # Every service below carries `profiles: [tools]`, so a bare `docker compose up`
 # with no service named starts nothing (verified: `docker compose config
@@ -31,73 +31,73 @@
 # `docker compose down --remove-orphans` run from this repo, an ordinary cleanup
 # command, would then treat DataHub's entire Quickstart as orphaned containers of
 # THIS project and stop it. Verified: with the shared default name, `docker
-# compose up -d modelguard-mcp` immediately warned that every datahub-quickstart
+# compose up -d janus-mcp` immediately warned that every datahub-quickstart
 # container was an "orphan container for this project". A distinct name makes
-# every command here scoped to ModelGuard's own containers only.
-name: modelguard
+# every command here scoped to Janus's own containers only.
+name: janus
 
-x-modelguard: &modelguard
+x-janus: &janus
   build:
     context: .
     args:
-      # Both extras baked in, so `... run --rm modelguard gate --review` and
-      # `... up modelguard-mcp` work without a rebuild. No LLM provider extra:
+      # Both extras baked in, so `... run --rm janus gate --review` and
+      # `... up janus-mcp` work without a rebuild. No LLM provider extra:
       # the out-of-the-box path (deterministic template prose, --no-llm) needs
       # none, matching README.md.
-      MODELGUARD_EXTRAS: agent,mcp
-  image: modelguard:local
+      JANUS_EXTRAS: agent,mcp
+  image: janus:local
   environment:
     DATAHUB_GMS_URL: http://datahub-gms:8080
-    # Token, LLM provider/model/key, and every MODELGUARD_* threshold pass
+    # Token, LLM provider/model/key, and every JANUS_* threshold pass
     # through from the shell that runs `docker compose`, via --env-file .env or
     # variables already exported. None has a default here: baking one in would
-    # be exactly the machine-specific fallback modelguard/env.py forbids in the
+    # be exactly the machine-specific fallback janus/env.py forbids in the
     # package itself, applied to the container instead.
     DATAHUB_GMS_TOKEN: ${DATAHUB_GMS_TOKEN:-}
-    MODELGUARD_LLM_PROVIDER: ${MODELGUARD_LLM_PROVIDER:-}
-    MODELGUARD_LLM_MODEL: ${MODELGUARD_LLM_MODEL:-}
-    MODELGUARD_LLM_API_KEY: ${MODELGUARD_LLM_API_KEY:-}
-    MODELGUARD_FRESHNESS_SLA_HOURS: ${MODELGUARD_FRESHNESS_SLA_HOURS:-}
-    MODELGUARD_MAX_HOPS: ${MODELGUARD_MAX_HOPS:-}
-    MODELGUARD_LINEAGE_RESULT_CAP: ${MODELGUARD_LINEAGE_RESULT_CAP:-}
-    MODELGUARD_LEAKAGE_MAX_HOPS: ${MODELGUARD_LEAKAGE_MAX_HOPS:-}
+    JANUS_LLM_PROVIDER: ${JANUS_LLM_PROVIDER:-}
+    JANUS_LLM_MODEL: ${JANUS_LLM_MODEL:-}
+    JANUS_LLM_API_KEY: ${JANUS_LLM_API_KEY:-}
+    JANUS_FRESHNESS_SLA_HOURS: ${JANUS_FRESHNESS_SLA_HOURS:-}
+    JANUS_MAX_HOPS: ${JANUS_MAX_HOPS:-}
+    JANUS_LINEAGE_RESULT_CAP: ${JANUS_LINEAGE_RESULT_CAP:-}
+    JANUS_LEAKAGE_MAX_HOPS: ${JANUS_LEAKAGE_MAX_HOPS:-}
   networks:
     - datahub_network
   profiles:
     - tools
 
 services:
-  # modelguard scan --table ... | --model ... | --dry-run | --write | --review
-  modelguard:
-    <<: *modelguard
+  # janus scan --table ... | --model ... | --dry-run | --write | --review
+  janus:
+    <<: *janus
 
-  # modelguard watch --table ... [--interval 30]
-  modelguard-watch:
-    <<: *modelguard
-    entrypoint: ["modelguard", "watch"]
+  # janus watch --table ... [--interval 30]
+  janus-watch:
+    <<: *janus
+    entrypoint: ["janus", "watch"]
 
-  # modelguard gate --model ... --block-at-or-above high  (exit 1 = blocked)
-  modelguard-gate:
-    <<: *modelguard
-    entrypoint: ["modelguard", "gate"]
+  # janus gate --model ... --block-at-or-above high  (exit 1 = blocked)
+  janus-gate:
+    <<: *janus
+    entrypoint: ["janus", "gate"]
 
   # One-shot: build the demo ML supply chain the DataHub datapacks lack.
-  modelguard-seed:
-    <<: *modelguard
-    entrypoint: ["modelguard-seed"]
+  janus-seed:
+    <<: *janus
+    entrypoint: ["janus-seed"]
 
-  # modelguard-scenario --lag-hours 30 [--revert] [--scenario target-leakage|input-schema-drift]
-  modelguard-scenario:
-    <<: *modelguard
-    entrypoint: ["modelguard-scenario"]
+  # janus-scenario --lag-hours 30 [--revert] [--scenario target-leakage|input-schema-drift]
+  janus-scenario:
+    <<: *janus
+    entrypoint: ["janus-scenario"]
 
   # Long-running: serves check_leakage/check_freshness/check_gate over stdio.
-  # `docker compose up modelguard-mcp` attaches this container's stdio to the
+  # `docker compose up janus-mcp` attaches this container's stdio to the
   # compose process's own, which is what an MCP client expects when it launches
   # a server itself; it is not meant to be started detached (`-d`).
-  modelguard-mcp:
-    <<: *modelguard
-    entrypoint: ["modelguard-mcp"]
+  janus-mcp:
+    <<: *janus
+    entrypoint: ["janus-mcp"]
     stdin_open: true
     tty: false
 

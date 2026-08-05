@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modelguard.detect.coverage import (
+from janus.detect.coverage import (
     CHECK_DEPRECATED_INPUT,
     CHECK_LEAKAGE,
     CHECK_PROXY,
@@ -11,14 +11,14 @@ from modelguard.detect.coverage import (
     MODEL_CHECKS,
     Unevaluated,
 )
-from modelguard.detect.guard_coverage import ModelCoverage, aggregate
+from janus.detect.guard_coverage import ModelCoverage, aggregate
 
 MODEL_A = "urn:li:mlModel:(urn:li:dataPlatform:mlflow,a,PROD)"
 MODEL_B = "urn:li:mlModel:(urn:li:dataPlatform:mlflow,b,PROD)"
 MODEL_C = "urn:li:mlModel:(urn:li:dataPlatform:mlflow,c,PROD)"
 
 
-def gap(check: str, model_urn: str, *, remedy: str = "Run `modelguard link`.") -> Unevaluated:
+def gap(check: str, model_urn: str, *, remedy: str = "Run `janus link`.") -> Unevaluated:
     """One check that could not run against one model."""
     return Unevaluated(check=check, target_urn=model_urn, reason="no metadata", remedy=remedy)
 
@@ -86,8 +86,8 @@ def test_next_join_ranks_by_remedy_so_one_link_is_recommended_once():
     ranking by check would put three separate recommendations in front of
     somebody who has one thing to do.
     """
-    link = "Declare them with `modelguard link`."
-    classify = "Set MODELGUARD_SENSITIVE_TERM_URNS."
+    link = "Declare them with `janus link`."
+    classify = "Set JANUS_SENSITIVE_TERM_URNS."
     sweep = [
         ModelCoverage(
             model_urn=MODEL_A,

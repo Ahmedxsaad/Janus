@@ -9,4 +9,4 @@ if [ "$#" -ne 1 ]; then
   exit 2
 fi
 
-modelguard scan --table "$1" --no-llm --dry-run
+janus scan --table "$1" --no-llm --dry-run

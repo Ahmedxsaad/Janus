@@ -13,8 +13,8 @@ import json
 
 import pytest
 
-from modelguard.env import ConfigError
-from modelguard.mcl import (
+from janus.env import ConfigError
+from janus.mcl import (
     ENV_KAFKA_BOOTSTRAP,
     ENV_KAFKA_GROUP_ID,
     ENV_SCHEMA_REGISTRY_URL,
@@ -107,14 +107,14 @@ def test_all_three_variables_or_none(monkeypatch):
 def test_all_three_present_builds_the_configuration(monkeypatch):
     monkeypatch.setenv(ENV_KAFKA_BOOTSTRAP, "broker:9092")
     monkeypatch.setenv(ENV_SCHEMA_REGISTRY_URL, "http://gms:8080/schema-registry/api/")
-    monkeypatch.setenv(ENV_KAFKA_GROUP_ID, "modelguard-prod")
+    monkeypatch.setenv(ENV_KAFKA_GROUP_ID, "janus-prod")
 
     config = mcl_config_from_env()
 
     assert config == MclConfig(
         bootstrap_servers="broker:9092",
         schema_registry_url="http://gms:8080/schema-registry/api/",
-        group_id="modelguard-prod",
+        group_id="janus-prod",
     )
 
 

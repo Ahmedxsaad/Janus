@@ -86,7 +86,7 @@ jobs:
         run: pytest -m "not integration" -q
 
   mutation:
-    name: mutation score (modelguard/detect/)
+    name: mutation score (janus/detect/)
     # Advisory only (T-08, docs/plan/10-depth-implementation.md): a run over
     # ~1500 mutants is the slow job the top-of-file note already warns about,
     # so it stays off the PR hot path the same way the integration suite does,
@@ -179,8 +179,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install "pydantic==2.9.0"
           pip install -e .
-          python -c "import modelguard; from modelguard.cli import app"
-          modelguard --help >/dev/null
+          python -c "import janus; from janus.cli import app"
+          janus --help >/dev/null
 
   docker:
     name: docker image builds
@@ -195,16 +195,16 @@ jobs:
       # stops building is invisible until someone tries to `docker build`, and
       # by then it is release day, not code-review day.
       - name: Build the image
-        run: docker build -t modelguard:ci .
+        run: docker build -t janus:ci .
 
       - name: The image runs as its declared non-root user
         run: |
-          test "$(docker run --rm --entrypoint whoami modelguard:ci)" = "modelguard"
+          test "$(docker run --rm --entrypoint whoami janus:ci)" = "janus"
 
       # Two different checks, because the four console scripts do not agree on
-      # --help. modelguard (Typer) and modelguard-scenario (argparse) parse
+      # --help. janus (Typer) and janus-scenario (argparse) parse
       # arguments before doing anything else, so --help exits 0 with no network.
-      # modelguard-seed and modelguard-mcp have no argument parser at all: they
+      # janus-seed and janus-mcp have no argument parser at all: they
       # connect to DataHub immediately, so --help would just be ignored and the
       # command would fail on a real, expected DataHubConnectionError, not on a
       # packaging problem. For those two, `command -v` is the honest test: it
@@ -213,14 +213,14 @@ jobs:
       # runner for.
       - name: The two scripts with argument parsing answer --help
         run: |
-          for cmd in modelguard modelguard-scenario; do
-            docker run --rm --entrypoint "$cmd" modelguard:ci --help >/dev/null
+          for cmd in janus janus-scenario; do
+            docker run --rm --entrypoint "$cmd" janus:ci --help >/dev/null
           done
 
       - name: The two network-first scripts are installed on PATH
         run: |
-          docker run --rm --entrypoint sh modelguard:ci -c \
-            'command -v modelguard-seed && command -v modelguard-mcp'
+          docker run --rm --entrypoint sh janus:ci -c \
+            'command -v janus-seed && command -v janus-mcp'
 
   helm:
     name: helm chart lints and renders
@@ -233,7 +233,7 @@ jobs:
           version: v3.21.3
 
       - name: Lint
-        run: helm lint --strict charts/modelguard-watch
+        run: helm lint --strict charts/janus-watch
 
       # No live cluster here, same reasoning as the integration suite and the
       # docker job: this proves the chart renders valid Kubernetes YAML for a
@@ -244,15 +244,15 @@ jobs:
       # three resources this chart is meant to create.
       - name: A bare install fails loudly on the required values
         run: |
-          if helm template charts/modelguard-watch >/dev/null 2>&1; then
+          if helm template charts/janus-watch >/dev/null 2>&1; then
             echo "::error::a bare install rendered successfully; the required-value guards in deployment.yaml are not firing"
             exit 1
           fi
 
       - name: A real install renders exactly the expected resources
         run: |
-          helm template test charts/modelguard-watch \
-            --set image.repository=ghcr.io/example/modelguard \
+          helm template test charts/janus-watch \
+            --set image.repository=ghcr.io/example/janus \
             --set image.tag=0.1.0 \
             --set datahub.gmsUrl=http://datahub-gms:8080 \
             --set watch.table=loans_raw \
@@ -300,6 +300,6 @@ jobs:
           "
           bash -n /tmp/runcmd.sh
 
-      - name: modelguard-watch.service passes systemd-analyze verify
+      - name: janus-watch.service passes systemd-analyze verify
         run: |
-          sudo systemd-analyze verify deploy/azure/modelguard-watch.service
+          sudo systemd-analyze verify deploy/azure/janus-watch.service

@@ -13,7 +13,7 @@ differentiated by wrapping a real, tested, deterministic detection engine
    structure of skills/datahub-enrich before writing anything.
 2. Follow the upstream CONTRIBUTING.md (their commit conventions and release
    process), not ours, for anything destined for the PR.
-3. The skill wraps the same detection logic as modelguard/; do not fork logic,
+3. The skill wraps the same detection logic as janus/; do not fork logic,
    call the same scripts or document the same workflow.
 4. Even if the upstream merge is slow, this folder must stand alone: a judge
    reading only skill/ should understand and be able to run it.
@@ -25,6 +25,7 @@ differentiated by wrapping a real, tested, deterministic detection engine
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: upstream mirroring and standalone rules |
 | 2026-07-21 | Claude (for Ghassen Naouar) | datahub-ml-guard skill lands: SKILL.md + scripts/ (thin CLI wrappers) + references/. Mirrors the datahub-enrich format (D-041) |
 | 2026-07-22 | Claude (for Ahmed Saad) | Drop the "first ML skill" claim (false: several overlapping skills already open upstream); state the real differentiator, a tested deterministic engine behind it (D-043) |
-| 2026-07-23 | Claude (for Ahmed Saad) | Prerequisite changes from "clone the ModelGuard repo, pip install -e ." to "pip install modelguard-datahub", now that the package is on PyPI. Closes the modelguard-dependency wrinkle docs/plan/05-oss-delivery.md flagged as an expected reviewer question (D-055) |
+| 2026-07-23 | Claude (for Ahmed Saad) | Prerequisite changes from "clone the Janus repo, pip install -e ." to "pip install janus-datahub", now that the package is on PyPI. Closes the janus-dependency wrinkle docs/plan/05-oss-delivery.md flagged as an expected reviewer question (D-055) |
 | 2026-08-01 | Claude (for Ghassen Naouar) | The row above was wrong: the package is not on PyPI, the release is deferred (D-072). The prerequisite names the clone-and-install path that works today and the `pip install` from the release on, so nobody follows an instruction that 404s (D-073) |
-| 2026-08-02 | Claude (for Ghassen Naouar) | references/mcp-composition.md: running modelguard-mcp beside DataHub's own mcp-server-datahub, which question belongs to which, and why detection stays deterministic rather than becoming something a model judges. Documentation only, no runtime dependency on the other server (D-084) |
+| 2026-08-02 | Claude (for Ghassen Naouar) | references/mcp-composition.md: running janus-mcp beside DataHub's own mcp-server-datahub, which question belongs to which, and why detection stays deterministic rather than becoming something a model judges. Documentation only, no runtime dependency on the other server (D-084) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Package and brand identifiers renamed repo-wide: paths, imports, and prose all match the current name and distribution name (D-136) |

@@ -27,7 +27,7 @@ The hackathon is crowded and several teams are building near-identical
 "agent reads DataHub, writes findings back" projects. The detection work is
 already differentiated (column-level lineage, measured in benchmarks/RESULTS.md);
 what is not differentiated is the identity and the surface a person actually
-touches. Everything ModelGuard produces today lands in a terminal, a CI summary,
+touches. Everything Janus produces today lands in a terminal, a CI summary,
 or a DataHub page somebody has to remember to open.
 
 So the proposal is a second surface, not a second product: an always-on pixel
@@ -123,7 +123,7 @@ Supporting interactions, in cost order:
 recognised his master; Argus was also the hundred-eyed watchman of the same
 mythology. A watchdog and a watcher in one word, for a process whose whole job
 is to keep waiting and still notice. The two rejected alternatives, kept so the
-reasoning survives: *Cerb* (Cerberus guards a crossing, and `modelguard gate` is
+reasoning survives: *Cerb* (Cerberus guards a crossing, and `janus gate` is
 literally a gate, but it reads as menacing unless drawn as a puppy) and *Scout*
 (warmest to a non-technical judge, least distinctive).
 
@@ -361,10 +361,10 @@ structured log lines at phase boundaries in `detect/graph_reads.py`,
 
 Logging rather than a progress callback because nothing has to be threaded
 through a detector's signature for a rendering concern, and because the lines
-are worth having on their own: an operator tailing `modelguard watch` wants to
+are worth having on their own: an operator tailing `janus watch` wants to
 know a lineage walk started and an aspect was written.
 
-The constraint that comes with that channel, from `modelguard/logs.py`: log
+The constraint that comes with that channel, from `janus/logs.py`: log
 lines carry identifiers, counts and durations only. No prose, no aspect content,
 no credential. So the speech bubble's sentence is **not** on the log channel;
 the producer takes it from the `ScanReport` it already holds and puts it in the
@@ -375,10 +375,10 @@ event's `title`.
 A consequence of stdio worth stating plainly: a window belongs to exactly one
 process. There is no shared bus, so two producers cannot drive one dog.
 
-- `modelguard companion` is the long-lived producer. It owns the window, polls
-  the catalogue (section 7), and can also run ModelGuard scans on a configured
+- `janus companion` is the long-lived producer. It owns the window, polls
+  the catalogue (section 7), and can also run Janus scans on a configured
   target, so one dog can show everything.
-- `modelguard watch --pet` is the development and demo path. It spawns its own
+- `janus watch --pet` is the development and demo path. It spawns its own
   window.
 - Running both gives two dogs with no shared state. That is honest and cheap;
   making it one dog means a broker process, which reintroduces the port, the
@@ -438,7 +438,7 @@ Four things, and each one exists because its absence was visible:
 
 ### The fallback that costs nothing
 
-`rich` is already a dependency. A terminal line inside `modelguard watch` works
+`rich` is already a dependency. A terminal line inside `janus watch` works
 over SSH, needs no binary, and is what runs when the window is unavailable for
 any reason. It renders the same event stream, one line per change of state, and
 deduplicates a steady state so a one-second poll does not scroll.
@@ -451,10 +451,10 @@ copy to keep in step with the first.
 ## 6b. Packaging with Python
 
 The requirement is that a Python user types one command. The complication is
-that a Tauri binary is per-platform and `modelguard-datahub` is a pure wheel.
+that a Tauri binary is per-platform and `janus-datahub` is a pure wheel.
 
 **Where the code lives.** `argos/` at the repository root, holding
-`src-tauri/` and `ui/`. Not under `modelguard/`, because a Rust crate inside the
+`src-tauri/` and `ui/`. Not under `janus/`, because a Rust crate inside the
 import package fouls `[tool.setuptools.packages.find]` and the sdist.
 
 **How the binary becomes a wheel.** maturin with `bindings = "bin"` builds a
@@ -464,17 +464,17 @@ maturin's bindings documentation]. Tauri embeds the frontend assets into the
 binary on a release build, so the wheel is one self-contained file with no data
 directory to locate at runtime.
 
-**Names, and why not the obvious one.** The distribution is `modelguard-argos`
-and the installed executable is `modelguard-argos` too. Not `argos`: that name
+**Names, and why not the obvious one.** The distribution is `janus-argos`
+and the installed executable is `janus-argos` too. Not `argos`: that name
 is already taken on PyPI [verified, HTTP 200 on the JSON API 2026-08-03], and it
-is far too generic to claim on a user's `PATH`. `modelguard-argos` is free
-[verified, 404] and matches the `modelguard-seed`, `modelguard-mcp`,
-`modelguard-scenario` convention already in `[project.scripts]`.
+is far too generic to claim on a user's `PATH`. `janus-argos` is free
+[verified, 404] and matches the `janus-seed`, `janus-mcp`,
+`janus-scenario` convention already in `[project.scripts]`.
 
 **The extra.**
 
 ```toml
-pet = ["modelguard-argos; platform_system != 'Linux'"]
+pet = ["janus-argos; platform_system != 'Linux'"]
 ```
 
 **The Linux caveat, which the marker is the honest form of.** The binary links
@@ -482,7 +482,7 @@ the system webkit2gtk. That is not an allowlisted external library under
 manylinux policy, so the wheel cannot be tagged manylinux and PyPI will not
 accept a bare `linux_x86_64` wheel. Vendoring webkit into the wheel to force a
 tag is rejected: it is enormous, it breaks against the host's GTK, and it would
-make ModelGuard the maintainer of a browser engine. Linux users install the
+make Janus the maintainer of a browser engine. Linux users install the
 `.deb` or `.AppImage` that `cargo tauri build` already produces, from GitHub
 Releases. `[confirm]` the exact maturin flag that skips the auditwheel repair
 for the local Linux build, since that path is used for the bundle even though
@@ -490,9 +490,9 @@ its wheel is never published.
 
 **How Python finds the binary**, in order:
 
-1. an explicit override, read only through `modelguard/env.py` (root CLAUDE.md
+1. an explicit override, read only through `janus/env.py` (root CLAUDE.md
    rule 6: one module touches the environment),
-2. `shutil.which("modelguard-argos")`, which covers the wheel, the `.deb` and a
+2. `shutil.which("janus-argos")`, which covers the wheel, the `.deb` and a
    `cargo install`,
 3. nothing found: one message naming this platform's install command, then the
    terminal sprite. It never silently degrades anything else.
@@ -511,14 +511,14 @@ identities are a paid ownership decision; until one exists, the release notes
 document the override for that path rather than pretending the warning does not
 appear.
 
-## 7. What Argos is, beyond ModelGuard
+## 7. What Argos is, beyond Janus
 
-Argos ships as a **general DataHub companion**, not a ModelGuard pet with a
-ModelGuard-shaped event stream. DataHub has no desktop presence at all today; it
+Argos ships as a **general DataHub companion**, not a Janus pet with a
+Janus-shaped event stream. DataHub has no desktop presence at all today; it
 is a browser tab people forget to open. That gap is the give-back, and it is the
 day-one shape rather than a later extraction.
 
-`modelguard companion` is the producer that makes it general. It knows nothing
+`janus companion` is the producer that makes it general. It knows nothing
 about ML lineage and polls the assets you own for three things. All three reads
 are verified to exist:
 
@@ -531,13 +531,13 @@ are verified to exist:
 
 The companion needs to know whose assets to watch, and an owner identifies an
 account, so per root CLAUDE.md rule 6a it gets no default and no fallback: the
-variable is declared in `modelguard/env.py`, added to `.env` and `.env.example`
+variable is declared in `janus/env.py`, added to `.env` and `.env.example`
 in the same position, and a missing value fails loudly naming the variable.
 
 Done, and checked against a running Quickstart on 2026-08-03: an owned table
 carrying an open incident, a failing assertion run and a deprecation produced
 all three issues in one sweep, ranked incident first, with the dog barking
-"Stale upstream data in ecommerce.public.loans_raw (+2 more)" and no ModelGuard
+"Stale upstream data in ecommerce.public.loans_raw (+2 more)" and no Janus
 scan running anywhere.
 
 The rest of the give-back, ranked by payoff per hour:
@@ -605,8 +605,8 @@ art is finished before any Rust exists.
 |---|---|---|
 | P0 | protocol, `argos/ui/`, sprite file, a recorded event fixture | done, checked in a browser over `python -m http.server` |
 | P1 | Tauri shell and the stdio bridge | done, window screenshotted rendering a fixture event |
-| P2 | `modelguard watch --pet`, the log lines and `ArgosHandler` | done, and run against a live Quickstart: the seeded leaking model produced a barking dog reading "CRITICAL Target leakage: prior_default_flag derives from label default_status" |
-| P3 | `modelguard companion` producer | done, and run live against all three sources |
+| P2 | `janus watch --pet`, the log lines and `ArgosHandler` | done, and run against a live Quickstart: the seeded leaking model produced a barking dog reading "CRITICAL Target leakage: prior_default_flag derives from label default_status" |
+| P3 | `janus companion` producer | done, and run live against all three sources |
 | P4 | maturin wheels, bundles, CI | files land; the build itself runs first in CI |
 | P5 | the blast-radius walk, overlay window included | done, checked in a browser |
 | P6 | give-back items 2 to 5 | not started |

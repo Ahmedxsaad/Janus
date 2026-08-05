@@ -21,10 +21,10 @@ from datahub.metadata.schema_classes import (
 )
 from datahub.metadata.urns import StructuredPropertyUrn
 
-from modelguard.config import ScanConfig
-from modelguard.detect.coverage import MODEL_CHECKS, coverage_gaps
-from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
-from modelguard.writeback.properties import FEATURE_TABLE
+from janus.config import ScanConfig
+from janus.detect.coverage import MODEL_CHECKS, coverage_gaps
+from janus.detect.leakage import SOURCE_COLUMN_PROPERTY
+from janus.writeback.properties import FEATURE_TABLE
 from tests.conftest import (
     CLEAN_FEATURE_URN,
     FEATURE_TABLE_URN,
@@ -116,8 +116,8 @@ def test_a_model_an_ingest_de_linked_is_told_apart_from_one_nobody_linked():
     described = _gaps(graph, model_urn=MODEL_URN)
 
     leakage = next(line for line in described if line.startswith("target leakage"))
-    assert "recorded modelguard link but declares no features" in leakage
-    assert "modelguard link --all" in leakage
+    assert "recorded janus link but declares no features" in leakage
+    assert "janus link --all" in leakage
 
 
 def test_a_model_with_no_training_run_cannot_be_checked_for_drift():
@@ -244,7 +244,7 @@ def test_a_truncated_sensitive_source_walk_is_reported_as_a_gap_not_clean():
         exists=True,
     )
     capped = replace(
-        CONFIG, lineage_result_cap=1, sensitive_tag_urns=("urn:li:tag:modelguard.sensitive",)
+        CONFIG, lineage_result_cap=1, sensitive_tag_urns=("urn:li:tag:janus.sensitive",)
     )
     client = FakeClient(
         lineage_by_column={
@@ -293,12 +293,12 @@ def test_a_hop_capped_leakage_walk_is_reported_with_the_hop_cap_remedy_not_the_r
     )
     described = _gaps(_leaking_model_graph(), model_urn=MODEL_URN, client=client)
     line = next(line for line in described if "target leakage" in line)
-    assert "MODELGUARD_LEAKAGE_MAX_HOPS" in line
-    assert "MODELGUARD_LINEAGE_RESULT_CAP" not in line
+    assert "JANUS_LEAKAGE_MAX_HOPS" in line
+    assert "JANUS_LINEAGE_RESULT_CAP" not in line
 
 
 def test_a_hop_capped_sensitive_source_walk_is_reported_with_the_hop_cap_remedy():
-    capped = replace(CONFIG, sensitive_tag_urns=("urn:li:tag:modelguard.sensitive",))
+    capped = replace(CONFIG, sensitive_tag_urns=("urn:li:tag:janus.sensitive",))
     client = FakeClient(
         lineage_by_column={
             "prior_default_flag": [
@@ -313,8 +313,8 @@ def test_a_hop_capped_sensitive_source_walk_is_reported_with_the_hop_cap_remedy(
     )
     described = _gaps(_leaking_model_graph(), model_urn=MODEL_URN, client=client, config=capped)
     line = next(line for line in described if "sensitive source" in line)
-    assert "MODELGUARD_LEAKAGE_MAX_HOPS" in line
-    assert "MODELGUARD_LINEAGE_RESULT_CAP" not in line
+    assert "JANUS_LEAKAGE_MAX_HOPS" in line
+    assert "JANUS_LINEAGE_RESULT_CAP" not in line
 
 
 def test_a_walk_hitting_both_caps_names_both_remedies():
@@ -337,8 +337,8 @@ def test_a_walk_hitting_both_caps_names_both_remedies():
     )
     described = _gaps(_leaking_model_graph(), model_urn=MODEL_URN, client=client, config=capped)
     line = next(line for line in described if "target leakage" in line)
-    assert "MODELGUARD_LEAKAGE_MAX_HOPS" in line
-    assert "MODELGUARD_LINEAGE_RESULT_CAP" in line
+    assert "JANUS_LEAKAGE_MAX_HOPS" in line
+    assert "JANUS_LINEAGE_RESULT_CAP" in line
 
 
 def test_model_checks_names_exactly_what_a_bare_model_reports_as_unevaluated():

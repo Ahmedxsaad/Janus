@@ -18,11 +18,11 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from modelguard.agent.pipeline import ScanReport
-from modelguard.argos import events
-from modelguard.argos.handler import ArgosHandler
-from modelguard.argos.producer import ArgosProducer
-from modelguard.argos.protocol import (
+from janus.agent.pipeline import ScanReport
+from janus.argos import events
+from janus.argos.handler import ArgosHandler
+from janus.argos.producer import ArgosProducer
+from janus.argos.protocol import (
     COMMANDS,
     MAX_ARGUMENT_LENGTH,
     STATES,
@@ -30,10 +30,10 @@ from modelguard.argos.protocol import (
     Event,
     Hop,
 )
-from modelguard.argos.terminal import TerminalArgos
-from modelguard.argos.window import ArgosWindow, resolve_binary
-from modelguard.logs import phase
-from modelguard.models import Finding, TrustBand
+from janus.argos.terminal import TerminalArgos
+from janus.argos.window import ArgosWindow, resolve_binary
+from janus.logs import phase
+from janus.models import Finding, TrustBand
 
 from .conftest import make_finding, make_trust_score
 
@@ -186,7 +186,7 @@ def test_a_clean_scan_patrols():
 
 
 def test_a_dropped_trust_band_makes_the_dog_sick_even_with_no_finding():
-    from modelguard.agent.pipeline import ScanReport, TrustWrite
+    from janus.agent.pipeline import ScanReport, TrustWrite
 
     report = ScanReport(
         run_id="r",
@@ -218,8 +218,8 @@ def test_a_configured_ui_url_builds_a_link_for_the_entity_type(monkeypatch):
 
 def _report_with(*findings: Finding) -> ScanReport:
     """Build a ScanReport around zero or more findings, as the pipeline would."""
-    from modelguard.agent.narrate import Narrative, NarrativeSource
-    from modelguard.agent.pipeline import FindingWrites, ScanReport
+    from janus.agent.narrate import Narrative, NarrativeSource
+    from janus.agent.pipeline import FindingWrites, ScanReport
 
     return ScanReport(
         run_id="r",
@@ -299,17 +299,17 @@ def test_a_handler_that_raises_does_not_kill_the_reader(stub_window: Path, caplo
 
 
 def test_a_missing_binary_is_not_an_error(monkeypatch):
-    monkeypatch.delenv("MODELGUARD_ARGOS_BIN", raising=False)
+    monkeypatch.delenv("JANUS_ARGOS_BIN", raising=False)
     monkeypatch.setenv("PATH", "")
     assert resolve_binary() is None
     assert ArgosWindow.open(lambda _: None) is None
 
 
 def test_a_configured_binary_that_is_not_there_fails_loudly(monkeypatch, tmp_path: Path):
-    from modelguard.env import ConfigError
+    from janus.env import ConfigError
 
-    monkeypatch.setenv("MODELGUARD_ARGOS_BIN", str(tmp_path / "nope"))
-    with pytest.raises(ConfigError, match="MODELGUARD_ARGOS_BIN"):
+    monkeypatch.setenv("JANUS_ARGOS_BIN", str(tmp_path / "nope"))
+    with pytest.raises(ConfigError, match="JANUS_ARGOS_BIN"):
         resolve_binary()
 
 
@@ -319,7 +319,7 @@ def test_a_configured_binary_that_is_not_there_fails_loudly(monkeypatch, tmp_pat
 def test_a_phase_log_line_becomes_an_event():
     seen: list[Event] = []
     handler = ArgosHandler(seen.append)
-    logger = logging.getLogger("modelguard.test.argos")
+    logger = logging.getLogger("janus.test.argos")
     logger.setLevel(logging.INFO)
     logger.addHandler(handler)
     try:
@@ -335,7 +335,7 @@ def test_the_bubble_never_carries_a_log_message():
     # record's message onto the screen.
     seen: list[Event] = []
     handler = ArgosHandler(seen.append)
-    logger = logging.getLogger("modelguard.test.argos.prose")
+    logger = logging.getLogger("janus.test.argos.prose")
     logger.setLevel(logging.INFO)
     logger.addHandler(handler)
     try:
@@ -400,18 +400,18 @@ def test_a_dropped_file_polls_now_and_never_reaches_a_shell(monkeypatch):
 
 
 def test_the_producer_detaches_its_handler_on_close():
-    before = len(logging.getLogger("modelguard").handlers)
+    before = len(logging.getLogger("janus").handlers)
     producer = ArgosProducer.start(Console(record=True), window=False)
-    assert len(logging.getLogger("modelguard").handlers) == before + 1
+    assert len(logging.getLogger("janus").handlers) == before + 1
     producer.close()
-    assert len(logging.getLogger("modelguard").handlers) == before
+    assert len(logging.getLogger("janus").handlers) == before
 
 
 def test_the_environment_is_only_read_through_env_py():
     # The window module resolves a path from the environment; it must do it the
     # way every other module does (root CLAUDE.md rule 6). This mirrors the
     # repo-wide check in test_env.py, kept close to the code that could break it.
-    source = Path(__file__).resolve().parent.parent / "modelguard" / "argos"
+    source = Path(__file__).resolve().parent.parent / "janus" / "argos"
     for module in source.glob("*.py"):
         code = module.read_text()
         assert "os.environ" not in code and "os.getenv" not in code, module.name
@@ -427,8 +427,8 @@ def test_a_recovery_wags_rather_than_going_quiet():
 
 def test_a_check_that_could_not_run_is_not_rendered_as_health():
     """detect/coverage.py's whole point, applied to pixels."""
-    from modelguard.agent.pipeline import ScanReport
-    from modelguard.detect.coverage import Unevaluated
+    from janus.agent.pipeline import ScanReport
+    from janus.detect.coverage import Unevaluated
 
     report = ScanReport(
         run_id="r",
@@ -448,7 +448,7 @@ def test_a_check_that_could_not_run_is_not_rendered_as_health():
 
 
 def test_the_trust_score_rides_along_so_the_meter_has_something_to_draw():
-    from modelguard.agent.pipeline import ScanReport, TrustWrite
+    from janus.agent.pipeline import ScanReport, TrustWrite
 
     report = ScanReport(
         run_id="r",
@@ -472,7 +472,7 @@ def test_the_band_is_sent_rather_than_recomputed_from_the_score():
     that model healthy while the catalogue calls it watch. Found by running
     this against a live graph, where exactly that happened.
     """
-    from modelguard.agent.pipeline import ScanReport, TrustWrite
+    from janus.agent.pipeline import ScanReport, TrustWrite
 
     report = ScanReport(
         run_id="r",

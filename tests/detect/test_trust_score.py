@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from modelguard.config import ScanConfig
-from modelguard.detect.trust_score import (
+from janus.config import ScanConfig
+from janus.detect.trust_score import (
     DEDUCTION_FRESHNESS_LAG,
     DEDUCTION_LEAKAGE,
     DEDUCTION_MISSING_OWNER,
@@ -13,7 +13,7 @@ from modelguard.detect.trust_score import (
     trust_inputs_from_findings,
     trust_score,
 )
-from modelguard.models import ModelRef, TrustBand, TrustScore
+from janus.models import ModelRef, TrustBand, TrustScore
 from tests.conftest import (
     MODEL_URN,
     make_finding,

@@ -1,4 +1,4 @@
-"""How long ModelGuard's findings stay open (T-16). Offline: no DataHub.
+"""How long Janus's findings stay open (T-16). Offline: no DataHub.
 
 Two obligations. The classification has to agree with the titles models.py
 actually writes, or an MTTR table silently drops a whole detector. And an
@@ -19,16 +19,16 @@ from datahub.metadata.schema_classes import (
     MLModelPropertiesClass,
 )
 
-from modelguard.config import ScanConfig
-from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
-from modelguard.lifecycle import (
+from janus.config import ScanConfig
+from janus.detect.leakage import SOURCE_COLUMN_PROPERTY
+from janus.lifecycle import (
     TITLE_PREFIXES,
     IncidentLifecycle,
     model_resources,
     mttr_by_type,
     read_lifecycles,
 )
-from modelguard.models import FindingType
+from janus.models import FindingType
 from tests.conftest import (
     FEATURE_TABLE_URN,
     LEAK_COLUMN_URN,
@@ -48,7 +48,7 @@ OPENED = 1_800_000_000_000
 INCIDENT = "urn:li:incident:abc"
 OTHER_INCIDENT = "urn:li:incident:def"
 
-FOOTER = "\n\nRaised by ModelGuard run scan-abc123."
+FOOTER = "\n\nRaised by Janus run scan-abc123."
 
 
 def place_incident(
@@ -120,12 +120,12 @@ def test_a_prefix_exists_for_every_finding_type():
     assert set(TITLE_PREFIXES) == set(FindingType)
 
 
-def test_an_incident_nobody_from_modelguard_raised_is_not_counted():
+def test_an_incident_nobody_from_janus_raised_is_not_counted():
     """Somebody else's incident on the same column is excluded by a fact.
 
     The run footer is the marker, not the title: a human writing an incident
     about a leak could easily use the same words, and counting it would put
-    somebody else's response time in ModelGuard's own number.
+    somebody else's response time in Janus's own number.
     """
     graph = linked_model_graph()
     place_incident(graph, description="A human raised this one, no footer.")
@@ -134,7 +134,7 @@ def test_an_incident_nobody_from_modelguard_raised_is_not_counted():
 
 
 def test_an_incident_with_an_unrecognised_title_is_not_counted():
-    """A ModelGuard footer with a title no detector writes says nothing usable."""
+    """A Janus footer with a title no detector writes says nothing usable."""
     graph = linked_model_graph()
     place_incident(graph, title="Something else entirely")
 

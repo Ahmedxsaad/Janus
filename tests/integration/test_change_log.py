@@ -24,12 +24,12 @@ import pytest
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.metadata.schema_classes import MLModelPropertiesClass
 
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.mcl import ChangeLog, mcl_config_from_env
-from modelguard.reconcile import consider
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.link import link_model, recorded_link
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.mcl import ChangeLog, mcl_config_from_env
+from janus.reconcile import consider
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.link import link_model, recorded_link
 
 pytestmark = pytest.mark.integration
 
@@ -62,7 +62,7 @@ def change_log():
     """
     mcl = mcl_config_from_env()
     if mcl is None:
-        pytest.skip("change log not configured; set the three MODELGUARD_KAFKA_* variables")
+        pytest.skip("change log not configured; set the three JANUS_KAFKA_* variables")
     # A fresh group per run, so this test always reads from `latest` at its own
     # subscription rather than resuming a cursor a previous run committed.
     from dataclasses import replace
@@ -76,7 +76,7 @@ def seeded(conn: DataHubConnection, config: ScanConfig):
     """Seed the graph, and make sure the model carries a *recorded* link.
 
     The seeder attaches features directly, which leaves no
-    ``modelguard.feature_table`` property behind, and the recorded arguments are
+    ``janus.feature_table`` property behind, and the recorded arguments are
     the whole of what the relink replays. Running `link` once here is what a user
     does anyway, and it is what makes the second test measure something rather
     than skip.

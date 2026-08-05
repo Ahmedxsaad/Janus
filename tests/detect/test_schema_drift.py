@@ -19,9 +19,9 @@ from datahub.metadata.schema_classes import (
     MLModelPropertiesClass,
 )
 
-from modelguard.config import ScanConfig
-from modelguard.detect.schema_drift import diff_schema, schema_drift_findings
-from modelguard.models import ChangeKind
+from janus.config import ScanConfig
+from janus.detect.schema_drift import diff_schema, schema_drift_findings
+from janus.models import ChangeKind
 from tests.conftest import (
     DEPLOYMENT_URN,
     FEATURE_TABLE_URN,
@@ -154,7 +154,7 @@ def test_a_snapshot_for_a_different_input_does_not_flag_this_one():
 
 
 def test_severity_tracks_whether_the_model_is_live():
-    from modelguard.models import Severity
+    from janus.models import Severity
 
     live = make_connection(
         _graph(snapshot={FEATURE_TABLE_URN: TRAINING_SCHEMA}, current=DRIFTED_SCHEMA, live=True)

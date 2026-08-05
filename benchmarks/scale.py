@@ -1,7 +1,7 @@
 """What a whole-catalog sweep costs, measured rather than extrapolated.
 
 ``RESULTS.md`` has said "no scale test" since the benchmark landed, and it is the
-first question anyone who runs a real catalog asks: ``modelguard scan
+first question anyone who runs a real catalog asks: ``janus scan
 --all-models`` performs one independent scan per model, so what does that cost at
 two hundred models rather than at one?
 
@@ -41,11 +41,11 @@ from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.metadata.schema_classes import MLModelPropertiesClass
 from datahub.metadata.urns import MlModelUrn
 
-from modelguard.agent import pipeline
-from modelguard.agent.pipeline import run_scan
-from modelguard.client import DataHubConnection
-from modelguard.config import ScanConfig
-from modelguard.seed import graph_spec as spec
+from janus.agent import pipeline
+from janus.agent.pipeline import run_scan
+from janus.client import DataHubConnection
+from janus.config import ScanConfig
+from janus.seed import graph_spec as spec
 
 #: Catalog sizes the sweep is measured at. Fixed, like every other constant in
 #: this package: a run that cannot be re-derived by reading the file is a run
@@ -54,7 +54,7 @@ SWEEP_SIZES: tuple[int, ...] = (1, 10, 50)
 
 #: Model id prefix for the replicas. Distinctive enough that anything left behind
 #: by an interrupted run is obvious in the UI and greppable in the graph.
-REPLICA_PREFIX = "modelguard_bench_scale_"
+REPLICA_PREFIX = "janus_bench_scale_"
 
 
 class _CountingGraph:
@@ -171,7 +171,7 @@ def create_replicas(conn: DataHubConnection, count: int) -> tuple[str, ...]:
     if seeded is None:
         raise RuntimeError(
             "the seeded model is not in this DataHub, so there is nothing to "
-            "replicate. Run modelguard-seed first."
+            "replicate. Run janus-seed first."
         )
 
     urns: list[str] = []
@@ -183,7 +183,7 @@ def create_replicas(conn: DataHubConnection, count: int) -> tuple[str, ...]:
                 entityUrn=urn,
                 aspect=MLModelPropertiesClass(
                     name=f"{REPLICA_PREFIX}{index:04d}",
-                    description="ModelGuard-Bench scale replica. Deleted when the run ends.",
+                    description="Janus-Bench scale replica. Deleted when the run ends.",
                     mlFeatures=list(seeded.mlFeatures or []),
                     trainingJobs=list(seeded.trainingJobs or []),
                     deployments=list(seeded.deployments or []),

@@ -10,8 +10,8 @@ from dataclasses import replace
 
 from datahub.metadata.schema_classes import GlossaryTermAssociationClass, GlossaryTermsClass
 
-from modelguard.config import ScanConfig
-from modelguard.detect.column_marks import (
+from janus.config import ScanConfig
+from janus.detect.column_marks import (
     ColumnMarkIndex,
     derivation_chains,
     marked_ancestor,

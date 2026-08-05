@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from modelguard.adapters import AdapterError, read_declaration
-from modelguard.adapters.feast import _source_table, read_repo
+from janus.adapters import AdapterError, read_declaration
+from janus.adapters.feast import _source_table, read_repo
 
 EXAMPLE_REPO = Path(__file__).resolve().parents[2] / "examples" / "feature-repo" / "feature_repo"
 

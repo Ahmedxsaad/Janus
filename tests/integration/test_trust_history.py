@@ -1,6 +1,6 @@
 """The trust history against a live DataHub: a MULTIPLE structured property, read back.
 
-Why a unit test does not cover this (F8): ``modelguard.trust_history`` is a
+Why a unit test does not cover this (F8): ``janus.trust_history`` is a
 structured property with MULTIPLE cardinality holding up to twenty pipe-delimited
 strings, and until this file ran, no such property had ever been written to a real
 GMS and read back. ``FakeGraph`` stores whatever it is handed; a server validates
@@ -22,15 +22,15 @@ from typing import TypeVar
 
 import pytest
 
-from modelguard.agent.pipeline import run_scan
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.detect.blast_radius import freshness_signal
-from modelguard.detect.leakage import leakage_findings
-from modelguard.detect.trust_score import DEDUCTION_UPSTREAM_FAILURE
-from modelguard.seed.scenarios import plant_leakage, plant_stale_source, revert_stale_source
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.trust_history import HISTORY_LIMIT, read_history
+from janus.agent.pipeline import run_scan
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.detect.blast_radius import freshness_signal
+from janus.detect.leakage import leakage_findings
+from janus.detect.trust_score import DEDUCTION_UPSTREAM_FAILURE
+from janus.seed.scenarios import plant_leakage, plant_stale_source, revert_stale_source
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.trust_history import HISTORY_LIMIT, read_history
 
 pytestmark = pytest.mark.integration
 

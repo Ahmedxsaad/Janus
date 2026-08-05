@@ -1,14 +1,14 @@
 # The dbt semantic layer over the feature table.
 #
 # A team that has adopted the semantic layer writes this for their BI tools, and
-# in doing so they write down exactly the thing `modelguard link` otherwise asks a
+# in doing so they write down exactly the thing `janus link` otherwise asks a
 # human to retype: which columns of this table are features, and which one is the
-# entity key that is not. `modelguard link --from dbt` reads it out of the compiled
-# manifest (modelguard/adapters/dbt.py, T-06) instead of asking a second time.
+# entity key that is not. `janus link --from dbt` reads it out of the compiled
+# manifest (janus/adapters/dbt.py, T-06) instead of asking a second time.
 #
 # Dimensions rather than measures throughout: a measure needs an aggregation time
 # dimension, and this table carries no event timestamp. What a column is aggregated
-# by is a BI question; which column a feature reads is the only one ModelGuard asks.
+# by is a BI question; which column a feature reads is the only one Janus asks.
 # The name is deliberately not `customer_features`. DataHub's dbt source keys a
 # semantic model as a dataset by its name, so a semantic model named after the
 # dbt model it is built on lands on the same URN and overwrites it: the feature

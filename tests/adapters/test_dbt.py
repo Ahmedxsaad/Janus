@@ -19,8 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from modelguard.adapters import AdapterError, read_declaration
-from modelguard.adapters.dbt import read_manifest
+from janus.adapters import AdapterError, read_declaration
+from janus.adapters.dbt import read_manifest
 
 MANIFEST = Path(__file__).resolve().parent / "dbt_manifest.json"
 

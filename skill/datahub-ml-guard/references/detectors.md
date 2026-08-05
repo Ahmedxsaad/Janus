@@ -31,9 +31,9 @@ a held-out split validates the same contaminated data. Only the lineage can catc
 The detector resolves each of a model's features to its source column, walks that column's
 upstream cone, and reports every column that reaches a declared label. A label is declared by a
 glossary term on the column, read from two places and unioned: `glossaryTerms` on the
-`schemaField` (what ModelGuard and the seeder write) and `editableSchemaMetadata` on the parent
+`schemaField` (what Janus and the seeder write) and `editableSchemaMetadata` on the parent
 dataset (what the DataHub UI writes when a human tags a column by hand). So a data scientist
-declares their label in the UI, touching no ModelGuard configuration, and detection starts
+declares their label in the UI, touching no Janus configuration, and detection starts
 working.
 
 One trap matters: `get_lineage(source_column=...)` returns the upstream **dataset**, not the
@@ -120,7 +120,7 @@ A model is scored only against what the scan actually checked: a scan that audit
 and leakage but not drift cannot deduct for drift it never looked for. The LLM never touches
 the number.
 
-**Write-back:** `modelguard.trust_score` (number) and `modelguard.trust_band` (string) as
+**Write-back:** `janus.trust_score` (number) and `janus.trust_band` (string) as
 structured properties on the mlModel, plus a rollup Model Impact Report.
 
 Cite: Sculley et al. 2015 (surrounding debt dominates reliability) and Mitchell et al.,
@@ -139,8 +139,8 @@ chain. It is configuration-gated and has no default: with no classification name
 matches a term that means something else in your catalog.
 
 ```bash
-MODELGUARD_SENSITIVE_TAG_URNS=urn:li:tag:PII,urn:li:tag:Confidential
-MODELGUARD_SENSITIVE_TERM_URNS=urn:li:glossaryTerm:Classification.Restricted
+JANUS_SENSITIVE_TAG_URNS=urn:li:tag:PII,urn:li:tag:Confidential
+JANUS_SENSITIVE_TERM_URNS=urn:li:glossaryTerm:Classification.Restricted
 ```
 
 **Deprecated input** needs no configuration: `deprecation` is DataHub's own aspect with one
@@ -163,4 +163,4 @@ trains on: past its freshness SLA, deprecated, or holding a classified column.
 It is its own finding type and never merged with the others, because it answers a weaker
 question with weaker evidence. It says so out loud, quoting the measured precision of
 table-level reasoning (0.25) against the question precision answers: which feature carries the
-problem. It never outranks a column-level finding. `modelguard link` is what upgrades it.
+problem. It never outranks a column-level finding. `janus link` is what upgrades it.

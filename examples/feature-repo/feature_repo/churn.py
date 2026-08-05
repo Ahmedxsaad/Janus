@@ -1,11 +1,11 @@
-"""A Feast repository that already declares the join ModelGuard needs.
+"""A Feast repository that already declares the join Janus needs.
 
-Nothing here is written for ModelGuard. It is an ordinary feature repo: a
+Nothing here is written for Janus. It is an ordinary feature repo: a
 customer entity, one feature view over a warehouse table, the label declared as
 a label view over another, and a feature service naming the pair a model trains
 on.
 
-`modelguard link --from feast --repo examples/feature-repo/feature_repo` reads
+`janus link --from feast --repo examples/feature-repo/feature_repo` reads
 exactly this file and proposes the link a human would otherwise have typed by
 hand, column by column.
 """

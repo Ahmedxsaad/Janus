@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Argos",
   "version": "0.1.0",
-  "identifier": "io.modelguard.argos",
+  "identifier": "io.janus.argos",
   "build": {
     "frontendDist": "ui"
   },
@@ -50,6 +50,6 @@
     "icon": ["icons/icon.png"],
     "category": "DeveloperTool",
     "shortDescription": "The DataHub watchdog",
-    "longDescription": "Argos renders the state of your data-to-model supply chain as a desktop pet, driven by a JSON event stream from ModelGuard or any other producer."
+    "longDescription": "Argos renders the state of your data-to-model supply chain as a desktop pet, driven by a JSON event stream from Janus or any other producer."
   }
 }

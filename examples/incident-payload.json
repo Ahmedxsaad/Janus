@@ -1,17 +1,17 @@
 {
   "_comment": [
-    "Real output: the incidentInfo aspect DataHub stored after `modelguard scan`",
+    "Real output: the incidentInfo aspect DataHub stored after `janus scan`",
     "raised a FRESHNESS incident on the stale source table. Read back from a",
     "local OSS Quickstart with graph.get_aspect(urn, IncidentInfoClass).",
     "An incident cannot attach to an mlModel: incidentInfo.entities accepts only",
     "dataset, chart, dashboard, dataFlow, dataJob, schemaField. Model-level risk",
-    "is carried by the modelguard.* structured properties instead."
+    "is carried by the janus.* structured properties instead."
   ],
   "incidentUrn": "urn:li:incident:3bd0e9cd-cf15-4c83-946f-ad632f384898",
   "incidentInfo": {
     "type": "FRESHNESS",
     "title": "Stale upstream data in ecommerce.public.loans_raw",
-    "description": "ecommerce.public.loans_raw last changed 30.0 hours ago, against a freshness SLA of 6.0 hours.\n\nModels at risk: 1 (1 currently serving).\n  - Credit Risk v3 [critical] live, 3 hops downstream\n\nDownstream datasets: 1. Downstream features: 2.\n\nFreshness was measured from the dataset's operation aspect, DataHub's record of when the table last changed. ModelGuard did not query the warehouse.\n\nAssessment:\necommerce.public.loans_raw has been stale for 30.0 hours, and 1 model(s) behind a live endpoint (Credit Risk v3) are scoring production traffic on features derived from it. Predictions are being served against inputs that no longer reflect the source system, and nothing in the serving path would surface that. Refresh the upstream table, then confirm the affected endpoints recover before trusting their output.\n\nRaised by ModelGuard run gate1-6c2236de.",
+    "description": "ecommerce.public.loans_raw last changed 30.0 hours ago, against a freshness SLA of 6.0 hours.\n\nModels at risk: 1 (1 currently serving).\n  - Credit Risk v3 [critical] live, 3 hops downstream\n\nDownstream datasets: 1. Downstream features: 2.\n\nFreshness was measured from the dataset's operation aspect, DataHub's record of when the table last changed. Janus did not query the warehouse.\n\nAssessment:\necommerce.public.loans_raw has been stale for 30.0 hours, and 1 model(s) behind a live endpoint (Credit Risk v3) are scoring production traffic on features derived from it. Predictions are being served against inputs that no longer reflect the source system, and nothing in the serving path would surface that. Refresh the upstream table, then confirm the affected endpoints recover before trusting their output.\n\nRaised by Janus run gate1-6c2236de.",
     "entities": [
       "urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.loans_raw,PROD)"
     ],

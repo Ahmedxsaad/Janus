@@ -1,4 +1,4 @@
-"""The guard-coverage trend on ModelGuard's own dataFlow (T-15). Offline."""
+"""The guard-coverage trend on Janus's own dataFlow (T-15). Offline."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from datahub.metadata.schema_classes import (
 )
 from datahub.metadata.urns import StructuredPropertyUrn
 
-from modelguard.detect.coverage import CHECK_LEAKAGE, CHECK_SCHEMA_DRIFT
-from modelguard.detect.guard_coverage import CatalogCoverage, CheckCoverage
-from modelguard.writeback.coverage_history import (
+from janus.detect.coverage import CHECK_LEAKAGE, CHECK_SCHEMA_DRIFT
+from janus.detect.guard_coverage import CatalogCoverage, CheckCoverage
+from janus.writeback.coverage_history import (
     HISTORY_LIMIT,
     CoverageEntry,
     append_entry,
@@ -20,8 +20,8 @@ from modelguard.writeback.coverage_history import (
     project_history,
     read_history,
 )
-from modelguard.writeback.process_instance import agent_flow_urn
-from modelguard.writeback.properties import COVERAGE_HISTORY
+from janus.writeback.process_instance import agent_flow_urn
+from janus.writeback.properties import COVERAGE_HISTORY
 from tests.conftest import FakeGraph, make_connection
 
 AT = datetime(2026, 8, 5, 9, 30, tzinfo=UTC)
@@ -171,7 +171,7 @@ def test_the_history_is_capped_oldest_first():
 
 
 def test_the_trend_lands_on_the_agents_own_flow_and_not_on_a_guarded_asset():
-    """The figure is about the whole graph, so it hangs on ModelGuard's entity."""
+    """The figure is about the whole graph, so it hangs on Janus's entity."""
     graph = FakeGraph()
     append_entry(make_connection(graph), make_coverage(), "scan-abc", now=AT)
 

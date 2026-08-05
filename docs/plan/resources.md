@@ -1,6 +1,6 @@
-# ModelGuard - Resource Library
+# Janus - Resource Library
 
-> Curated, annotated resources for building ModelGuard **production-grade**. Every entry has: a **URL**,
+> Curated, annotated resources for building Janus **production-grade**. Every entry has: a **URL**,
 > **Read** (the exact chapters / sections / concepts to focus on - not the whole thing), and **Maps to**
 > (the precise place in *our* project it informs - a detector, a file, or a plan section).
 >
@@ -68,12 +68,12 @@ https://sigmodrecord.org/publications/sigmodRecord/1806/pdfs/09_Surveys_Polyzoti
 **Amershi et al. - Software Engineering for Machine Learning: A Case Study (ICSE-SEIP 2019)**
 https://www.microsoft.com/en-us/research/publication/software-engineering-for-machine-learning-a-case-study/
 - **Read:** the **9-stage ML workflow** figure; the data-management + "data quality" pain points; the "AI-specific" challenges list.
-- **Maps to:** positions ModelGuard as the *validation* stage tooling; framing for "Real-World Usefulness" (PH §E).
+- **Maps to:** positions Janus as the *validation* stage tooling; framing for "Real-World Usefulness" (PH §E).
 
 **Shankar, Garcia, Hellerstein, Parameswaran - Operationalizing Machine Learning: An Interview Study (2022)**
 https://arxiv.org/abs/2209.09125
 - **Read:** §4 the **"Three Vs" (Velocity, Validation, Versioning)**; §5 pain points (undead features, pipeline jungles, "I don't know it broke until users complain").
-- **Maps to:** the narrative spine - ModelGuard is a *Validation* accelerator that protects *Velocity*. Use the "until production" quote in the pitch (`01-strategy §2`).
+- **Maps to:** the narrative spine - Janus is a *Validation* accelerator that protects *Velocity*. Use the "until production" quote in the pitch (`01-strategy §2`).
 
 **Rabanser, Günnemann, Lipton - Failing Loudly: Detecting Dataset Shift (NeurIPS 2019)**
 https://arxiv.org/abs/1810.11953
@@ -126,7 +126,7 @@ https://arxiv.org/abs/2102.07750
 
 **Fundamentals of Data Engineering - Reis & Housley (O'Reilly 2022)** - https://www.oreilly.com/library/view/fundamentals-of-data/9781098108298/
 - **Read:** **Ch 2 the data-engineering lifecycle** + the **"undercurrents"** (security, data management, DataOps, orchestration).
-- **Maps to:** positions ModelGuard among data-eng concerns; the "undercurrents" map to PH cross-cutting sections.
+- **Maps to:** positions Janus among data-eng concerns; the "undercurrents" map to PH cross-cutting sections.
 
 **Driving Data Quality with Data Contracts - Andrew Jones (Packt 2023)** - https://www.packtpub.com/product/driving-data-quality-with-data-contracts/9781837635009
 - **Read:** the chapters on **what a contract contains** and **enforcing contracts in pipelines**.
@@ -134,7 +134,7 @@ https://arxiv.org/abs/2102.07750
 
 **Site Reliability Engineering + The Site Reliability Workbook - Google (free)** - https://sre.google/sre-book/table-of-contents/
 - **Read:** **Ch 4 SLOs**, **Ch 6 Monitoring Distributed Systems** (the four golden signals), **Ch 14 Managing Incidents**, **Ch 15 Postmortem Culture**.
-- **Maps to:** ModelGuard's SLO/error-budget + incident lifecycle + blameless impact reports (PH §C.3-C.4).
+- **Maps to:** Janus's SLO/error-budget + incident lifecycle + blameless impact reports (PH §C.3-C.4).
 
 **Machine Learning Design Patterns - Lakshmanan, Robinson, Munn (O'Reilly 2020)** - https://www.oreilly.com/library/view/machine-learning-design/9781098115777/
 - **Read:** the **Reproducibility patterns** (Transform, Repeatable Splitting, **Bridged Schema**, Workflow Pipeline, Feature Store).
@@ -198,7 +198,7 @@ https://arxiv.org/abs/2102.07750
 
 **OpenLineage** - https://openlineage.io/ · repo https://github.com/OpenLineage/OpenLineage
 - **Read:** the **object model** (Run / Job / Dataset + **facets**), and the **columnLineage facet** spec.
-- **Maps to:** if ModelGuard emits lineage, speak OpenLineage for interop; conceptual model for `architecture.md §7`.
+- **Maps to:** if Janus emits lineage, speak OpenLineage for interop; conceptual model for `architecture.md §7`.
 
 **Marquez** - https://github.com/MarquezProject/marquez
 - **Read:** the **data model** + lineage API docs.
@@ -226,7 +226,7 @@ https://arxiv.org/abs/2102.07750
 
 **Open Data Contract Standard (ODCS) v3.1.0 - LF Bitol** - https://github.com/bitol-io/open-data-contract-standard
 - **Read:** the **v3.1.0 schema** - the `schema`, `quality`, and `SLA` sections + an example contract.
-- **Maps to:** `examples/input-data-contract.odcs.yaml` - the contract ModelGuard emits for a model's inputs (IP §6.5).
+- **Maps to:** `examples/input-data-contract.odcs.yaml` - the contract Janus emits for a model's inputs (IP §6.5).
 
 **datacontract-cli** - https://github.com/datacontract/datacontract-cli
 - **Read:** `datacontract test`, `import`, `export odcs` commands.
@@ -266,7 +266,7 @@ https://arxiv.org/abs/2102.07750
 
 **CML - Continuous Machine Learning (Iterative/DVC)** - https://github.com/iterative/cml · https://cml.dev/
 - **Read:** the GitHub Action setup + **`cml comment create`** PR-report pattern.
-- **Maps to:** the stretch **PR-comment / GitHub Action** that posts ModelGuard findings on a PR (IP §8, MigrationCopilot fallback).
+- **Maps to:** the stretch **PR-comment / GitHub Action** that posts Janus findings on a PR (IP §8, MigrationCopilot fallback).
 
 **DVC** - https://dvc.org/
 - **Read:** data/model versioning + pipeline reproducibility use-case docs.
@@ -282,7 +282,7 @@ https://arxiv.org/abs/2102.07750
 
 **Open Policy Agent (OPA) / Rego** - https://www.openpolicyagent.org/
 - **Read:** Rego basics + policy-as-code intro.
-- **Maps to:** express governance rules ("no model may depend on a table failing a freshness assertion") as policy ModelGuard enforces (PH §C, stretch).
+- **Maps to:** express governance rules ("no model may depend on a table failing a freshness assertion") as policy Janus enforces (PH §C, stretch).
 
 **The DevOps Handbook - Kim, Humble, Debois, Willis** - https://itrevolution.com/product/the-devops-handbook/
 - **Read:** the **"Three Ways"** (Flow, Feedback, Continual Learning) + the telemetry chapters.
@@ -317,7 +317,7 @@ https://arxiv.org/abs/2102.07750
 
 **MITRE ATLAS** - https://atlas.mitre.org/
 - **Read:** the **tactics matrix** + **"ML Supply Chain Compromise"** technique + case studies.
-- **Maps to:** reasoning about *malicious* vs *accidental* drift; what ModelGuard should flag as suspicious (PH §D.4).
+- **Maps to:** reasoning about *malicious* vs *accidental* drift; what Janus should flag as suspicious (PH §D.4).
 
 **SLSA** - https://slsa.dev/ · **Sigstore model signing** - https://github.com/sigstore/model-transparency
 - **Read:** SLSA **Levels** + **Provenance**; the model-transparency README (sign/verify model files).
@@ -355,7 +355,7 @@ https://arxiv.org/abs/2102.07750
   (https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook), which is where the
   subcategory text lives.
 - **Maps to:** maps our model-risk write-back to a recognized governance vocabulary (pairs with SR 11-7 for finance).
-- **What it changed here (T-02, D-109):** `modelguard crosswalk` and the site's
+- **What it changed here (T-02, D-109):** `janus crosswalk` and the site's
   crosswalk section. Each detector cites one MAP, one MEASURE and one MANAGE
   subcategory, quoted verbatim from the Playbook (retrieved 2026-08-04), and the
   table is generated from the detector registry so a new check cannot be absent

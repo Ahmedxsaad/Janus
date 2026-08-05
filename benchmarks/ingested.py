@@ -1,7 +1,7 @@
 """Score the detectors on a graph this project did not build (T-14).
 
 Every other measurement in this package runs against the graph
-``modelguard-seed`` wrote. That graph is exactly the one where the links the
+``janus-seed`` wrote. That graph is exactly the one where the links the
 detectors read already exist, which is precisely the assumption a real project
 breaks, so a perfect score on it is a claim about the seeder as much as about
 the detectors (benchmarks/CLAUDE.md rule 8, and F6 in docs/plan/07).
@@ -9,7 +9,7 @@ the detectors (benchmarks/CLAUDE.md rule 8, and F6 in docs/plan/07).
 This module removes the seeder. It measures against ``examples/real-project/``:
 postgres holding a public dataset, dbt building the feature and label tables,
 MLflow tracking the training run, and DataHub's own postgres, dbt and mlflow
-sources ingesting all three. Nothing in that stack knows ModelGuard exists, the
+sources ingesting all three. Nothing in that stack knows Janus exists, the
 leak is planted in the dbt model rather than by a seeding call, and the
 column-level lineage the detectors walk is what DataHub's own SQL parser
 produced from the compiled query.
@@ -27,7 +27,7 @@ Why it restores the model first
 -------------------------------
 The interesting half of a foreign graph is the state it arrives in: an mlModel
 with no features, no run inputs, and no link to a single column, where the only
-honest answer is that nothing could be checked (D-074). ModelGuard's own ``link``
+honest answer is that nothing could be checked (D-074). Janus's own ``link``
 then destroys that state, so a second run of this benchmark would measure a
 different graph from the first. :func:`restore_ingested_state` puts the model
 back to what ingestion produced by clearing exactly the two aspects ``link``
@@ -50,15 +50,15 @@ from datahub.metadata.schema_classes import (
 from datahub.metadata.urns import DatasetUrn, SchemaFieldUrn, Urn
 
 from benchmarks import metrics
-from modelguard.adapters import ADAPTERS, AdapterError, DeclaredLink, read_declaration
-from modelguard.agent.pipeline import run_scan
-from modelguard.client import DataHubConnection
-from modelguard.config import ScanConfig
-from modelguard.detect.degraded import training_tables
-from modelguard.detect.leakage import feature_source_column, leakage_findings
-from modelguard.discovery import search_model_urns
-from modelguard.models import LeakageFinding
-from modelguard.writeback.link import link_model
+from janus.adapters import ADAPTERS, AdapterError, DeclaredLink, read_declaration
+from janus.agent.pipeline import run_scan
+from janus.client import DataHubConnection
+from janus.config import ScanConfig
+from janus.detect.degraded import training_tables
+from janus.detect.leakage import feature_source_column, leakage_findings
+from janus.discovery import search_model_urns
+from janus.models import LeakageFinding
+from janus.writeback.link import link_model
 
 #: The example stack, relative to the repository root. The benchmark is run from
 #: there (``python -m benchmarks.run_bench``), the same way the dbt recipe in
@@ -185,7 +185,7 @@ def find_model(conn: DataHubConnection) -> str | None:
 def resolve_in_warehouse(conn: DataHubConnection, table: str) -> tuple[str | None, int]:
     """Resolve a declared relation to the warehouse dataset, and count the rest.
 
-    ``modelguard link`` resolves a name through :func:`modelguard.cli.resolve_table`,
+    ``janus link`` resolves a name through :func:`janus.cli.resolve_table`,
     which refuses an ambiguous one and prints every candidate for a human to
     choose from. That refusal is correct and it is not a thing a benchmark can
     answer, so the choice is made here, explicitly, by platform: the table the

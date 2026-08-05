@@ -1,6 +1,6 @@
-# ModelGuard - Implementation Plan
+# Janus - Implementation Plan
 
-> Companion to `01-strategy-modelguard.md`. This is the buildable blueprint: environment, architecture,
+> Companion to `01-strategy-janus.md`. This is the buildable blueprint: environment, architecture,
 > concrete code, the ML-graph seeder (the #1 de-risker), the four detectors, the write-back layer, the
 > agent, the OSS contribution, verification, demo, and a submission checklist mapped to the rubric.
 >
@@ -27,7 +27,7 @@
    • cron scan      Agent Ctx Kit)│                   │  MCP mutations / assertions YAML)
         │                         │                   ▼
         │            ┌────────────┴──────────────────────────────────┐
-        └──────────► │  ModelGuard  (LangGraph orchestrator)          │
+        └──────────► │  Janus  (LangGraph orchestrator)          │
                      │   1. Detect      (deterministic, Python)       │
                      │   2. Investigate (traverse blast radius)       │
                      │   3. Reason+Score(LLM, human-gated)            │
@@ -84,25 +84,25 @@ pytest  ruff  mypy  pre-commit                                             [veri
 ```
 
 **LLM:** BYO, **optional**, and **provider-agnostic** (D-030). Three variables, set together or not at all:
-`MODELGUARD_LLM_PROVIDER` (`anthropic` | `openai` | `google`), `MODELGUARD_LLM_MODEL` (the provider's model id
-verbatim), `MODELGUARD_LLM_API_KEY`. `modelguard/llm.py` is the only module that may import a vendor SDK or
+`JANUS_LLM_PROVIDER` (`anthropic` | `openai` | `google`), `JANUS_LLM_MODEL` (the provider's model id
+verbatim), `JANUS_LLM_API_KEY`. `janus/llm.py` is the only module that may import a vendor SDK or
 name a vendor's model; nothing is hardcoded, including the default provider. With no LLM configured, `scan`
 writes deterministic template prose and everything else behaves identically: detection, severity, and the
 incident title never depend on the LLM (D-027). All three chat classes were introspected: they accept the same
 `model` / `api_key` / `temperature` / `max_tokens` keywords despite differing field names [verified].
 
 **Configuration** (`.env`, git-ignored; `.env.example` carries the identical key set). Read only through
-`modelguard/env.py`, the one module that calls `load_dotenv` or touches `os.environ`. Values that identify a
+`janus/env.py`, the one module that calls `load_dotenv` or touches `os.environ`. Values that identify a
 system, an account, or a vendor have **no defaults**; thresholds do (D-029).
 ```
 DATAHUB_GMS_URL=http://localhost:8080
 DATAHUB_GMS_TOKEN=            # generate in UI: Settings → Access Tokens (only if auth is enabled)
-MODELGUARD_LLM_PROVIDER=      # anthropic | openai | google. All three LLM vars, or none.
-MODELGUARD_LLM_MODEL=         # the provider's model id, verbatim
-MODELGUARD_LLM_API_KEY=       # never passed as a CLI flag: argv leaks into shell history
-MODELGUARD_FRESHNESS_SLA_HOURS=   # blank -> 6, the documented default in config.py
-MODELGUARD_MAX_HOPS=              # blank -> 3
-MODELGUARD_LINEAGE_RESULT_CAP=    # blank -> 500
+JANUS_LLM_PROVIDER=      # anthropic | openai | google. All three LLM vars, or none.
+JANUS_LLM_MODEL=         # the provider's model id, verbatim
+JANUS_LLM_API_KEY=       # never passed as a CLI flag: argv leaks into shell history
+JANUS_FRESHNESS_SLA_HOURS=   # blank -> 6, the documented default in config.py
+JANUS_MAX_HOPS=              # blank -> 3
+JANUS_LINEAGE_RESULT_CAP=    # blank -> 500
 TOOLS_IS_MUTATION_ENABLED=true    # required to expose MCP write tools
 ```
 
@@ -111,13 +111,13 @@ TOOLS_IS_MUTATION_ENABLED=true    # required to expose MCP write tools
 ## 2. Repository layout (Apache-2.0 from commit #1)
 
 ```
-modelguard/
+janus/
 ├── LICENSE                      # Apache 2.0 - set repo License in GitHub "About" (judging requirement) [verified]
 ├── README.md                    # architecture diagram + "reads AND writes" table + "what we did NOT rebuild"
 ├── quickstart.sh                # one command: boot DataHub → load datapack → seed ML graph → run agent
 ├── pyproject.toml               # pinned deps + ruff/mypy/pytest config (replaced requirements.txt)
 ├── .env.example
-├── modelguard/
+├── janus/
 │   ├── client.py                # DataHubClient / DataHubGraph factory, env config
 │   ├── seed/                    # THE DE-RISKER - builds the ML graph the datapacks lack
 │   │   ├── graph_spec.py        # fixed URNs + values: the single source of truth for the seeded graph
@@ -137,7 +137,7 @@ modelguard/
 │   ├── agent/
 │   │   ├── graph.py             # LangGraph: detect → investigate → reason → (approve) → writeback
 │   │   └── tools.py             # datahub-agent-context toolset + custom write tools
-│   └── cli.py                   # `modelguard scan` / `modelguard watch` (Typer)
+│   └── cli.py                   # `janus scan` / `janus watch` (Typer)
 ├── skill/                       # OSS contribution → PR to datahub-project/datahub-skills
 │   └── datahub-ml-guard/
 │       ├── SKILL.md
@@ -150,7 +150,7 @@ modelguard/
 │   ├── guarding-assertion-payments.yml
 │   ├── input-data-contract.odcs.yaml   # ODCS contract emitted for a model's inputs (see §6.5)
 │   └── incident-payload.json
-├── benchmarks/                  # "ModelGuard-Bench" - see 03-production-hardening.md §A
+├── benchmarks/                  # "Janus-Bench" - see 03-production-hardening.md §A
 │   ├── inject.py                # Jenga-based corruption + leakage/drift injection
 │   ├── run_bench.py             # precision/recall/F1, MTTD, baselines, scale curve
 │   ├── golden/                  # golden impact reports for regression diffing
@@ -172,7 +172,7 @@ The datapacks are warehouse/BI-centric; they contain **no** ML entities. We seed
 supply chain **on top of an existing datapack table** so real column-level lineage exists into the model.
 
 Actual SDK surface, introspected from **acryl-datahub 1.6.0.13** [verified]. The snippet this section
-originally carried was wrong on four symbols; see D-012. Implemented in `modelguard/seed/seed_ml_graph.py`.
+originally carried was wrong on four symbols; see D-012. Implemented in `janus/seed/seed_ml_graph.py`.
 
 ```python
 from datahub.sdk.main_client import DataHubClient
@@ -213,8 +213,8 @@ graph.emit_mcps([
 
 > **`MLFeatureProperties.sources` is dataset-granular, not column-granular** [verified]. Its relationship
 > declares `entityTypes: [dataset]`, so a feature may point at the dataset it derives from but **not** at a
-> `schemaField`. Pointing it at a column URN creates a dangling edge. ModelGuard therefore records the exact
-> source column in the feature's `customProperties` under `modelguard.source_column`. Problem 1's traversal
+> `schemaField`. Pointing it at a column URN creates a dangling edge. Janus therefore records the exact
+> source column in the feature's `customProperties` under `janus.source_column`. Problem 1's traversal
 > starts from that column, not from `sources`.
 
 **Attaching features to the model:** `MLModel` exposes no `mlFeatures` API. Upsert the model first, then read
@@ -253,7 +253,7 @@ graph = DataHubGraph(DatahubClientConfig(server=GMS_URL, token=TOKEN))
 graph.execute_graphql("""
 mutation { raiseIncident(input:{
   resourceUrn:"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.customer_features,PROD),prior_default_flag)",
-  type: FIELD, title:"ModelGuard smoke test",
+  type: FIELD, title:"Janus smoke test",
   description:"If you can read this in the UI, write-back works." }) }
 """)   # returns the new incident URN
 ```
@@ -325,7 +325,7 @@ and a deployment with no properties aspect is not live.
 - **Tag** `model-at-risk` on the model. There is **no mlModel patch builder** in `datahub.specific`
   [verified], so tagging is read-merge-emit on `globalTags`; a blind write drops other people's tags.
   Glossary terms are deferred to P1, where `leakage-risk` on the leaking feature is the natural term.
-- **Structured properties** on the model: `modelguard.risk_flags` and `modelguard.run_id`. **Not**
+- **Structured properties** on the model: `janus.risk_flags` and `janus.run_id`. **Not**
   `trust_score`: no detector computes it yet, and writing a number nothing measured is fabrication.
 - **Guarding assertion** on the offending upstream table as **open-assertions YAML** (verified format):
   ```yaml
@@ -333,13 +333,13 @@ and a deployment with no properties aspect is not live.
   assertions:
     - entity: urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.loans_raw,PROD)
       type: freshness
-      id_raw: modelguard.freshness.ecommerce.public.loans_raw   # stable -> stable assertion guid
+      id_raw: janus.freshness.ecommerce.public.loans_raw   # stable -> stable assertion guid
       lookback_interval: "6 hours"
       last_modified_field: updated_at
       schedule: { type: interval, interval: "6 hours" }
   ```
   Emit it as an artifact in `examples/` **and** create the assertion entity so it appears in the Quality tab,
-  **plus** an `assertionRunEvent` carrying the result ModelGuard actually measured on this scan (D-026). The
+  **plus** an `assertionRunEvent` carrying the result Janus actually measured on this scan (D-026). The
   assertion's declared type is `DATASET_CHANGE` and the detector reads the `operation` aspect, so the declared
   check and the executed check are the same check: a fresh table writes SUCCESS. Three traps, all verified:
   - `DataHubClient.assertions` is **Cloud only** (it imports `acryl_datahub_cloud`). On OSS, parse the YAML
@@ -360,7 +360,7 @@ declaration and the document id derives from the model, so both update in place.
 as production-grade.
 
 ### 4.3 Verify the loop
-`modelguard scan --table loans_raw` → incident + tag + properties + assertion + run event + report, all visible
+`janus scan --table loans_raw` → incident + tag + properties + assertion + run event + report, all visible
 in the UI, same result every run. The gate is executable, not a UI inspection:
 `pytest -m integration tests/integration/test_phase1_loop.py` seeds, plants the failure, scans, asserts every
 write landed, rescans to prove nothing duplicates, then reverts and asserts a clean scan writes nothing. It
@@ -392,14 +392,14 @@ The shipped detector reads `.paths` and never `.urn` for this comparison
 (section 8.3).
 
 **Label column** is declared as a glossary term (`urn:li:glossaryTerm:
-modelguard.label`), read from two aspects and unioned: directly on the
-`schemaField` (what ModelGuard and the seeder write), and via
+janus.label`), read from two aspects and unioned: directly on the
+`schemaField` (what Janus and the seeder write), and via
 `editableSchemaMetadata` on the parent dataset (what the DataHub UI writes when
 a human tags a column by hand). Both routes were emitted and read back against
 a live Quickstart before the detector was written (D-032). A structured
 property on the training dataset was considered and rejected: it is invisible
 in the UI's own vocabulary, and a term reaches a human declaring their own
-label with zero ModelGuard configuration.
+label with zero Janus configuration.
 
 Temporal leakage (a feature derived from a column produced after the
 prediction timestamp) is not yet implemented; the column-lineage leakage above
@@ -428,7 +428,7 @@ ingestion lags training, and the `lastModified` stamps are unreliable as an
 "as-of training" cursor. The shipped detector instead captures a **schema
 fingerprint on the training run at training time** (a JSON map of input dataset
 URN to `field_path -> native_type`, in `customProperties` under
-`modelguard.training_schema`) and diffs the input dataset's **current**
+`janus.training_schema`) and diffs the input dataset's **current**
 `schemaMetadata` against it. This is exactly the training-serving skew guard
 TFX/TFDV perform (Breck et al. 2019): freeze a schema at training, validate
 serving data against it. Deterministic, testable, and more robust than trusting
@@ -447,8 +447,8 @@ version history (D-036).
 
 > **Landed 2026-07-16** (D-037). `trust_inputs_from_findings` reduces a scan's
 > findings about one model to deterministic inputs, `trust_score` applies the
-> weights below, and the pipeline writes `modelguard.trust_score` +
-> `modelguard.trust_band` on each model a finding named. 7 unit tests plus
+> weights below, and the pipeline writes `janus.trust_score` +
+> `janus.trust_band` on each model a finding named. 7 unit tests plus
 > pipeline and integration coverage.
 
 ```
@@ -460,7 +460,7 @@ trust = 100
   − 10·(missing_owner)      # weights are illustrative; expose in config
 score ∈ [0,100] → band: healthy / watch / at-risk
 ```
-- **Write-back:** `modelguard.trust_score` (number) + `modelguard.risk_flags` (multiple string) as
+- **Write-back:** `janus.trust_score` (number) + `janus.risk_flags` (multiple string) as
   **structured properties on the mlModel / model card**, plus a rollup **Model Impact Report** document.
 - **Cite** Sculley et al. 2015 (undeclared consumers) + Mitchell et al. 2019 (model cards).
 
@@ -494,17 +494,17 @@ key: it changes every run, so including it would duplicate every finding too (D-
 ### 6.2 Structured properties [verified]
 Define (YAML → `datahub properties upsert -f props.yaml`):
 ```yaml
-- id: modelguard.trust_score
-  qualified_name: modelguard.trust_score
+- id: janus.trust_score
+  qualified_name: janus.trust_score
   type: number
   cardinality: SINGLE
-  display_name: ModelGuard Trust Score
+  display_name: Janus Trust Score
   entity_types: [mlModel]
-- id: modelguard.risk_flags
-  qualified_name: modelguard.risk_flags
+- id: janus.risk_flags
+  qualified_name: janus.risk_flags
   type: string
   cardinality: MULTIPLE
-  display_name: ModelGuard Risk Flags
+  display_name: Janus Risk Flags
   entity_types: [mlModel]
 ```
 Assign (GraphQL):
@@ -512,7 +512,7 @@ Assign (GraphQL):
 mutation { upsertStructuredProperties(input:{
   assetUrn:"<mlModel urn>",
   structuredPropertyInputParams:[
-    { structuredPropertyUrn:"urn:li:structuredProperty:modelguard.trust_score",
+    { structuredPropertyUrn:"urn:li:structuredProperty:janus.trust_score",
       values:[{ numberValue: 62 }] }]}) { properties { structuredProperty { urn } } } }
 ```
 (or OpenAPI v3 `POST /openapi/v3/entity/mlModel/<url-encoded-urn>/structuredProperties`.) [verified]
@@ -533,14 +533,14 @@ PATCH builders instead of the agent so writes are reproducible in tests.
 > `schemaMetadata` and returns an ODCS v3.1.0 YAML: one schema object per input table
 > (native types verbatim as `physicalType`, `logicalType` mapped where unambiguous,
 > `required` from `nullable`) plus one `slaProperties` freshness entry per table for the
-> SLA ModelGuard guards. Exposed as `modelguard scan --model <m> --contract-out <path>`;
+> SLA Janus guards. Exposed as `janus scan --model <m> --contract-out <path>`;
 > it renders a file and never mutates the graph, so it runs on a clean or dry-run scan.
 > `examples/input-data-contract.odcs.yaml` was generated from a real seeded scan and
 > lints green against datacontract-cli's bundled ODCS 3.1.0 JSON Schema. 10 unit tests.
-> No volume/quality expectation is emitted: ModelGuard measures none (writeback rule 10).
+> No volume/quality expectation is emitted: Janus measures none (writeback rule 10).
 
 For a model's input tables, emit an **Open Data Contract Standard (ODCS v3.1.0)** YAML capturing the schema
-+ freshness/volume/quality expectations ModelGuard derived, and validate it with `datacontract-cli` before
++ freshness/volume/quality expectations Janus derived, and validate it with `datacontract-cli` before
 committing it to `examples/`. This makes the "contract for the ML boundary" tangible and standards-based
 (Linux Foundation Bitol, Apache-2.0). See `resources.md §6`. Optional but a strong Originality + Usefulness signal.
 
@@ -561,7 +561,7 @@ committing it to `examples/`. This makes the "contract for the ML boundary" tang
 > `watch` shipped as a **polling** loop that acts on finding-set transitions, not
 > the Actions/Kafka consumer sketched below; that remains the documented upgrade
 > path. Findings ride an in-process holder rather than the checkpointed state, so
-> no ModelGuard dataclass is msgpack-serialized. 9 unit tests (4 on the approval
+> no Janus dataclass is msgpack-serialized. 9 unit tests (4 on the approval
 > gate, 5 on watch transitions). The `tools.py` sketch below did not ship.
 
 `datahub-agent-context` gives the read toolset (`search`, `get_entities`, `get_lineage`,
@@ -598,8 +598,8 @@ detect ─▶ investigate ─▶ reason_and_score ─▶ [human_approval interru
 - `write_back` = idempotent mutations from §6.
 
 Two entry points via `cli.py` (Typer):
-- `modelguard scan` - one-shot audit of all models (great for the video's "before" state).
-- `modelguard watch` - polling audit with finding-set transition detection, recovery
+- `janus scan` - one-shot audit of all models (great for the video's "before" state).
+- `janus watch` - polling audit with finding-set transition detection, recovery
   reconciliation, bounded retry/backoff, and the DataHub Actions framework as a future
   event-driven upgrade. The demo never depends on Kafka timing.
 
@@ -615,7 +615,7 @@ Two entry points via `cli.py` (Typer):
 
 > **Landed 2026-07-21** (D-041). `skill/datahub-ml-guard/` ships `SKILL.md` (the
 > frontmatter below plus When-to-use / Workflow / Cloud-boundary), `scripts/` (thin
-> bash wrappers shelling to `modelguard-seed` and `modelguard scan --table/--model`,
+> bash wrappers shelling to `janus-seed` and `janus scan --table/--model`,
 > no logic fork), and `references/` (`detectors.md`, `datahub-write-surface.md`). It
 > mirrors the upstream datahub-enrich format (frontmatter fields `name`,
 > `description`, `user-invocable`, `allowed-tools`).
@@ -722,14 +722,14 @@ Concrete, reproducible findings from Phase 0, worth far more than generic praise
 
 ## 9. Testing & verification
 
-> **ModelGuard-Bench core landed 2026-07-22** (D-047), covering the measured half of this section:
+> **Janus-Bench core landed 2026-07-22** (D-047), covering the measured half of this section:
 > `python -m benchmarks.run_bench` scores the detectors against a live graph and writes
 > `benchmarks/RESULTS.md`. `quickstart.sh` is still **not** written, so the one-command judge path
 > below remains the seed-plus-scan sequence in the README.
 
 - **Unit** (`tests/`): detectors against fixture graphs - a known-leakage graph must flag exactly the seeded
   feature; a clean graph must flag nothing (no false positives). Schema-diff on a synthetic rename.
-- **Integration:** `quickstart.sh` on a clean machine → seed → inject scenario → `modelguard scan` → assert
+- **Integration:** `quickstart.sh` on a clean machine → seed → inject scenario → `janus scan` → assert
   the incident/property/document exist via GraphQL reads. This *is* the judge's reproduction path.
 - **Determinism:** LLM `temperature=0`; detection independent of the LLM; scenario seeds fixed.
 - **Idempotency test:** run `scan` twice → exactly one incident per finding.
@@ -741,12 +741,12 @@ Concrete, reproducible findings from Phase 0, worth far more than generic praise
 
 **Video arc:** (0:00) cold-open on the pain - "a credit-risk model scoring live loans; a source column
 silently went stale - the kind of miss that cost one team \$250K in a weekend." (0:20) trigger the planted
-issue. (0:35) ModelGuard runs: lights up the lineage graph, names the exact model + live deployment at risk,
+issue. (0:35) Janus runs: lights up the lineage graph, names the exact model + live deployment at risk,
 detects the leakage feature, computes the trust score. (1:40) **cut to the DataHub UI** - the incident, the
 `model-at-risk` tag, the trust-score property, the guarding assertion, the impact report, all written back.
 (2:30) close on the `datahub-ml-guard` skill + the MCP PR. No slideware; one uninterrupted live loop.
 
-**Submission checklist (maps to the rubric - see `01-strategy-modelguard.md` §4):**
+**Submission checklist (maps to the rubric - see `01-strategy-janus.md` §4):**
 - [ ] Public repo, **Apache-2.0 license file**, License shown in GitHub **About** [verified] (hard requirement)
 - [ ] Project URL + testing instructions (local `quickstart.sh`; credentials if any)
 - [ ] `examples/` folder: impact report, guarding-assertion YAML, incident payload, the skill [verified]
@@ -768,7 +768,7 @@ detects the leakage feature, computes the trust score. (1:40) **cut to the DataH
 | Risk | Likelihood | Mitigation |
 |---|---|---|
 | ~~**ML-graph seeding harder than expected**~~ | RETIRED | Seeder works and is idempotent; gate passed. |
-| ~~`get_lineage` won't cross into ML entities~~ | RETIRED | Column lineage is dataset-to-dataset and resolves; ML entities are reached through `mlModelProperties` and the feature `sources` aspect plus the `modelguard.source_column` bridge. |
+| ~~`get_lineage` won't cross into ML entities~~ | RETIRED | Column lineage is dataset-to-dataset and resolves; ML entities are reached through `mlModelProperties` and the feature `sources` aspect plus the `janus.source_column` bridge. |
 | **Incidents cannot attach to mlModel** | REALIZED | Findings go on the dataset/schemaField; model risk goes on structured properties (D-017). Reframed as an OSS RFC (section 8.3). |
 | Exact SDK/agent import symbols differ | Med | [confirm]-flagged everywhere; `pip show` + introspect; pin versions in `pyproject.toml`. |
 | Actions/Kafka setup eats time | Med | Ship `scan` first; `watch` is optional polish with a polling fallback. |
@@ -787,7 +787,7 @@ detects the leakage feature, computes the trust score. (1:40) **cut to the DataH
   proven by an executable integration gate that reruns and asserts nothing duplicates.
 - **W3 - Differentiators.** P1 leakage detector (flagship), P3 schema drift, P4 trust score. Draft the
   `datahub-ml-guard` SKILL.md and test it in Claude Code/Cursor. Add finance/healthcare framing toggle.
-  Stand up **ModelGuard-Bench** (Jenga injection + precision/recall) so detectors are measured, not asserted
+  Stand up **Janus-Bench** (Jenga injection + precision/recall) so detectors are measured, not asserted
   (`03-production-hardening.md §A`).
 - **W4 - Contribution + hardening.** Open the skill PR (+ MCP tool/RFC); write README + `examples/` (incl.
   ODCS contract); harden `quickstart.sh`; `watch` mode + Slack notify if time. Run the **baseline comparison**

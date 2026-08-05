@@ -31,9 +31,9 @@ class TestParse:
     def test_counts_every_status(self):
         counts, _survivors = _parse(
             _results(
-                "modelguard.detect.leakage.x_a__mutmut_1: killed",
-                "modelguard.detect.leakage.x_a__mutmut_2: survived",
-                "modelguard.detect.leakage.x_a__mutmut_3: killed",
+                "janus.detect.leakage.x_a__mutmut_1: killed",
+                "janus.detect.leakage.x_a__mutmut_2: survived",
+                "janus.detect.leakage.x_a__mutmut_3: killed",
             )
         )
 
@@ -42,12 +42,12 @@ class TestParse:
     def test_only_survivors_are_returned_by_name(self):
         _, survivors = _parse(
             _results(
-                "modelguard.detect.leakage.x_a__mutmut_1: killed",
-                "modelguard.detect.leakage.x_a__mutmut_2: survived",
+                "janus.detect.leakage.x_a__mutmut_1: killed",
+                "janus.detect.leakage.x_a__mutmut_2: survived",
             )
         )
 
-        assert survivors == ["modelguard.detect.leakage.x_a__mutmut_2"]
+        assert survivors == ["janus.detect.leakage.x_a__mutmut_2"]
 
     def test_an_unparseable_line_stops_the_render_rather_than_being_skipped(self):
         with pytest.raises(SystemExit):
@@ -60,28 +60,24 @@ class TestParse:
         (killed, survived, timeout, suspicious, no tests, ...) is not
         hard-coded here.
         """
-        counts, _ = _parse(_results("modelguard.detect.leakage.x_a__mutmut_1: timeout"))
+        counts, _ = _parse(_results("janus.detect.leakage.x_a__mutmut_1: timeout"))
 
         assert counts == {"timeout": 1}
 
 
 class TestVerifyCoverage:
     def test_a_survivor_matching_a_verdicts_prefix_is_assigned_to_it(self):
-        verdicts = (Verdict("modelguard.detect.leakage.x_a", "gap", "because"),)
+        verdicts = (Verdict("janus.detect.leakage.x_a", "gap", "because"),)
 
-        by_verdict = _verify_coverage(
-            ["modelguard.detect.leakage.x_a__mutmut_1"], verdicts=verdicts
-        )
+        by_verdict = _verify_coverage(["janus.detect.leakage.x_a__mutmut_1"], verdicts=verdicts)
 
-        assert by_verdict["modelguard.detect.leakage.x_a"] == [
-            "modelguard.detect.leakage.x_a__mutmut_1"
-        ]
+        assert by_verdict["janus.detect.leakage.x_a"] == ["janus.detect.leakage.x_a__mutmut_1"]
 
     def test_a_survivor_with_no_matching_verdict_stops_the_render(self):
-        with pytest.raises(SystemExit, match=r"modelguard\.detect\.leakage\.x_unlisted"):
+        with pytest.raises(SystemExit, match=r"janus\.detect\.leakage\.x_unlisted"):
             _verify_coverage(
-                ["modelguard.detect.leakage.x_unlisted__mutmut_1"],
-                verdicts=(Verdict("modelguard.detect.leakage.x_a", "gap", "because"),),
+                ["janus.detect.leakage.x_unlisted__mutmut_1"],
+                verdicts=(Verdict("janus.detect.leakage.x_a", "gap", "because"),),
             )
 
     def test_a_prefix_that_is_a_substring_of_another_function_does_not_steal_it(self):
@@ -91,32 +87,32 @@ class TestVerifyCoverage:
         semantics rather than str.startswith.
         """
         verdicts = (
-            Verdict("modelguard.detect.leakage.x_a", "gap", "because"),
-            Verdict("modelguard.detect.leakage.x_ancestor", "gap", "unrelated"),
+            Verdict("janus.detect.leakage.x_a", "gap", "because"),
+            Verdict("janus.detect.leakage.x_ancestor", "gap", "unrelated"),
         )
 
         by_verdict = _verify_coverage(
-            ["modelguard.detect.leakage.x_ancestor__mutmut_1"], verdicts=verdicts
+            ["janus.detect.leakage.x_ancestor__mutmut_1"], verdicts=verdicts
         )
 
-        assert by_verdict["modelguard.detect.leakage.x_a"] == []
-        assert by_verdict["modelguard.detect.leakage.x_ancestor"] == [
-            "modelguard.detect.leakage.x_ancestor__mutmut_1"
+        assert by_verdict["janus.detect.leakage.x_a"] == []
+        assert by_verdict["janus.detect.leakage.x_ancestor"] == [
+            "janus.detect.leakage.x_ancestor__mutmut_1"
         ]
 
 
 class TestRenderMutationSection:
     VERDICTS = (
-        Verdict("modelguard.detect.leakage.x_a", "gap", "a real gap explanation"),
-        Verdict("modelguard.detect.leakage.x_b", "equivalent", "an equivalence explanation"),
+        Verdict("janus.detect.leakage.x_a", "gap", "a real gap explanation"),
+        Verdict("janus.detect.leakage.x_b", "equivalent", "an equivalence explanation"),
     )
 
     def test_the_score_is_killed_over_killed_plus_survived(self):
         text = _results(
-            "modelguard.detect.leakage.x_a__mutmut_1: killed",
-            "modelguard.detect.leakage.x_a__mutmut_2: killed",
-            "modelguard.detect.leakage.x_a__mutmut_3: killed",
-            "modelguard.detect.leakage.x_b__mutmut_1: survived",
+            "janus.detect.leakage.x_a__mutmut_1: killed",
+            "janus.detect.leakage.x_a__mutmut_2: killed",
+            "janus.detect.leakage.x_a__mutmut_3: killed",
+            "janus.detect.leakage.x_b__mutmut_1: survived",
         )
 
         section = render_mutation_section(text, verdicts=self.VERDICTS)
@@ -125,8 +121,8 @@ class TestRenderMutationSection:
 
     def test_every_survivor_group_gets_its_own_row(self):
         text = _results(
-            "modelguard.detect.leakage.x_a__mutmut_1: survived",
-            "modelguard.detect.leakage.x_b__mutmut_1: survived",
+            "janus.detect.leakage.x_a__mutmut_1: survived",
+            "janus.detect.leakage.x_b__mutmut_1: survived",
         )
 
         section = render_mutation_section(text, verdicts=self.VERDICTS)
@@ -138,8 +134,8 @@ class TestRenderMutationSection:
 
     def test_a_function_with_no_survivors_gets_no_row(self):
         text = _results(
-            "modelguard.detect.leakage.x_a__mutmut_1: killed",
-            "modelguard.detect.leakage.x_b__mutmut_1: survived",
+            "janus.detect.leakage.x_a__mutmut_1: killed",
+            "janus.detect.leakage.x_b__mutmut_1: survived",
         )
 
         section = render_mutation_section(text, verdicts=self.VERDICTS)
@@ -149,9 +145,9 @@ class TestRenderMutationSection:
 
     def test_gap_and_equivalent_counts_are_disjoint_and_sum_to_survived(self):
         text = _results(
-            "modelguard.detect.leakage.x_a__mutmut_1: survived",
-            "modelguard.detect.leakage.x_a__mutmut_2: survived",
-            "modelguard.detect.leakage.x_b__mutmut_1: survived",
+            "janus.detect.leakage.x_a__mutmut_1: survived",
+            "janus.detect.leakage.x_a__mutmut_2: survived",
+            "janus.detect.leakage.x_b__mutmut_1: survived",
         )
 
         section = render_mutation_section(text, verdicts=self.VERDICTS)
@@ -161,14 +157,14 @@ class TestRenderMutationSection:
 
     def test_the_section_is_wrapped_in_the_splice_markers(self):
         section = render_mutation_section(
-            _results("modelguard.detect.leakage.x_a__mutmut_1: killed"), verdicts=self.VERDICTS
+            _results("janus.detect.leakage.x_a__mutmut_1: killed"), verdicts=self.VERDICTS
         )
 
         assert section.startswith(START_MARKER)
         assert section.rstrip("\n").endswith(END_MARKER)
 
     def test_an_unlisted_survivor_stops_the_render(self):
-        text = _results("modelguard.detect.leakage.x_unlisted__mutmut_1: survived")
+        text = _results("janus.detect.leakage.x_unlisted__mutmut_1: survived")
 
         with pytest.raises(SystemExit):
             render_mutation_section(text, verdicts=self.VERDICTS)
@@ -177,7 +173,7 @@ class TestRenderMutationSection:
 class TestSplice:
     def test_a_file_with_no_prior_section_gets_one_appended(self, tmp_path):
         results_md = tmp_path / "RESULTS.md"
-        results_md.write_text("# ModelGuard-Bench results\n\nExisting content.\n")
+        results_md.write_text("# Janus-Bench results\n\nExisting content.\n")
 
         spliced = _splice(results_md, f"{START_MARKER}\nnew section\n{END_MARKER}\n")
 

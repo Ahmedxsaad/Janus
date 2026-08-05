@@ -1,12 +1,12 @@
-# ModelGuard on a real ML project
+# Janus on a real ML project
 
 Everything else in this repository is measured against a graph
-`modelguard-seed` built. A seeded graph is exactly the one where the links the
+`janus-seed` built. A seeded graph is exactly the one where the links the
 detectors read already exist, which is precisely the assumption a real project
 breaks. So this is the same product run against an ordinary stack that knows
 nothing about it, and a record of what that found (D-074, 2026-08-01).
 
-It is also a benchmark target now, not only a validation exercise: ModelGuard-Bench
+It is also a benchmark target now, not only a validation exercise: Janus-Bench
 scores the detectors against the graph **this** stack's ingestion produced, in its
 own section of `benchmarks/RESULTS.md`, never merged with the seeded numbers
 (D-121, T-14). Stand the stack up as below and `python -m benchmarks.run_bench`
@@ -24,7 +24,7 @@ sources.
 | `ml/train_churn.py` | Trains a logistic-regression churn model and tracks it in MLflow |
 | `ingestion/` | Three DataHub recipes: postgres, dbt, mlflow |
 
-Two declarations of one join is the point rather than duplication: `modelguard
+Two declarations of one join is the point rather than duplication: `janus
 link --from dbt` and `--from feast` each read one of them, and the benchmark
 checks that both arrive at the same seven columns of the same ingested table.
 
@@ -56,9 +56,9 @@ Verified live on the demo VM, 2026-08-01, against DataHub GMS 1.5.0.6 with
    nothing else: no features, no inputs on the run, no link to a single column.
    A scan of that model can only report that it had nothing to check, which is
    what it now says rather than reporting the model healthy.
-2. **One `modelguard link` call closes the gap**, and the leak is caught on the
+2. **One `janus link` call closes the gap**, and the leak is caught on the
    real graph, with the derivation quoted from DataHub's own lineage:
-   `contract_renewed_flag <- churn`. `modelguard gate` exits 1 on it.
+   `contract_renewed_flag <- churn`. `janus gate` exits 1 on it.
 3. **Fixing it closes the incident.** Delete the column, rebuild with dbt,
    re-ingest, re-link, rescan: the finding is gone and the incident resolves
    itself. Closing that loop needed a fix (D-069's known gap: a leak fixed by
@@ -66,9 +66,9 @@ Verified live on the demo VM, 2026-08-01, against DataHub GMS 1.5.0.6 with
    walked only the model's current features and a deleted column is in none).
 4. **Re-ingestion un-links every model.** DataHub's mlflow source upserts the
    whole `mlModelProperties` aspect, dropping the features `link` wrote. Filed
-   as [feedback #14](../../docs/most-valuable-feedback.md). ModelGuard records
+   as [feedback #14](../../docs/most-valuable-feedback.md). Janus records
    what `link` was told as structured properties, an aspect ingestion does not
-   touch, so replaying it is `modelguard link --all`: no arguments, every linked
+   touch, so replaying it is `janus link --all`: no arguments, every linked
    model, safe on a schedule.
 
 ## What the second run found (2026-08-04, D-121, T-14)
@@ -121,29 +121,29 @@ python ml/train_churn.py
 
 cd ingestion && for r in postgres dbt mlflow; do datahub ingest -c $r.yml; done && cd ..
 
-modelguard inventory                    # telco_churn_1: not checked
+janus inventory                    # telco_churn_1: not checked
 
 # The feature table is spelled by two datasets on a dbt stack (the warehouse
 # table and its dbt sibling), so name the warehouse one. `link` prints both and
 # refuses rather than choosing, which is what you want it to do.
 FEATURES='urn:li:dataset:(urn:li:dataPlatform:postgres,warehouse.analytics.customer_features,PROD)'
 LABELS='urn:li:dataset:(urn:li:dataPlatform:postgres,warehouse.analytics.customer_labels,PROD)'
-modelguard link --model telco_churn_1 \
+janus link --model telco_churn_1 \
   --features "$FEATURES" --label-table "$LABELS" \
   --label-column churned --exclude customer_id
-modelguard scan --model telco_churn_1   # the leak, with its derivation
+janus scan --model telco_churn_1   # the leak, with its derivation
 ```
 
 Or import the join instead of typing it, from either declaration this project
 already carries (`--from` proposes and writes nothing until you confirm):
 
 ```bash
-modelguard link --model telco_churn_1 --from feast --repo feature_repo
-modelguard link --model telco_churn_1 --from dbt --repo churn_analytics \
+janus link --model telco_churn_1 --from feast --repo feature_repo
+janus link --model telco_churn_1 --from dbt --repo churn_analytics \
   --label-table "$LABELS" --label-column churned
 ```
 
-On a schedule, the last three become `modelguard link --all && modelguard scan
+On a schedule, the last three become `janus link --all && janus scan
 --all-models`, which is the post-ingestion step this stack actually needs.
 
 Then play the fix: delete the `contract_renewed_flag` line from

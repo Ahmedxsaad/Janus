@@ -12,14 +12,14 @@ from datahub.metadata.schema_classes import (
     OwnershipTypeClass,
 )
 
-from modelguard.config import ScanConfig
-from modelguard.detect.blast_radius import (
+from janus.config import ScanConfig
+from janus.detect.blast_radius import (
     blast_radius,
     finding_for,
     freshness_signal,
     upstream_datasets,
 )
-from modelguard.models import Severity
+from janus.models import Severity
 from tests.conftest import FakeClient, FakeGraph, lineage_result, make_connection
 
 TABLE = "urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce.public.loans_raw,PROD)"

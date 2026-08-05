@@ -3,7 +3,7 @@
 Pulls the dbt feature table straight out of the warehouse, joins the labels,
 fits a model, and logs the run to MLflow. Deliberately ordinary: this is the
 script that produces the metadata everything downstream has to work with, and
-its ordinariness is the point. Nothing in it knows ModelGuard exists.
+its ordinariness is the point. Nothing in it knows Janus exists.
 """
 
 import os

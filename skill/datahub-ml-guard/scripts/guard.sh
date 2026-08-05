@@ -2,7 +2,7 @@
 # Write back: raise the incident, tag the at-risk models, record risk flags and the
 # trust score, leave a freshness guarding assertion, and publish the Model Impact
 # Report. Idempotent: a second run of an unchanged graph writes nothing. Pass
-# --review to modelguard for an approval prompt before any write lands.
+# --review to janus for an approval prompt before any write lands.
 # Usage: guard.sh <table-name-or-urn>
 set -euo pipefail
 
@@ -11,4 +11,4 @@ if [ "$#" -ne 1 ]; then
   exit 2
 fi
 
-modelguard scan --table "$1" --review
+janus scan --table "$1" --review

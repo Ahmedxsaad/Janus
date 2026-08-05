@@ -23,8 +23,8 @@ from datahub.metadata.schema_classes import (
     StringTypeClass,
 )
 
-import modelguard
-from modelguard.config import ScanConfig
+import janus
+from janus.config import ScanConfig
 from tests.conftest import (
     FEATURE_TABLE_URN,
     MODEL_URN,
@@ -68,11 +68,11 @@ class TestSurface:
     def test_the_supported_names_import_from_the_top_level_package(self):
         """What a user's script pins to. Moving one of these breaks them silently."""
         for name in ("link_model", "scan_model", "ScanReport", "LinkResult", "LinkError"):
-            assert hasattr(modelguard, name), name
+            assert hasattr(janus, name), name
 
     def test_all_lists_exactly_the_supported_surface(self):
-        """`from modelguard import *` must not hand out anything unsupported."""
-        assert set(modelguard.__all__) == {
+        """`from janus import *` must not hand out anything unsupported."""
+        assert set(janus.__all__) == {
             "LinkError",
             "LinkResult",
             "ScanReport",
@@ -84,24 +84,22 @@ class TestSurface:
     def test_the_package_version_matches_the_distribution_version(self):
         """A wheel whose __version__ disagrees with its metadata is unreportable.
 
-        A user debugging in the field reads `modelguard.__version__`; a resolver
+        A user debugging in the field reads `janus.__version__`; a resolver
         reads the metadata. Nothing else keeps the two equal, so this does.
         """
         pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
         declared = tomllib.loads(pyproject.read_text())["project"]["version"]
 
-        assert modelguard.__version__ == declared
+        assert janus.__version__ == declared
 
 
 class TestScanModel:
     def test_a_call_with_no_target_is_refused_rather_than_scanning_nothing(self):
         with pytest.raises(ValueError, match="model=, table=, or both"):
-            modelguard.scan_model()
+            janus.scan_model()
 
     def test_a_model_name_is_resolved_and_scanned(self):
-        report = modelguard.scan_model(
-            model="credit_risk_v3", dry_run=True, conn=_conn(), config=CONFIG
-        )
+        report = janus.scan_model(model="credit_risk_v3", dry_run=True, conn=_conn(), config=CONFIG)
 
         assert report.model_urn == MODEL_URN
         assert report.dry_run is True
@@ -109,20 +107,18 @@ class TestScanModel:
     def test_a_dry_run_writes_nothing(self):
         conn = _conn()
 
-        modelguard.scan_model(model="credit_risk_v3", dry_run=True, conn=conn, config=CONFIG)
+        janus.scan_model(model="credit_risk_v3", dry_run=True, conn=conn, config=CONFIG)
 
         assert conn.graph.emitted == []  # type: ignore[attr-defined]
         # Reads are allowed and expected here: resolving the model name is a
-        # GraphQL scroll (modelguard/discovery.py). What a dry run may never do
+        # GraphQL scroll (janus/discovery.py). What a dry run may never do
         # is mutate, so the assertion names that rather than counting calls.
         sent = [query for query, _ in conn.graph.graphql_calls]  # type: ignore[attr-defined]
         assert [query for query in sent if "mutation" in query] == []
 
     def test_the_checks_that_could_not_run_are_reported_not_hidden(self):
         """The API returns the same honest report the CLI prints, gaps included."""
-        report = modelguard.scan_model(
-            model="credit_risk_v3", dry_run=True, conn=_conn(), config=CONFIG
-        )
+        report = janus.scan_model(model="credit_risk_v3", dry_run=True, conn=_conn(), config=CONFIG)
 
         assert report.clean
         assert report.not_evaluated
@@ -132,7 +128,7 @@ class TestLinkModel:
     def test_it_declares_a_feature_per_column_and_the_label(self):
         conn = _conn()
 
-        result = modelguard.link_model(
+        result = janus.link_model(
             model="credit_risk_v3",
             features="ecommerce.public.customer_features",
             label_column="churned",
@@ -149,7 +145,7 @@ class TestLinkModel:
     def test_a_label_in_another_table_is_addressed_there(self):
         conn = _conn()
 
-        result = modelguard.link_model(
+        result = janus.link_model(
             model="credit_risk_v3",
             features="ecommerce.public.customer_features",
             label_table="ecommerce.public.customer_features",
@@ -163,7 +159,7 @@ class TestLinkModel:
     def test_a_dry_run_declares_nothing(self):
         conn = _conn()
 
-        modelguard.link_model(
+        janus.link_model(
             model="credit_risk_v3",
             features="ecommerce.public.customer_features",
             label_column="churned",
@@ -176,7 +172,7 @@ class TestLinkModel:
 
     def test_an_unresolvable_table_raises_rather_than_linking_the_wrong_one(self):
         with pytest.raises(ValueError):
-            modelguard.link_model(
+            janus.link_model(
                 model="credit_risk_v3",
                 features="no_such_table",
                 label_column="churned",

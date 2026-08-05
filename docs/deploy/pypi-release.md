@@ -1,4 +1,4 @@
-# Releasing modelguard-datahub to PyPI
+# Releasing janus-datahub to PyPI
 
 `.github/workflows/publish-pypi.yml` builds and publishes the wheel and sdist
 on a `v*.*.*` tag. It authenticates with **Trusted Publishing** (OIDC), so
@@ -7,7 +7,7 @@ setup has to happen on PyPI's side, once, before the first release.
 
 **Status, 2026-08-01:** the pending publisher has been created on PyPI, so the
 one-time setup below is done. Nothing is published yet: the authoritative
-check, `https://pypi.org/simple/modelguard-datahub/`, still returns 404. The
+check, `https://pypi.org/simple/janus-datahub/`, still returns 404. The
 first release is deliberately deferred until closer to submission, so the
 published version matches the final submitted state rather than an
 intermediate one. Skip to [Cutting a release](#cutting-a-release).
@@ -19,7 +19,7 @@ returns HTTP 200 regardless, which reads as "it exists" when it does not. The
 
 ## One-time setup, on PyPI
 
-`modelguard-datahub` does not exist on PyPI yet, so use the **pending
+`janus-datahub` does not exist on PyPI yet, so use the **pending
 publisher** flow, which reserves the name and the publisher together and
 requires no pre-existing project.
 
@@ -27,7 +27,7 @@ requires no pre-existing project.
    enable 2FA, which PyPI requires for publishing).
 2. Go to **Your account -> Publishing -> Add a new pending publisher**.
 3. Fill in exactly:
-   - PyPI project name: `modelguard-datahub`
+   - PyPI project name: `janus-datahub`
    - Owner: `Ahmedxsaad`
    - Repository name: `DataHub`
    - Workflow name: `publish-pypi.yml`
@@ -59,14 +59,14 @@ Checked mechanically on 2026-08-02 against the built wheel, except where noted.
       `pypi.org`, so all 22 of them 404'd for the first person to arrive from
       `pip install`. GitHub renders absolute links identically, so one form
       serves both.
-- [x] `modelguard/writeback/props/*.yaml` is inside the wheel: without it,
+- [x] `janus/writeback/props/*.yaml` is inside the wheel: without it,
       `define_properties` fails on a fresh install and no scan can write a trust
       score.
-- [x] All four console scripts (`modelguard`, `modelguard-seed`,
-      `modelguard-scenario`, `modelguard-mcp`) are installed and run.
-- [x] `import modelguard` exposes the public API (`link_model`, `scan_model` and
+- [x] All four console scripts (`janus`, `janus-seed`,
+      `janus-scenario`, `janus-mcp`) are installed and run.
+- [x] `import janus` exposes the public API (`link_model`, `scan_model` and
       their result types) from a clean install.
-- [x] `modelguard.__version__` equals `pyproject.toml`'s `version`. A test
+- [x] `janus.__version__` equals `pyproject.toml`'s `version`. A test
       enforces it (`tests/test_api.py`), because a wheel whose two versions
       disagree is one nobody can report a bug against: the user reads one, the
       resolver reads the other.
@@ -102,8 +102,8 @@ Pushing the tag fires both publish workflows: this one, and
 ## Verifying a release
 
 ```bash
-pip install modelguard-datahub==0.1.0
-modelguard --help
+pip install janus-datahub==0.1.0
+janus --help
 ```
 
 Install into a throwaway virtualenv, not the development one: installing the

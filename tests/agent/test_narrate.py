@@ -7,8 +7,8 @@ import re
 import pytest
 from pydantic import SecretStr
 
-from modelguard.agent import narrate as narrate_module
-from modelguard.agent.narrate import (
+from janus.agent import narrate as narrate_module
+from janus.agent.narrate import (
     MAX_NARRATIVE_CHARS,
     NarrativeSource,
     fact_block,
@@ -16,7 +16,7 @@ from modelguard.agent.narrate import (
     narrate,
     template_narrative,
 )
-from modelguard.llm import LLMConfig
+from janus.llm import LLMConfig
 from tests.conftest import make_finding as _finding
 from tests.conftest import make_leakage_finding as _leakage_finding
 from tests.conftest import make_schema_drift_finding as _drift_finding
@@ -65,7 +65,7 @@ def test_the_template_says_nothing_is_scoring_when_no_model_consumes_the_table()
 
 
 def test_the_narrator_module_never_touches_the_environment():
-    """Configuration enters through modelguard.env only. No os.environ here."""
+    """Configuration enters through janus.env only. No os.environ here."""
     source = (
         narrate_module.__file__.replace(".pyc", ".py")  # defensive, .py in practice
     )
@@ -109,7 +109,7 @@ def test_a_failing_llm_call_degrades_to_the_template(monkeypatch):
 
 def test_an_uninstalled_provider_degrades_to_the_template(monkeypatch):
     """A missing binding is a config problem, not a reason to fail the scan."""
-    from modelguard.llm import LLMUnavailableError
+    from janus.llm import LLMUnavailableError
 
     def _missing(_config: LLMConfig) -> None:
         raise LLMUnavailableError("needs langchain-openai")

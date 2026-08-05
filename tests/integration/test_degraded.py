@@ -25,20 +25,20 @@ import pytest
 from datahub.ingestion.graph.openapi import RelationshipDirection
 from datahub.metadata.schema_classes import IncidentInfoClass, IncidentStateClass
 
-from modelguard.agent.pipeline import new_run_id, run_scan
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.detect.degraded import table_level_findings
-from modelguard.models import FindingType, Severity, TableRisk
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.scenarios import (
+from janus.agent.pipeline import new_run_id, run_scan
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.detect.degraded import table_level_findings
+from janus.models import FindingType, Severity, TableRisk
+from janus.seed import graph_spec as spec
+from janus.seed.scenarios import (
     plant_delinked_model,
     plant_deprecated_input,
     revert_delinked_model,
     revert_deprecated_input,
 )
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.incidents import INCIDENT_ON_RELATIONSHIP
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.incidents import INCIDENT_ON_RELATIONSHIP
 
 pytestmark = pytest.mark.integration
 

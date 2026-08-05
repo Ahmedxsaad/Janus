@@ -7,7 +7,7 @@ that exist, and the URNs are stable.
 
 from __future__ import annotations
 
-from modelguard.seed import graph_spec as spec
+from janus.seed import graph_spec as spec
 
 
 def _source_column_names() -> set[str]:

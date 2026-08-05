@@ -25,16 +25,16 @@ from datahub.metadata.schema_classes import (
     GlobalTagsClass as Tags,
 )
 
-from modelguard.config import ScanConfig
-from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
-from modelguard.models import FreshnessSignal
-from modelguard.writeback.feature_documents import (
+from janus.config import ScanConfig
+from janus.detect.leakage import SOURCE_COLUMN_PROPERTY
+from janus.models import FreshnessSignal
+from janus.writeback.feature_documents import (
     FeatureFacts,
     TableInTheChain,
     gather_feature,
     render_feature_card,
 )
-from modelguard.writeback.model_documents import NOT_RECORDED
+from janus.writeback.model_documents import NOT_RECORDED
 from tests.conftest import (
     CLEAN_COLUMN_URN,
     FEATURE_TABLE_URN,
@@ -55,7 +55,7 @@ from tests.conftest import (
 
 CONFIG = ScanConfig()
 RUN_URN = "urn:li:dataProcessInstance:credit_risk_v3_run"
-SENSITIVE_TAG = "urn:li:tag:modelguard.sensitive"
+SENSITIVE_TAG = "urn:li:tag:janus.sensitive"
 
 
 def facts(**overrides: object) -> FeatureFacts:
@@ -264,7 +264,7 @@ def test_gather_reports_a_feature_with_no_source_column_as_untraced():
 
     assert not result.traced
     assert result.unevaluated
-    assert "modelguard.source_column" in result.unevaluated[0]
+    assert "janus.source_column" in result.unevaluated[0]
 
 
 def test_gather_reads_the_snapshot_for_this_columns_own_table_only():

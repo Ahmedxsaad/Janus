@@ -8,7 +8,7 @@ description: |
   X for target leakage", "did this model's input schema drift", "score this model's trust",
   "guard this table", or any request to audit the data-to-model boundary in DataHub.
 user-invocable: true
-allowed-tools: Bash(modelguard *), Bash(modelguard-seed), Bash(modelguard-scenario *), Bash(scripts/check_blast_radius.sh *), Bash(scripts/check_leakage.sh *), Bash(scripts/guard.sh *), Bash(scripts/seed_demo.sh)
+allowed-tools: Bash(janus *), Bash(janus-seed), Bash(janus-scenario *), Bash(scripts/check_blast_radius.sh *), Bash(scripts/check_leakage.sh *), Bash(scripts/guard.sh *), Bash(scripts/seed_demo.sh)
 ---
 
 # DataHub ML Guard
@@ -16,7 +16,7 @@ allowed-tools: Bash(modelguard *), Bash(modelguard-seed), Bash(modelguard-scenar
 Read column-level and ML lineage in DataHub to catch the data-to-model failures that do not
 announce themselves, then write the findings back into the graph where the data lives.
 
-Detection is deterministic Python (the `modelguard` package). This skill is the operator's
+Detection is deterministic Python (the `janus` package). This skill is the operator's
 guide to it: it never asks a language model whether a finding exists. The model only explains,
 ranks, and drafts prose, and every write is gated behind human approval.
 
@@ -41,12 +41,12 @@ schema still matches training.
 ## Prerequisites
 
 - A DataHub instance (a local OSS Quickstart is enough: `datahub docker quickstart`).
-- The `modelguard` CLI. Until the first PyPI release is cut, install it from a
+- The `janus` CLI. Until the first PyPI release is cut, install it from a
   clone: `git clone https://github.com/Ahmedxsaad/DataHub && pip install -e DataHub`.
-  From the release on it is `pip install modelguard-datahub` (the distribution
-  is named `-datahub` because the exact name `modelguard` is taken on PyPI by an
-  unrelated package). Either way the installed commands are `modelguard`,
-  `modelguard-mcp`, `modelguard-seed`, `modelguard-scenario`.
+  From the release on it is `pip install janus-datahub` (the distribution
+  is named `-datahub` because the exact name `janus` is taken on PyPI by an
+  unrelated package). Either way the installed commands are `janus`,
+  `janus-mcp`, `janus-seed`, `janus-scenario`.
 - `DATAHUB_GMS_URL` set (`export DATAHUB_GMS_URL=http://localhost:8080` for the
   default Quickstart). No token is needed against it; set `DATAHUB_GMS_TOKEN`
   only if metadata-service auth is enabled.
@@ -70,7 +70,7 @@ schema still matches training.
    offending dataset or column, tags each at-risk model, records the risk flags and trust
    score as structured properties, leaves a freshness guarding assertion, and publishes a
    Model Impact Report. Writes are idempotent: a second run of an unchanged graph writes
-   nothing. Use `modelguard scan --review` for an interactive approval prompt, or
+   nothing. Use `janus scan --review` for an interactive approval prompt, or
    `--auto-approve` for an unattended run.
 
 See `references/detectors.md` for what each detector checks and cites, and
@@ -97,7 +97,7 @@ appears in the Quality tab on OSS. Continuous scheduled evaluation of it is Clou
   literature (Kaufman 2012, Breck 2019, Sculley 2015, Mitchell 2019).
 - `references/datahub-write-surface.md` - incidents, structured properties, labels/terms,
   documents, guarding assertions, and the ODCS input contract, with the exact API shapes.
-- `references/mcp-composition.md` - running `modelguard-mcp` alongside DataHub's own
+- `references/mcp-composition.md` - running `janus-mcp` alongside DataHub's own
   `mcp-server-datahub`: how to configure both, which question belongs to which, and why
   detection stays deterministic rather than becoming something a model judges.
 

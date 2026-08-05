@@ -3,5 +3,5 @@
 # scenario so the checks have something to find. Idempotent: re-running re-upserts.
 set -euo pipefail
 
-modelguard-seed
-modelguard-scenario --lag-hours 30
+janus-seed
+janus-scenario --lag-hours 30

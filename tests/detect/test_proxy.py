@@ -28,10 +28,10 @@ from datahub.metadata.schema_classes import (
     TagAssociationClass,
 )
 
-from modelguard.config import ScanConfig
-from modelguard.detect.governance import proxy_candidate_findings
-from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
-from modelguard.models import FindingType, ProxyCandidateFinding, Severity
+from janus.config import ScanConfig
+from janus.detect.governance import proxy_candidate_findings
+from janus.detect.leakage import SOURCE_COLUMN_PROPERTY
+from janus.models import FindingType, ProxyCandidateFinding, Severity
 from tests.conftest import (
     DEPLOYMENT_URN,
     FEATURE_TABLE_URN,
@@ -45,7 +45,7 @@ from tests.conftest import (
     make_connection,
 )
 
-PROTECTED_TAG = "urn:li:tag:modelguard.protected"
+PROTECTED_TAG = "urn:li:tag:janus.protected"
 CONFIG = ScanConfig(protected_attribute_tag_urns=(PROTECTED_TAG,))
 
 #: The fork. `applicant_income` (the model's feature) and `ethnicity_band` (the
@@ -372,7 +372,7 @@ class TestConfig:
             GlossaryTermsClass,
         )
 
-        term = "urn:li:glossaryTerm:modelguard.protected"
+        term = "urn:li:glossaryTerm:janus.protected"
         graph = FakeGraph(
             aspects={  # type: ignore[arg-type]
                 (MODEL_URN, MLModelPropertiesClass): MLModelPropertiesClass(

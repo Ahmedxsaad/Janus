@@ -12,8 +12,8 @@ from datahub.metadata.schema_classes import (
 )
 from datahub.metadata.urns import SchemaFieldUrn
 
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.scenarios import (
+from janus.seed import graph_spec as spec
+from janus.seed.scenarios import (
     BACKUP_LABEL_COLUMN,
     COMMON_ANCESTOR_LABEL,
     LOOKALIKE_COLUMN,
@@ -239,7 +239,7 @@ def test_no_edge_carries_a_scenario_marker():
 
     ``transformOperation`` is part of what GMS keys a fine-grained edge on, so a
     marked edge and the seeder's unmarked one are two different edges: the next
-    ``modelguard-seed`` adds its own alongside and the column lineage grows. The
+    ``janus-seed`` adds its own alongside and the column lineage grows. The
     Week 1 gate's byte-for-byte test is what caught that; this is its offline
     twin, so the marker cannot come back without something going red first.
     """

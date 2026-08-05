@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from modelguard.models import (
+from janus.models import (
     ChangeKind,
     ModelAtRisk,
     RemedyKind,

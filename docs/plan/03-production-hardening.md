@@ -1,13 +1,13 @@
-# ModelGuard - Production Hardening
+# Janus - Production Hardening
 
-> How ModelGuard becomes *production-grade*, not a demo: a benchmark it's measured against, performance
+> How Janus becomes *production-grade*, not a demo: a benchmark it's measured against, performance
 > and scaling design, and a real security model for an agent that **writes to a governance graph**.
 > Grounded in `resources.md`. This is what separates a hackathon toy from a Grand-Prize build - and it's
 > concrete evidence for the **Technical Execution** and **Real-World Usefulness** criteria.
 
 ---
 
-## A. Evaluation & benchmarking - "ModelGuard-Bench"
+## A. Evaluation & benchmarking - "Janus-Bench"
 
 > **Core landed 2026-07-22** (D-047). `benchmarks/` ships `inject.py` (the labelled trial matrix),
 > `metrics.py` (pure scoring arithmetic), `run_bench.py` (the live harness and renderer) and a
@@ -46,7 +46,7 @@ reproducible one - which is itself a differentiator (judges rarely see hackathon
 
 > **Landed 2026-07-22** (D-050), as implementations of the *approach* rather than of the products.
 > `benchmarks/baselines.py` scores table-level lineage and no-lineage quality checks on the same graph
-> and ground truth, per feature. Measured: ModelGuard 1.00 precision / 1.00 recall; table-level 0.25 /
+> and ground truth, per feature. Measured: Janus 1.00 precision / 1.00 recall; table-level 0.25 /
 > **1.00** (it does catch the leak, it cannot say which feature carries it); no-lineage 0.00 recall.
 > The number that matters is the fourth column: table-level still flags **2 features after the leak is
 > fixed**, because it never saw the column edge and so cannot see it removed. No Great Expectations,
@@ -57,7 +57,7 @@ Run the same injected scenarios through:
 - **Evidently / NannyML** - catches *model drift* but **only after** bad data reaches the model; **no upstream root cause**.
 - **Naive table-level lineage** - over-reports (flags all downstream, not the column-precise subset).
 
-**ModelGuard's claim, quantified:** *only* the cross-boundary, column-level approach both (a) roots the
+**Janus's claim, quantified:** *only* the cross-boundary, column-level approach both (a) roots the
 failure to the exact upstream column **and** (b) names the exact model + live deployment - before it scores.
 Put this in a 3-row comparison table.
 
@@ -110,12 +110,12 @@ Elasticsearch + Kafka - see `resources.md §9`; our job is to traverse a bounded
 - **Event sourcing of findings:** append every finding as an immutable event → replayable audit trail +
   enables "what changed since last run" diffs.
 
-### C.3 Self-observability (ModelGuard monitors itself)
+### C.3 Self-observability (Janus monitors itself)
 
 > **Landed 2026-08-01** (D-073), at the level the SLO below actually needs.
 > `agent/pipeline.py` emits one `logfmt` line per completed scan through the
 > stdlib logger: `run_id`, both targets, `dry_run`, and the counts and timings
-> (`findings`, `writes`, `warnings`, `detect_ms`, `total_ms`). `modelguard watch`,
+> (`findings`, `writes`, `warnings`, `detect_ms`, `total_ms`). `janus watch`,
 > the one entry point that runs unattended, configures the handler; the library
 > itself only emits, so an embedding application keeps the decision. The line
 > carries identifiers and counts only: no aspect content, no prose, no credential.
@@ -130,9 +130,9 @@ Elasticsearch + Kafka - see `resources.md §9`; our job is to traverse a bounded
 - **The SLO, stated:** *95% of upstream freshness failures on model-feeding tables produce an incident
   within 60 seconds of DataHub indexing the change.* The three terms of that budget, measured in
   `benchmarks/RESULTS.md` rather than estimated: the detector call (median 0.05s, slowest 0.14s), DataHub's
-  own index convergence (median 2.92s, slowest 4.03s, and not ModelGuard's to control), and the `watch`
+  own index convergence (median 2.92s, slowest 4.03s, and not Janus's to control), and the `watch`
   poll interval (operator-set; 30s on the demo VM). At a 30s interval the worst case is roughly 35s, which
-  is what leaves the target this much headroom. `detect_ms` on every scan line is the term ModelGuard owns,
+  is what leaves the target this much headroom. `detect_ms` on every scan line is the term Janus owns,
   so a regression in it is visible before the budget is spent. Track an **error budget** on
   missed/late detections.
 - Impact reports **are blameless postmortems**: what broke, blast radius, root cause, remediation, guarding
@@ -147,10 +147,10 @@ Elasticsearch + Kafka - see `resources.md §9`; our job is to traverse a bounded
 > delimiter was not escaped, so a dataset named `loans_raw</evidence>` closed the block early and promoted
 > the rest of its own name *outside* the untrusted region. Fixed, with regression tests that fail against
 > the previous code. Also verified holding: deterministic detection, parameterized GraphQL with bound
-> variables (no interpolation anywhere), no credential in any log, exception, or repr ModelGuard emits, and
+> variables (no interpolation anywhere), no credential in any log, exception, or repr Janus emits, and
 > loud failure on malformed configuration. Full findings and what was rejected are in D-049.
 
-**Threat model:** ModelGuard reads *untrusted* metadata (descriptions, dataset names, doc text authored by
+**Threat model:** Janus reads *untrusted* metadata (descriptions, dataset names, doc text authored by
 anyone) and takes *write* actions (incidents, tags, properties). That is exactly OWASP LLM01 + LLM06
 territory (`resources.md §10`). Controls:
 
@@ -171,10 +171,10 @@ territory (`resources.md §10`). Controls:
    resolve in the graph; enum values (incident `type`) checked against the allowed set; numeric scores clamped.
 4. **LLM03 - Supply chain.** Pin dependencies (`pyproject.toml`, hashes via a lockfile); verify the MCP server /
    Agent Context Kit versions; note DataHub datapacks are Apache-2.0 and safe to publish.
-5. **Data privacy (finance/healthcare framing).** ModelGuard operates on the **metadata graph, not row-level
+5. **Data privacy (finance/healthcare framing).** Janus operates on the **metadata graph, not row-level
    data** - a strong, quotable privacy property: **no PHI/PII is ever sent to the LLM.** Profiling uses
    DataHub's existing profile aspects (aggregate stats), not raw records (cf. whylogs' profile-only approach).
-6. **Auditability.** Every write is stamped with `modelguard.run_id`, actor, timestamp, and a rationale link
+6. **Auditability.** Every write is stamped with `janus.run_id`, actor, timestamp, and a rationale link
    to the impact report - a complete audit trail (maps to NIST AI RMF "Manage" + MITRE ATLAS defenses).
 
 ---
@@ -203,7 +203,7 @@ territory (`resources.md §10`). Controls:
       and Prometheus are named there as the unbuilt upgrade, not implied.
 - [x] "No raw data to the LLM" privacy property called out explicitly.
       Leads the README's "Security and privacy" section, with the reason it holds structurally:
-      ModelGuard never connects to the warehouse, so there is no path for a row to reach a
+      Janus never connects to the warehouse, so there is no path for a row to reach a
       provider (D-073).
 - [x] Every literature claim in reports/README cites a named source from `resources.md`.
       Each detector's module docstring cites its paper, the impact reports quote Kaufman and

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from modelguard.config import SCORE_PROVENANCE, SCORING_VERSION
-from modelguard.models import FindingType
-from modelguard.writeback.documents import (
+from janus.config import SCORE_PROVENANCE, SCORING_VERSION
+from janus.models import FindingType
+from janus.writeback.documents import (
     RUN_ID_PROPERTY,
     _document_id,
     publish_impact_report,
@@ -12,7 +12,7 @@ from modelguard.writeback.documents import (
     render_trust_trend,
     render_trust_waterfall,
 )
-from modelguard.writeback.trust_history import TrustEntry
+from janus.writeback.trust_history import TrustEntry
 from tests.conftest import MODEL_URN as MODEL
 from tests.conftest import TABLE_URN, FakeClient, FakeGraph, make_connection, make_trust_score
 from tests.conftest import make_deprecated_input_finding as _deprecated_finding
@@ -119,7 +119,7 @@ def test_every_finding_type_can_be_reported_on():
 def test_the_sensitive_source_report_names_the_classification_and_the_path():
     markdown = render_impact_report(_sensitive_finding(), "prose", "scan-abc")
 
-    assert "modelguard.sensitive" in markdown
+    assert "janus.sensitive" in markdown
     assert "ecommerce.public.loans_raw.income" in markdown
     assert "applicant_income <- income" in markdown
     # It is an exposure, not an outage, and the report has to say so.

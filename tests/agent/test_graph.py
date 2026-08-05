@@ -13,10 +13,10 @@ from datahub.metadata.schema_classes import (
     StructuredPropertiesClass,
 )
 
-from modelguard.agent.graph import ApprovalRequiredError, run_agent
-from modelguard.agent.pipeline import ScanReport
-from modelguard.config import ScanConfig
-from modelguard.models import Severity
+from janus.agent.graph import ApprovalRequiredError, run_agent
+from janus.agent.pipeline import ScanReport
+from janus.config import ScanConfig
+from janus.models import Severity
 from tests.conftest import (
     DEPLOYMENT_URN,
     LEAK_FEATURE_URN,
@@ -125,7 +125,7 @@ def test_approving_writes_the_incident_and_the_trust_score():
         mcp.aspect for mcp in graph.emitted if isinstance(mcp.aspect, StructuredPropertiesClass)
     ]
     final = {a.propertyUrn.rsplit(":", 1)[-1]: a.values for a in props[-1].properties}
-    assert final["modelguard.trust_score"] == [35.0]
+    assert final["janus.trust_score"] == [35.0]
 
 
 def test_omitting_approval_is_rejected_before_any_write():

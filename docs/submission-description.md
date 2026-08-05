@@ -14,7 +14,7 @@ submission form's testing-instructions field.
 
 ## Short version (the elevator pitch, for the top of the form)
 
-ModelGuard is the missing CI for your ML supply chain. It reads the
+Janus is the missing CI for your ML supply chain. It reads the
 warehouse-to-model column-level lineage that DataHub uniquely spans, catches
 the data-to-model failures that pass every existing check silently, and writes
 incidents, model trust scores, impact reports, and guarding assertions back
@@ -38,11 +38,11 @@ These are not monitoring failures. Model monitors watch predictions, and data
 quality tools watch tables. Neither can see the edge between them, which is
 where the failure actually lives.
 
-### What ModelGuard does
+### What Janus does
 
 It reads that edge. DataHub is the one place where column-level warehouse
 lineage and ML metadata (features, training runs, models, deployments) live in
-the same graph, so ModelGuard traverses from a failing column all the way to
+the same graph, so Janus traverses from a failing column all the way to
 the live deployment scoring traffic on it, and then writes what it found back
 into the same graph:
 
@@ -67,13 +67,13 @@ Four detectors, all deterministic Python:
 
 ### Four ways to run it, one shared core
 
-- `modelguard scan` for a batch audit.
-- `modelguard watch` to poll and act the moment something changes, the
+- `janus scan` for a batch audit.
+- `janus watch` to poll and act the moment something changes, the
   long-running mode behind the live demo.
-- `modelguard gate` for CI: the preventive half, judging a pull request
+- `janus gate` for CI: the preventive half, judging a pull request
   against a policy and answering in an exit code, so a leaking model fails the
   build instead of shipping.
-- `modelguard-mcp` for a conversational MCP client: ask "is credit_risk_v3
+- `janus-mcp` for a conversational MCP client: ask "is credit_risk_v3
   leaking?" in plain language.
 
 All four call the identical detect-reason-write core.
@@ -83,7 +83,7 @@ All four call the identical detect-reason-write core.
 Detection is deterministic Python, end to end. The language model only words
 the incident description and the report's assessment. It never decides whether
 a finding exists, never sets a severity, never composes GraphQL, and nothing
-it emits reaches a deduplication key or a URN. ModelGuard runs completely
+it emits reaches a deduplication key or a URN. Janus runs completely
 without an LLM configured, writing template prose instead, and that is the
 out-of-the-box path.
 
@@ -108,7 +108,7 @@ a number rather than an assertion. Scored per feature, on the same graph:
 
 | Approach | Precision | Recall | Still alerting after the fix |
 |---|---|---|---|
-| ModelGuard (column-level lineage) | 1.00 | 1.00 | 0 features |
+| Janus (column-level lineage) | 1.00 | 1.00 | 0 features |
 | Table-level lineage | 0.25 | 1.00 | 2 features |
 | Table quality checks, no lineage | - | 0.00 | 0 features |
 
@@ -132,11 +132,11 @@ gate.
 
 ### Data used
 
-No real or proprietary data. `modelguard-seed` builds a synthetic ecommerce
+No real or proprietary data. `janus-seed` builds a synthetic ecommerce
 lending graph (a `loans_raw` source table, a `customer_features` feature
 table, ML features, a training run, and a `credit_risk_v3` model behind a live
 deployment), because DataHub's own sample datapacks contain no ML supply chain
-to guard. `modelguard-scenario` plants and reverts the three failures on
+to guard. `janus-scenario` plants and reverts the three failures on
 demand, which is what makes the demo reproducible and the benchmark scoreable.
 
 ### Given back to the DataHub ecosystem
@@ -150,7 +150,7 @@ demand, which is what makes the demo reproducible and the benchmark scoreable.
   building, each with a repro and a workaround.
 
 One of those is a genuine finding about the metadata model: DataHub refuses an
-incident on an `mlModel` entity, which is why ModelGuard attaches findings to
+incident on an `mlModel` entity, which is why Janus attaches findings to
 the data asset and carries model-level risk as structured properties. That
 constraint shaped the design and is written up as an RFC rather than worked
 around silently.

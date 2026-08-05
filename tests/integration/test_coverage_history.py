@@ -19,13 +19,13 @@ import uuid
 
 import pytest
 
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.detect.coverage import MODEL_CHECKS, coverage_gaps
-from modelguard.detect.guard_coverage import ModelCoverage, aggregate
-from modelguard.discovery import search_model_urns
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.coverage_history import (
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.detect.coverage import MODEL_CHECKS, coverage_gaps
+from janus.detect.guard_coverage import ModelCoverage, aggregate
+from janus.discovery import search_model_urns
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.coverage_history import (
     append_entry,
     read_history,
 )
@@ -110,7 +110,7 @@ def test_the_figure_counts_every_model_the_graph_holds_including_hidden_versions
 
     A model GMS hides from search is one that silently stops being checked
     (D-100). Leaving it out of the denominator would report coverage over the
-    models ModelGuard happens to see rather than over the models that exist,
+    models Janus happens to see rather than over the models that exist,
     which is the flattering error.
     """
     model_urns = search_model_urns(conn)

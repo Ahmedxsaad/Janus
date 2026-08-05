@@ -1,7 +1,7 @@
 """The ODCS input-contract renderer turns a model's inputs into a valid contract.
 
 A model with an input table produces a contract whose schema object mirrors the
-table's columns and whose SLA property carries the freshness ModelGuard guards. A
+table's columns and whose SLA property carries the freshness Janus guards. A
 model with no readable input schema raises rather than emitting an empty contract
 (positive evidence, like the detectors). The native-to-logical type mapping is
 spot-checked, and it omits rather than guesses on an unknown type.
@@ -17,8 +17,8 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
 )
 
-from modelguard.config import ScanConfig
-from modelguard.writeback.contract import (
+from janus.config import ScanConfig
+from janus.writeback.contract import (
     ContractError,
     _logical_type,
     render_input_contract,
@@ -64,7 +64,7 @@ def test_renders_valid_odcs_contract():
 
     assert contract["apiVersion"] == "v3.1.0"
     assert contract["kind"] == "DataContract"
-    assert contract["id"] == "modelguard.input-contract.credit_risk_v3"
+    assert contract["id"] == "janus.input-contract.credit_risk_v3"
 
     (table,) = contract["schema"]
     assert table["name"] == "ecommerce.public.customer_features"

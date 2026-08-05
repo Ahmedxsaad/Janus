@@ -16,9 +16,29 @@ Entry template:
 
 ---
 
+## D-136: Package and brand identifiers renamed repo-wide (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: Every file, directory, package name, CLI entry point, and prose
+  mention across the repository uses the current name (Janus) and the
+  current distribution name (janus-datahub). This closes the open item
+  flagged in D-083.
+- Options considered: (a) rename only the Python package and leave prose and
+  docs mixed; (b) rename everything the repo controls (code, package,
+  charts, systemd unit, docs, decision log and CLAUDE.md history) in one
+  pass, leaving only the GitHub remote for a separate manual step since that
+  is a shared, externally visible change.
+- Why (b): a mixed rename is worse than no rename, readers hit an
+  unexplained mismatch between the package they import and the name in the
+  docs. The GitHub remote is excluded because renaming it is visible to
+  every collaborator immediately and is not reversible by this session.
+- Result: `janus/` is the package, `janus-datahub` is the distribution name,
+  `janus` `janus-mcp` `janus-seed` `janus-scenario` are the CLI entry
+  points, `charts/janus-watch/` and `deploy/azure/janus-watch.service` match.
+  Full test suite rerun after the rename (see CI/test run in this branch).
+
 ## D-135: The Agent Context Kit grounds the narrator, and cannot be installed (2026-08-05)
 - Decided by: Claude (for Ahmed Saad).
-- Decision: `modelguard/agent/context_kit.py` reads organizational context for a
+- Decision: `janus/agent/context_kit.py` reads organizational context for a
   finding through DataHub's own Agent Context Kit (`datahub-agent-context`) and
   hands it to the narrator: owners, domain, description, and the catalog's own
   `health` for the asset. It is declared in pyproject as a commented-out extra
@@ -26,7 +46,7 @@ Entry template:
 - Options considered: (a) skip the kit entirely, as the project had until now;
   (b) give the narrator the kit's tools as a LangChain tool-caller so it can
   explore the catalog; (c) call the kit's read-only toolset as a library, with
-  ModelGuard choosing what to fetch.
+  Janus choosing what to fetch.
 - Why (c): (b) is the tempting one and it breaks the design law. The kit's tools
   are exactly what an LLM tool-caller drives, and handing them to the narrator
   would let a model decide which parts of the catalog an incident may mention,
@@ -64,7 +84,7 @@ Entry template:
 
 ## D-134: Full-implementation review of phases 0-7 (2026-08-05)
 - Decided by: Claude (for Ghassen Naouar).
-- Decision: A recall-biased review of the whole `modelguard/` package against a
+- Decision: A recall-biased review of the whole `janus/` package against a
   live Quickstart (GMS v1.7.0) found ten real defects; all ten are fixed and the
   full suite (933 offline, 71 integration) is green, ruff and mypy clean.
   Highest severity, in order: (1) `_reconcile_stale_findings` had no branch for
@@ -86,7 +106,7 @@ Entry template:
   one feature resolved a source column, so a partially linked model's unlinked
   features were silently never walked; (6) `resolve_incident` returned a bool
   no caller checked instead of raising, so a rejected resolve left DataHub's
-  incident ACTIVE while ModelGuard reported the model recovered; (7)
+  incident ACTIVE while Janus reported the model recovered; (7)
   `adapters/feast.py` could call a SQL contrib source's
   `get_table_query_string()` on a `SparkSource`, which starts a live Spark
   session, violating the read-only/offline adapter contract
@@ -124,7 +144,7 @@ Entry template:
 ## D-133: The benchmark scored a detector it had never switched on (2026-08-05)
 - Decided by: Ghassen Naouar.
 - Found by: running `python -m benchmarks.run_bench` on a checkout whose `.env`
-  did not carry `MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS`. `proxy-planted` came
+  did not carry `JANUS_PROTECTED_ATTRIBUTE_TAG_URNS`. `proxy-planted` came
   back WRONG in 0.00s, which is a detector that returned before it read anything.
 - Decision: `run_bench.main` supplies `protected_attribute_tag_urns` explicitly,
   the way it has always supplied `sensitive_tag_urns`, and RESULTS.md reports
@@ -145,10 +165,10 @@ Entry template:
 
 ## D-132: T-20, the change-log consumer, and a link that survives an ingest (2026-08-05)
 - Decided by: Ghassen Naouar.
-- Decision: `modelguard/mcl.py` consumes DataHub's `MetadataChangeLog` over the
-  topic GMS already publishes, and `modelguard/reconcile.py` replays a
-  `modelguard link` that an ingestion run dropped. Both are reached through
-  `modelguard watch --events`, behind a `[kafka]` extra. Polling stays the
+- Decision: `janus/mcl.py` consumes DataHub's `MetadataChangeLog` over the
+  topic GMS already publishes, and `janus/reconcile.py` replays a
+  `janus link` that an ingestion run dropped. Both are reached through
+  `janus watch --events`, behind a `[kafka]` extra. Polling stays the
   default and needs no broker.
 - Options considered: (a) `datahub-actions`, the official framework; (b) a
   direct `confluent-kafka` consumer; (c) leave T-20 blocked, as the plan had it,
@@ -181,7 +201,7 @@ Entry template:
   consumer now waits for the assignment and buffers anything that arrives while
   waiting. And DataHub's mlflow source names an `mlModel` per model *version*
   (`telco_churn_1_1`), not per model, which is the entity a replay has to target.
-- Result: F11 closes. `modelguard/CLAUDE.md` rule 2's "polling by design" becomes
+- Result: F11 closes. `janus/CLAUDE.md` rule 2's "polling by design" becomes
   "polling by default", and the Actions framework stops being the documented
   upgrade path because the upgrade is built.
 
@@ -207,21 +227,21 @@ Entry template:
   `feature_names_in_` does give the raw input columns, which is the DataFrame's
   own `columns` and needs no adapter to recover.
 - Why not (a) regardless: reading any of it needs a fitted estimator in memory,
-  so an adapter would unpickle a file. `modelguard/adapters/CLAUDE.md`'s local
+  so an adapter would unpickle a file. `janus/adapters/CLAUDE.md`'s local
   rule is that an adapter parses a declaration, offline, and never executes a
   vendor artifact. Arbitrary code execution to recover a mapping the caller
   already holds is not a trade worth making.
 - Why not (b): it invents a declaration format nobody produces, to carry data
   the training script already has in hand at the moment it would write it.
-- Result: `modelguard.api.link_model`, called from the training script, already
+- Result: `janus.api.link_model`, called from the training script, already
   serves the need, and the README already documents it as the one place
-  ModelGuard belongs inside somebody's code.
+  Janus belongs inside somebody's code.
 
 ---
 
 ## D-130: T-19, a Data Card per feature (2026-08-05)
 - Decided by: Ghassen Naouar.
-- Decision: `writeback/feature_documents.py` and `modelguard feature-card`.
+- Decision: `writeback/feature_documents.py` and `janus feature-card`.
   Same gather-then-pure-render shape as `model_documents.py`, so the two cannot
   disagree about one feature. `column_marks.py` gains `derivation_chains`.
 - Options considered for the CLI surface: (a) `--feature <urn>`; (b) `--model`,
@@ -249,7 +269,7 @@ Entry template:
 
 ## D-129: T-18, the tables that only feed models nothing uses (2026-08-05)
 - Decided by: Ghassen Naouar.
-- Decision: `modelguard/finops.py` and `modelguard finops`. A report, not a
+- Decision: `janus/finops.py` and `janus finops`. A report, not a
   detector: no `FindingType`, no incident, no trust deduction.
 - Why not a finding: nothing is broken. A model nobody deployed is a decision
   somebody may not have noticed they made, and raising an incident about it
@@ -265,7 +285,7 @@ Entry template:
   that would make this recommend deleting a table something still reads. One test
   asserts the *wrong* answer a filtered list produces, so the reason is pinned
   rather than only written down.
-- `MODELGUARD_UNUSED_MODEL_DAYS` defaults to 90, a quarter, which is the period a
+- `JANUS_UNUSED_MODEL_DAYS` defaults to 90, a quarter, which is the period a
   budget holder already thinks in. An algorithm parameter, so it carries a
   documented default (root rule 6b).
 - Result: `blast_radius.py` gains `upstream_datasets`, the hop-capped mirror of
@@ -276,7 +296,7 @@ Entry template:
 
 ## D-128: T-17, three OTLP instruments and no traces (2026-08-05)
 - Decided by: Ghassen Naouar.
-- Decision: `modelguard/telemetry.py` exports the scan numbers `_log_scan`
+- Decision: `janus/telemetry.py` exports the scan numbers `_log_scan`
   already assembles, as three OTLP metrics, behind an `[otel]` extra, installed
   by `watch` alone.
 - Options considered: (a) metrics; (b) OTel logs; (c) traces and spans;
@@ -289,7 +309,7 @@ Entry template:
   already assembled and already emitted, and threading an exporter through the
   pipeline's signature would create a second place a scan's numbers are stated.
   One measurement, two renderings, exactly as `argos/handler.py` does it.
-- `MODELGUARD_OTEL_ENDPOINT` is an address, so no default and no fallback (rule
+- `JANUS_OTEL_ENDPOINT` is an address, so no default and no fallback (rule
   6a). Headers are optional rather than an all-or-nothing group, because a
   collector in the same cluster needs none, and are carried as `SecretStr`: that
   is where an authenticated collector's token goes (rule 6d).
@@ -298,9 +318,9 @@ Entry template:
 
 ---
 
-## D-127: T-16, how long ModelGuard's own findings stay open (2026-08-05)
+## D-127: T-16, how long Janus's own findings stay open (2026-08-05)
 - Decided by: Ghassen Naouar.
-- Decision: `modelguard/lifecycle.py` reads MTTR per finding type out of
+- Decision: `janus/lifecycle.py` reads MTTR per finding type out of
   `incidentInfo`'s two stamps, for incidents carrying the run footer
   `raise_incident` already writes. Reported in `inventory` and in `RESULTS.md`.
 - Nothing new is recorded to make it possible: every fact was already in the
@@ -332,10 +352,10 @@ Entry template:
 - Decided by: Ghassen Naouar.
 - Decision: `detect/guard_coverage.py` folds `coverage.py`'s per-model gaps into
   a catalog figure and names the single remedy that would unblock the most;
-  `writeback/coverage_history.py` trends it; `modelguard coverage` prints it and,
+  `writeback/coverage_history.py` trends it; `janus coverage` prints it and,
   with `--write`, records the point.
 - Options considered for where the trend hangs: (a) a synthetic entity;
-  (b) every model, duplicated; (c) ModelGuard's own `dataFlow`, the entity T-04
+  (b) every model, duplicated; (c) Janus's own `dataFlow`, the entity T-04
   already creates.
 - Why (c): a catalog-level figure belongs to no model or dataset, and minting a
   synthetic asset would put a made-up entity in somebody's catalog. That a
@@ -364,7 +384,7 @@ Entry template:
 - Decision: `README.md` joins `[tool.mutmut] also_copy`, and `tests/test_docs.py`
   reads its documents inside the tests rather than at import.
 - Why: D-123's new test read `README.md` at module scope. mutmut runs the suite
-  from a copied tree, `also_copy` lists what gets copied beyond `modelguard/`
+  from a copied tree, `also_copy` lists what gets copied beyond `janus/`
   and `tests/`, and `README.md` was not on it. So the read raised
   `FileNotFoundError` during *collection*, which is not one failing test but no
   tests at all: mutmut reported all 1792 mutants as "no tests" and rendered a
@@ -417,7 +437,7 @@ Entry template:
 ## D-123: Phase 5's two commands existed and were undiscoverable (2026-08-05)
 - Decided by: Ahmed Saad.
 - Decision: `model-card` and `evidence-pack` are documented in the README and on
-  the documentation page, and a test now asserts that every command ModelGuard
+  the documentation page, and a test now asserts that every command Janus
   registers appears in both.
 - Options considered: (a) document the two commands and move on; (b) document
   them and add the test; (c) leave it, since `--help` lists them.
@@ -444,7 +464,7 @@ Entry template:
   detector nowhere despite already carrying its crosswalk row (the crosswalk
   test enforces that row; nothing enforced the prose). One gap is documented and
   not closed: `plant_proxy_attribute` exists in `seed/scenarios.py` and the
-  benchmark drives it, but `modelguard-scenario` does not expose it, so the
+  benchmark drives it, but `janus-scenario` does not expose it, so the
   proxy check is the one governance finding a reader cannot plant and watch
   clear. The page says which two are reversible rather than implying all three.
 
@@ -511,7 +531,7 @@ Entry template:
      says the post-fix graph is not measured rather than leaving it implied.
 - Why: F6 (the benchmark scores itself) has three steps, and this is the third
   and the hardest: every other number in RESULTS.md is measured on the graph
-  `modelguard-seed` wrote, which is the one graph where the links the detectors
+  `janus-seed` wrote, which is the one graph where the links the detectors
   read are guaranteed to exist. It is also the verification for all of phase 3:
   the adapters, the degraded mode and the table-level fallback were all built
   against seeded or fixture graphs.
@@ -598,8 +618,8 @@ Entry template:
   which `trust_score.py` has cited since Phase 2 without producing the artifact)
   and an **EU AI Act Article 10 evidence pack** (T-13). One `gather()` reads the
   graph; both renderers are pure functions of what it returns, so the two
-  artifacts cannot disagree about the same model. Exposed as `modelguard
-  model-card` and `modelguard evidence-pack`, printing by default and
+  artifacts cannot disagree about the same model. Exposed as `janus
+  model-card` and `janus evidence-pack`, printing by default and
   publishing only with `--write`.
 - Options considered:
   1. Produce them on every scan. Rejected: they are not findings, they are
@@ -620,7 +640,7 @@ Entry template:
   be filed or cited as any of them; and "What this pack could NOT establish" is
   its *second* heading, before any evidence, because a gap at the end of a long
   document is a gap nobody reads. Four things it can never establish are named
-  unconditionally: freshness at training time (ModelGuard measures freshness
+  unconditionally: freshness at training time (Janus measures freshness
   now, nothing records it as of the run, and the two are different claims),
   whether anybody examined the data for bias, how the data was collected, and
   anything at all about the data's contents. Articles 10 and 12 are cited by
@@ -673,7 +693,7 @@ Entry template:
   rather than a chain: a model feature and a column classified a protected
   attribute both descending from one ancestor within `proxy_max_hops`, with
   neither descending from the other. Configured by
-  `MODELGUARD_PROTECTED_ATTRIBUTE_TERM_URNS` / `..._TAG_URNS`, no default and
+  `JANUS_PROTECTED_ATTRIBUTE_TERM_URNS` / `..._TAG_URNS`, no default and
   no fallback (root rule 6a); unset reports not-evaluated, never clean.
 - Options considered:
   1. Extend the existing sensitive-source detector to cover it. Rejected: the
@@ -725,7 +745,7 @@ Entry template:
      provably deterministic without asking it.
   4. **Hop cap says why**: `WalkResult` gains `hop_capped`, distinct from
      `truncated` (different knob, different remedy:
-     `MODELGUARD_LEAKAGE_MAX_HOPS` vs `MODELGUARD_LINEAGE_RESULT_CAP`).
+     `JANUS_LEAKAGE_MAX_HOPS` vs `JANUS_LINEAGE_RESULT_CAP`).
      `coverage.py`'s `_leakage_gap`/`_sensitive_gap` now name whichever cap
      actually bound, or both. Closes the silent half of F1 D-097 left open:
      a walk declining an ancestor on distance alone previously said nothing.
@@ -769,9 +789,9 @@ Entry template:
 
 ## D-115: T-08, mutation score for the detectors (2026-08-04)
 - Decided by: Ahmed Saad.
-- Decision: `modelguard/detect/` is now mutation-tested with mutmut 3.7.0
+- Decision: `janus/detect/` is now mutation-tested with mutmut 3.7.0
   (`[tool.mutmut]` in pyproject.toml), scoped there via `only_mutate` while
-  `source_paths = ["modelguard"]` keeps the rest of the package present and
+  `source_paths = ["janus"]` keeps the rest of the package present and
   importable. 1484 mutants generated, 1148 killed, 336 survived: a 0.77
   score. Every survivor is grouped by function and given a verdict in
   `benchmarks/mutation_report.py`'s `VERDICTS` (302 real gaps, 34 provably
@@ -798,7 +818,7 @@ Entry template:
      than mechanically hidden.
   3. Excluding `logger.*(...)` calls from mutation
      (`do_not_mutate_patterns = ['logger\.\w+\(']`): kept. A corrupted log
-     line is invisible to every consumer this project has (modelguard/
+     line is invisible to every consumer this project has (janus/
      CLAUDE.md rule 2, detect/ is pure); mutmut's own README documents this
      exact pattern.
 - Why: 09 section 2.1's claim ("the detectors are correct") had never been
@@ -822,7 +842,7 @@ Entry template:
 
 ## D-114: `link`'s usage errors no longer hide behind a connection failure (2026-08-04)
 - Decided by: Ahmed Saad.
-- Decision: the three argument-shape checks in `modelguard link` (`--repo`/
+- Decision: the three argument-shape checks in `janus link` (`--repo`/
   `--select` without `--from`, `--infer` with `--from`, `--from` without
   `--repo`) now run before `_prepare()` instead of after. They need no
   DataHub connection, but they sat after `_prepare()`'s `connect()` call,
@@ -833,14 +853,14 @@ Entry template:
   `tests/test_cli.py` tests expected 2 and got 1.
 - Options considered:
   1. Change the tests to accept exit code 1. Rejected: 1 is this codebase's
-     "could not tell" code (`modelguard/CLAUDE.md` rule 2, gate's exit
+     "could not tell" code (`janus/CLAUDE.md` rule 2, gate's exit
      codes), and a malformed `--from`/`--repo` combination is a usage
      error the caller can see from the arguments alone, not a fact about
      whether DataHub answered.
   2. Move the checks ahead of `_prepare()`. Chosen: matches the pattern
      already used by the `--all` conflict check and the `model is None`
      check, both of which precede `_prepare()` for the same reason.
-- Result: `modelguard/cli.py`'s `link` command reorders the three checks;
+- Result: `janus/cli.py`'s `link` command reorders the three checks;
   the `repo is None` guard also moved, which caused mypy to lose the
   narrowing between the check and `_declared_link`'s call site since they
   are no longer the same `if` block. Re-added as an explicit (unreachable)
@@ -879,7 +899,7 @@ Entry template:
   the feature, and saying it with the mode attached is the difference between an
   honest weaker answer and a false alarm.
 - Result:
-  - `modelguard/detect/degraded.py`, gated on `has_column_link`: features alone are
+  - `janus/detect/degraded.py`, gated on `has_column_link`: features alone are
     not a link, since a feature carrying no source column is one the column-level
     walk skips. Tables come from the training runs' recorded inputs and from
     dataset-to-model lineage, unioned rather than ranked: nothing here has to pick
@@ -921,9 +941,9 @@ Entry template:
 ## D-112: Import the link from the file that already declares it (2026-08-04)
 - Decided by: Ghassen Naouar (asked for phase 3 of the depth plan), implemented by
   Claude. Closes T-05 and T-06.
-- Decision: a new read-only, offline package `modelguard/adapters/` reads the
+- Decision: a new read-only, offline package `janus/adapters/` reads the
   feature-to-column join out of declarations teams already maintain, and
-  `modelguard link --from feast|dbt --repo <path>` proposes it exactly the way
+  `janus link --from feast|dbt --repo <path>` proposes it exactly the way
   `--infer` proposes: reasons first, the declaration each line came from, and
   nothing written until a human answers.
 - Options considered:
@@ -974,7 +994,7 @@ Entry template:
 - Decided by: Ghassen Naouar (asked for phase 2 of the depth plan), implemented by
   Claude. Closes T-04, and the half of F4 that let a mid-scan failure be silent.
 - Decision: every scan is emitted as a `dataProcessInstance` under a `dataJob`
-  ("scan") under a `dataFlow` ("ModelGuard"), keyed by the `run_id` every write is
+  ("scan") under a `dataFlow` ("Janus"), keyed by the `run_id` every write is
   already stamped with (D-013). The instance carries the entities the scan read as
   inputs, the entities it wrote to as outputs, a STARTED event, and a COMPLETE
   event whose result is SUCCESS or FAILURE. A dry run emits nothing at all.
@@ -994,10 +1014,10 @@ Entry template:
   graph exempts itself from that thesis. Concretely it buys three things: an
   incident's `run_id` becomes an entity somebody can open rather than a string to
   grep; a crashed scan leaves a FAILURE event instead of a half-written graph and
-  silence; and ModelGuard's own runs become subject to the same freshness reasoning
+  silence; and Janus's own runs become subject to the same freshness reasoning
   it applies to a warehouse table.
 - Result:
-  - `modelguard/writeback/process_instance.py`. `scan_run` is a context manager so
+  - `janus/writeback/process_instance.py`. `scan_run` is a context manager so
     that however a scan ends, including by raising, the graph is told; the exception
     is re-raised unchanged, because swallowing it would move the failure rather than
     surface it. Detection runs inside the run too: a scan that dies working out what
@@ -1014,7 +1034,7 @@ Entry template:
     2. **`DataFlow.generate_mcp` and `DataJob.generate_mcp` always emit `globalTags`
        and `ownership`, empty or not.** Both are whole-list upserts (writeback rule
        9), so emitting them verbatim would strip a tag or an owner somebody put on
-       ModelGuard's own flow, on every poll of `watch`. `_emit_template` drops them.
+       Janus's own flow, on every poll of `watch`. `_emit_template` drops them.
     3. **The run events are built here rather than by the helper**, only so that
        `messageId` can be set from the `run_id` and the phase. A run event is a
        timeseries aspect, so it appends; a deterministic message id is what lets a
@@ -1115,7 +1135,7 @@ Entry template:
 ## D-109: The NIST AI RMF crosswalk is generated, and says it is not conformity (2026-08-04)
 - Decided by: Ghassen Naouar (asked for phase 0 of the depth plan), implemented by
   Claude. Closes T-02.
-- Decision: `modelguard crosswalk` prints a markdown table mapping each detector to
+- Decision: `janus crosswalk` prints a markdown table mapping each detector to
   one MAP, one MEASURE and one MANAGE subcategory of the NIST AI RMF, plus the
   verbatim text of every subcategory it cites. The same table is a section on the
   docs site. Three properties, in order of how much they matter:
@@ -1135,7 +1155,7 @@ Entry template:
      retyped and a reader can check every quotation in one pass.
 - Options considered:
   - Where the table lives: (a) `render.py`, as 10-depth-implementation.md says,
-    (b) a new `modelguard/crosswalk.py`. (a) chosen: it is a rendering with no
+    (b) a new `janus/crosswalk.py`. (a) chosen: it is a rendering with no
     judgement in it, which is exactly what that module holds, and one dict plus one
     function does not earn a module. render.py's docstring gains a section saying
     the third reader is a governance function rather than a program or a pull request.
@@ -1164,14 +1184,14 @@ Entry template:
      new "Trust score" section in the impact report. The integer goes last
      everywhere it appears.
   3. `SCORING_VERSION` (config.py, currently 2) is stamped into every
-     `modelguard.trust_history` entry and written as a new `modelguard.scoring_version`
+     `janus.trust_history` entry and written as a new `janus.scoring_version`
      structured property. The trend table renders a version change as a labelled
      discontinuity, saying in the document that the step is a release and not a
      regression.
   4. `SCORE_PROVENANCE`, one sentence, printed wherever the number is: the weights
      are a stated preference ordering, not a calibrated model.
   5. `GatePolicy.advisory` cautions when `--min-trust` is used without
-     `--block-at-or-above`, and `modelguard gate` prints it.
+     `--block-at-or-above`, and `janus gate` prints it.
 - Options considered:
   - Deductions shape: (a) the typed `Deduction` tuple, (b) keeping the existing
      `Mapping[str, float]` and adding a parallel `causes` map. (b) was the smaller
@@ -1488,14 +1508,14 @@ Entry template:
   `argos/icons/make_icon.py` (palette). `tests/test_argos.py`'s `SPRITE`
   constant moves to 32; all 585 tests pass. `cargo build --release` clean.
   Verified against the live stack this session's D-100 fix was also tested on:
-  `modelguard watch --table loans_raw --pet` renders the new character with no
+  `janus watch --table loans_raw --pet` renders the new character with no
   errors in the log across repeated polls.
 
 ## D-100: Model discovery stops losing older versions to DataHub's search (2026-08-03)
 - Decided by: Ahmed Saad (asked for the product to be run end to end as an
   ordinary user would, which is what surfaced this), fixed by Claude.
 - Decision: every model-discovery path goes through the new
-  `modelguard/discovery.py`, which issues its own `scrollAcrossEntities` with
+  `janus/discovery.py`, which issues its own `scrollAcrossEntities` with
   `SearchFlags.filterNonLatestVersions: false` rather than calling
   `DataHubClient.search`. Older versions of a versioned model are in scope for
   `inventory`, `scan --all-models`, `link --all`, and `--model <name>`.
@@ -1506,7 +1526,7 @@ Entry template:
 - Why: found by running the real-project example end to end. Registering a second
   MLflow model version makes DataHub stamp the first entity `isLatest: false`,
   and GMS then drops it from every search result while the entity itself stays
-  perfectly alive: not soft-deleted, all aspects intact, ModelGuard's own
+  perfectly alive: not soft-deleted, all aspects intact, Janus's own
   structured properties and open incident still on it. The consequences are not
   cosmetic. `link --all` reported "No model carries a recorded link" for a model
   whose recorded link was sitting right there, which defeats the exact command
@@ -1518,7 +1538,7 @@ Entry template:
   but needs two discovery paths that must not drift, for a noise problem that is
   bounded anyway: an unlinked old version reports itself unchecked and writes
   nothing, so writes still only happen for a model a human linked on purpose.
-- Result: `modelguard/discovery.py` with `search_model_urns`, called from
+- Result: `janus/discovery.py` with `search_model_urns`, called from
   `cli._model_urns`, `cli.resolve_model` and `writeback.link.models_with_recorded_link`.
   Verified against the live stack the bug was found on: `inventory` went from 2
   models to 3, `link --all` from "no model carries a recorded link" to replaying
@@ -1528,7 +1548,7 @@ Entry template:
   mutation-checked per tests/CLAUDE.md rule 6 by flipping the flag back to true.
   One existing test changed with it: a dry run asserted that *no* GraphQL was
   sent, using it as a proxy for "no mutation" that only held while the incident
-  mutation was the sole GraphQL ModelGuard issued; it now asserts no mutation.
+  mutation was the sole GraphQL Janus issued; it now asserts no mutation.
 
 ## D-099: Argos redrawn, three more states, and a live run that found a lie (2026-08-03)
 - Decided by: Ghassen Naouar (asked for the design to be improved a lot and for
@@ -1574,7 +1594,7 @@ Entry template:
 ## D-098: Argos, the desktop companion, and the stdio protocol behind it (2026-08-03)
 - Decided by: Ghassen Naouar (four choices settled through the planning
   session), built by Claude on `feat/argos-companion`.
-- Decision: ModelGuard gains a second surface. A pixel watchdog named **Argos**
+- Decision: Janus gains a second surface. A pixel watchdog named **Argos**
   renders the state of the ML supply chain on the desktop, driven by a
   versioned JSON event stream.
   1. **Name: Argos.** Odysseus's dog, who waited and still recognised his
@@ -1594,13 +1614,13 @@ Entry template:
      keeps the GMS token out of the process that draws. Its one real hazard is
      written into the code: the parent must drain the child's stdout on a
      thread or both processes deadlock.
-  4. **Scope: a general DataHub companion, from day one.** `modelguard
+  4. **Scope: a general DataHub companion, from day one.** `janus
      companion` polls the assets one owner owns for open incidents, failing
-     assertion runs and deprecations, and emits the same events. ModelGuard is
+     assertion runs and deprecations, and emits the same events. Janus is
      one producer among several rather than the whole point. DataHub has no
      desktop presence today, and that gap is the give-back.
   5. **Distribution: pip-first.** maturin builds the binary into platform
-     wheels, so `pip install "modelguard-datahub[pet]"` works on macOS and
+     wheels, so `pip install "janus-datahub[pet]"` works on macOS and
      Windows. Linux carries a platform marker instead of a wheel: the binary
      links system webkit2gtk, which no manylinux tag permits, so PyPI cannot
      accept it and the `.deb` and `.AppImage` from the release are that route.
@@ -1612,15 +1632,15 @@ Entry template:
   The constraint came with it, that log lines carry no prose, so the speech
   bubble's sentence comes from the finding's title.
 - Why: the detection work is differentiated and the surface was not. Everything
-  ModelGuard produced landed in a terminal, a CI summary, or a DataHub page
+  Janus produced landed in a terminal, a CI summary, or a DataHub page
   somebody had to remember to open. The design law is root CLAUDE.md rule 4
   applied to pixels: no animation exists without a real event behind it, and
   the state a disconnected poll shows is a ghost, because a cheerful pet on a
   broken watch is the lie that gets ambient displays switched off.
 - Result: `argos/` (Tauri v2 crate, static frontend, 11 text sprite frames, a
-  generated icon), `modelguard/argos/` (protocol, events, window, terminal
-  fallback, log handler, producer), `modelguard/companion.py`, `watch --pet`
-  and `modelguard companion`, a `pet` extra, and `.github/workflows/build-argos.yml`.
+  generated icon), `janus/argos/` (protocol, events, window, terminal
+  fallback, log handler, producer), `janus/companion.py`, `watch --pet`
+  and `janus companion`, a `pet` extra, and `.github/workflows/build-argos.yml`.
   44 tests, each mutation-checked. Three claims in the plan doc were corrected
   by building it: the sprite format is one file per character rather than one
   per frame, the terminal fallback is a status line rather than pixel art (the
@@ -1811,21 +1831,21 @@ Entry template:
 
 ## D-092: F11 addressed, the link decay gets a schedule and a name (2026-08-02)
 - Decided by: Ghassen Naouar, applied by Claude
-- Decision: three of F11's four parts. (1) `charts/modelguard-watch` ships a
-  CronJob running `modelguard link --all`, off by default, `concurrencyPolicy:
+- Decision: three of F11's four parts. (1) `charts/janus-watch` ships a
+  CronJob running `janus link --all`, off by default, `concurrencyPolicy:
   Forbid`, one values block to enable. (2) The README's training-script section
   shows the pipeline shape rather than only the call: `mlflow.log_param
-  ("modelguard_features", FEATURE_TABLE)` beside `link_model`, which is the same
+  ("janus_features", FEATURE_TABLE)` beside `link_model`, which is the same
   line that feeds `--infer` (D-091), plus a plain statement that a link declared
   once decays on a schedule the user does not control. (3) A model that carries
-  a recorded `modelguard.feature_table` but declares no features is now reported
+  a recorded `janus.feature_table` but declares no features is now reported
   as a distinct coverage gap naming the ingest that did it and the command that
   repairs it, instead of the generic "this model declares no features".
 - Options considered: for (3), a new finding type (an incident) or a coverage
   gap.
 - Why: a gap. Nothing is failing: the model is fine and the checks simply
   cannot run, which is exactly what `Unevaluated` was built to say (D-074).
-  Raising an incident for it would put ModelGuard's own broken plumbing in a
+  Raising an incident for it would put Janus's own broken plumbing in a
   user's incident list next to their data failures.
 - Result: `detect/coverage.py` now imports `read_properties` and the property
   name from `writeback/properties.py`, the first import from writeback into
@@ -2030,7 +2050,7 @@ Entry template:
   rich in an environment that already has FastAPI, LangChain, or most ML tooling
   in it), (b) widen everything including the optional extras (rejected as scope
   creep past what F2 actually reviewed), (c) widen only the core list, chosen.
-- Why: `modelguard-datahub` is a library on PyPI now, not only an application
+- Why: `janus-datahub` is a library on PyPI now, not only an application
   developed in its own fresh venv. A conflict is invisible from the maintainers'
   side, since the development environment is the one without the conflict, and
   visible immediately to a real adopter installing next to their training code,
@@ -2039,7 +2059,7 @@ Entry template:
   pre-pinned to 2.12.0 and 2.9.0 in separate runs: both resolved and installed
   cleanly (the old exact pin would have forced an upgrade at best and a hard
   `ResolutionImpossible` against any other package with its own conflicting
-  exact pin at worst), `import modelguard` and `modelguard --help` both ran.
+  exact pin at worst), `import janus` and `janus --help` both ran.
   CI gains a permanent regression check for this exact class of bug: a new
   `install-alongside` job installs `pydantic==2.9.0` first, then this project,
   and asserts the install and a smoke import both succeed. 498 offline tests,
@@ -2088,19 +2108,19 @@ Entry template:
 ## D-084: Compose DataHub's own MCP server rather than absorb it (2026-08-02)
 - Decided by: Ghassen Naouar (item F of docs/plan/06), applied by Claude
 - Decision: `skill/datahub-ml-guard/references/mcp-composition.md` documents
-  running `modelguard-mcp` beside `acryldata/mcp-server-datahub`, with the client
+  running `janus-mcp` beside `acryldata/mcp-server-datahub`, with the client
   configuration, two worked sessions, and the argument for the split. No runtime
   dependency is added.
 - Options considered: (a) depend on `mcp-server-datahub` and proxy its tools,
   rejected as complexity bought for a criterion tick, and it would make
-  ModelGuard's MCP surface fail when the other server's did; (b) reimplement
+  Janus's MCP surface fail when the other server's did; (b) reimplement
   search and lineage tools, rejected outright, that is rebuilding a shipped
   feature rather than composing it; (c) document the composition, chosen.
-- Why: the judging criteria name the MCP Server explicitly, and ModelGuard ships
+- Why: the judging criteria name the MCP Server explicitly, and Janus ships
   its own plus contributes a tool upstream, but nothing showed the two working
   together. The paragraph that makes the pairing worth reading is itself the
   differentiator: the official server answers what the catalog contains, and
-  ModelGuard answers the three questions that have to be reproducible, with
+  Janus answers the three questions that have to be reproducible, with
   evidence, and with no LLM in the decision.
 - Result: a reference doc and a README paragraph pointing at it. It also states
   the case against the tempting alternative (skip the detectors, ask a capable
@@ -2109,16 +2129,16 @@ Entry template:
 
 ## D-083: A public Python API, and a README PyPI can render (2026-08-02)
 - Decided by: Ghassen Naouar (items G and I of docs/plan/06), applied by Claude
-- Decision: `modelguard/api.py` exposes `link_model` and `scan_model`,
+- Decision: `janus/api.py` exposes `link_model` and `scan_model`,
   re-exported from the package root with `__all__`; both are thin wrappers over
   the functions the CLI calls. Separately, the README's 22 repository-relative
   links become absolute GitHub URLs.
 - Options considered: for the API, a client class was rejected as an abstraction
   with one implementation over two functions; exposing the internals directly
-  was rejected because a user pinning to `modelguard.agent.pipeline.run_scan`
+  was rejected because a user pinning to `janus.agent.pipeline.run_scan`
   freezes an internal boundary. For the README, a second `README-pypi.md` was
   rejected: a document that would drift from the first.
-- Why: the one place ModelGuard belongs inside somebody's code is the script
+- Why: the one place Janus belongs inside somebody's code is the script
   that trains the model, because that is the only moment when the feature table,
   the label column and the training-time schema are all known. Telling that
   script to shell out to a CLI is a worse interface than a function call, and it
@@ -2129,7 +2149,7 @@ Entry template:
 - Result: 11 offline tests. The pre-tag checklist in
   docs/deploy/pypi-release.md is now checked mechanically: `twine check` passes,
   the wheel installs into a throwaway venv, all four console scripts run, the
-  packaged property YAML is present, and `import modelguard` exposes the API.
+  packaged property YAML is present, and `import janus` exposes the API.
   A test pins `__version__` to `pyproject.toml`'s version, because a wheel whose
   two versions disagree is one nobody can file a bug against: the user reads one
   and the resolver reads the other. The rename decision (D-076) remains the one
@@ -2147,7 +2167,7 @@ Entry template:
   1. Extrapolate from the single seeded model. Rejected: a curve nobody
      measured, presented as one, is the kind of number a benchmark exists to
      replace.
-  2. Add `--replicas N` to `modelguard-seed`. Rejected: every URN in
+  2. Add `--replicas N` to `janus-seed`. Rejected: every URN in
      `graph_spec` is a fixed function today, so parameterising it touches the
      whole seeder to serve one benchmark, and production seed code would grow a
      feature only the benchmark uses.
@@ -2174,7 +2194,7 @@ Entry template:
 ## D-081: A trust score with a direction (2026-08-02)
 - Decided by: Ghassen Naouar (item C of docs/plan/06), applied by Claude
 - Decision: each scan that scores a model appends one capped entry to a new
-  `modelguard.trust_history` structured property, keyed on `run_id` so a rerun
+  `janus.trust_history` structured property, keyed on `run_id` so a rerun
   replaces its own row. The impact report gains a "Trust over time" section, the
   CLI prints the direction under each score, and `--format json` carries
   `previous_score`.
@@ -2202,8 +2222,8 @@ Entry template:
 
 ## D-080: link --infer proposes the join, a human still confirms it (2026-08-02)
 - Decided by: Ghassen Naouar (item A of docs/plan/06), applied by Claude
-- Decision: `modelguard/writeback/link_infer.py` reads a model's link out of the
-  graph and renders the exact `modelguard link` command a person would have
+- Decision: `janus/writeback/link_infer.py` reads a model's link out of the
+  graph and renders the exact `janus link` command a person would have
   typed, one reason per decision, and writes nothing until they say yes (`--yes`
   skips the prompt, `--dry-run` never prompts). Refused alongside `--all`.
 - Options considered:
@@ -2236,7 +2256,7 @@ Entry template:
 
 ## D-079: Read the governance graph, not only the structural one (2026-08-02)
 - Decided by: Ghassen Naouar (item B of docs/plan/06), applied by Claude
-- Decision: two detectors land in `modelguard/detect/governance.py`.
+- Decision: two detectors land in `janus/detect/governance.py`.
   **Sensitive source**: a model feature whose upstream column lineage reaches a
   column the organization classified (a glossary term or a tag). **Deprecated
   input**: a model trained on a dataset carrying DataHub's `deprecation` aspect.
@@ -2284,7 +2304,7 @@ Entry template:
 ## D-077: One scan, three renderings, and a rich markup bug the guards hid (2026-08-01)
 - Decided by: Ghassen Naouar (chose all ten improvements from
   docs/plan/06-judge-review-and-improvements.md), applied by Claude
-- Decision: item D. `modelguard/render.py` holds two new renderings of a
+- Decision: item D. `janus/render.py` holds two new renderings of a
   `ScanReport`, both pure functions of it like `gate.py`: `report_json` for
   `--format json` on `scan` and `gate`, and `job_summary_markdown`, appended to
   the file named by `GITHUB_STEP_SUMMARY` on every gate and scan run.
@@ -2321,7 +2341,7 @@ Entry template:
 
 ## D-078: Structured logs behind one variable, closing P2-5 (2026-08-01)
 - Decided by: Ghassen Naouar (item H of the same review), applied by Claude
-- Decision: `modelguard/logs.py` adds `MODELGUARD_LOG_FORMAT`, `text` (default)
+- Decision: `janus/logs.py` adds `JANUS_LOG_FORMAT`, `text` (default)
   or `json`. `_log_scan` assembles its facts once as a mapping and renders them
   twice: `logfmt` in the message, and the same mapping as structured fields on
   the record, which `JsonFormatter` emits as top-level JSON keys. `watch` is
@@ -2341,7 +2361,7 @@ Entry template:
   log search depends on. An unrecognised value fails loudly naming the variable.
   P2-5 marked done in docs/plan/04-improvements.md.
 
-## D-076: Review ModelGuard as a judge would, and plan the work before the tag (2026-08-01)
+## D-076: Review Janus as a judge would, and plan the work before the tag (2026-08-01)
 - Decided by: Ghassen Naouar (asked for a deep review from the judges'
   perspective plus creative, solid improvements), applied by Claude
 - Decision: docs/plan/06-judge-review-and-improvements.md scores the repository
@@ -2367,9 +2387,9 @@ Entry template:
 - Decided by: Ghassen Naouar (asked for the remaining work to be finished),
   applied by Claude
 - Decision: the demo VM now runs D-074's branch rather than main. `git fetch` +
-  checkout, `docker compose build modelguard-watch` (compose builds
-  `modelguard:local` from the repo, so a checkout alone changes nothing), then
-  `systemctl restart modelguard-watch`. Verified: the service is active, its
+  checkout, `docker compose build janus-watch` (compose builds
+  `janus:local` from the repo, so a checkout alone changes nothing), then
+  `systemctl restart janus-watch`. Verified: the service is active, its
   first scan wrote `findings=2 writes=2` reusing both open incidents rather than
   duplicating, the freshness scenario is re-planted, and `loans_raw` carries
   exactly one active incident, which is what the README tells a judge to look
@@ -2380,7 +2400,7 @@ Entry template:
   strictly better at the thing a judge sees: it no longer reports an
   unevaluated check as healthy. Reverting is `git checkout main` plus the same
   rebuild.
-- Why: main's ModelGuard would tell a judge inspecting anything outside the
+- Why: main's Janus would tell a judge inspecting anything outside the
   seeded pair that it was "healthy" when it had checked nothing.
 - Result: live and healthy. **One security finding, and it needs a human.** The
   VM's git remote still carried the fine-grained clone token from provisioning,
@@ -2401,11 +2421,11 @@ Entry template:
   deploy needs a credential pasted in for the duration of the pull, or the repo
   to be public, which the hackathon rules require before submission anyway.
 
-## D-074: Run ModelGuard against a real ML project, and fix what that broke (2026-08-01)
+## D-074: Run Janus against a real ML project, and fix what that broke (2026-08-01)
 - Decided by: Ghassen Naouar (asked to use the product as an ordinary user
   would on a real project, and to make it more solid and usable), applied by
   Claude
-- Decision: built a genuine ML project on the demo VM and ran ModelGuard
+- Decision: built a genuine ML project on the demo VM and ran Janus
   against it as a new user, then fixed every gap that surfaced. The project is
   the ordinary stack, nothing about it built for this tool: IBM's public Telco
   churn dataset (7043 customers) landed in postgres, three dbt models building
@@ -2441,7 +2461,7 @@ Entry template:
      DataHub's mlflow source produces an mlModel with no features, no inputs on
      its training run, and no link to a single column; its dbt source produces
      excellent column-level lineage between tables. Nothing joins the two, so
-     every detector had nothing to read. `modelguard link` is that join, called
+     every detector had nothing to read. `janus link` is that join, called
      from the training script with what it already knows: the table it read,
      the columns it used, the column it predicted. It declares one mlFeature
      per column carrying its exact source column, applies the label term, and
@@ -2461,7 +2481,7 @@ Entry template:
      drift baseline. On a nightly ingestion schedule that un-links every model
      every night. Two answers: the arguments to `link` are now recorded as
      structured properties, an aspect ingestion does not touch, so replaying it
-     is `modelguard link --model <name>`; and fix 2 means the next scan says
+     is `janus link --model <name>`; and fix 2 means the next scan says
      plainly that it can no longer see the model rather than calling it
      healthy. Filed as feedback for DataHub (docs/most-valuable-feedback.md).
   6. **D-069's known gap is not theoretical.** A leak fixed by deleting the
@@ -2477,17 +2497,17 @@ Entry template:
   7. **Smaller things a real graph exposed.** Demo-only advice ("seed the demo
      graph first", "start the Quickstart") is now gated on the GMS being local,
      since telling somebody pointed at their production catalog to run
-     `modelguard-seed` invites demo datasets into it. The SDK's per-query
+     `janus-seed` invites demo datasets into it. The SDK's per-query
      `max_hops` paragraph no longer lands in the middle of a report or a CI log.
      The unauthenticated-write warning no longer prints on `--dry-run` or on a
-     read-only `gate`. `MODELGUARD_LABEL_TERM_URN` exists, because `config.py`
+     read-only `gate`. `JANUS_LABEL_TERM_URN` exists, because `config.py`
      documented the label term as configurable while `from_env` never read it,
      so on a real catalog the detector could only ever look for a term that was
      not there. A leak path across sibling entities (dbt and postgres both
      describing one table) rendered as "x <- x <- y"; consecutive repeats now
      collapse. A model whose `mlModelProperties.name` ingestion left unset
      rendered as a full URN mid-sentence, and now reads as its URN name.
-     `modelguard inventory` lists every model in a graph with what can and
+     `janus inventory` lists every model in a graph with what can and
      cannot be checked, which is the first thing to run against a DataHub you
      did not seed.
 - Options considered: (a) document the gaps and change nothing, (b) fix the
@@ -2507,11 +2527,11 @@ Entry template:
   reruns, the fix closing the incident automatically, and the retrained model
   coming back clean with both checks actually running. 392 unit tests green,
   ruff and mypy clean. The harness is committed at `examples/real-project/`.
-  The sweeps followed: `modelguard scan --all-models` audits every model in a
-  graph and `modelguard link --all` replays every recorded link, which is the
+  The sweeps followed: `janus scan --all-models` audits every model in a
+  graph and `janus link --all` replays every recorded link, which is the
   post-ingestion step reduced to one scheduled command (a model nobody linked is
   skipped rather than guessed at). The 42 integration tests were run against the
-  live graph on this code, with `modelguard watch` stopped first per
+  live graph on this code, with `janus watch` stopped first per
   tests/CLAUDE.md rule 2, and all pass.
 
   Still true, and now visible rather than hidden: `link` has to run after each
@@ -2537,7 +2557,7 @@ Entry template:
      overwrote the first. The finding type joins the key, mirroring the incident
      dedup key that already separates the same case.
   2. **One malformed property killed a whole model's leakage scan.**
-     `modelguard.source_column` is free text anything can write. An unparseable
+     `janus.source_column` is free text anything can write. An unparseable
      value reached `SchemaFieldUrn.from_string` inside `leak_path` with no
      guard, and the exception left `leakage_findings` entirely, so a model with
      one bad feature got no leakage detection at all rather than one skipped
@@ -2575,8 +2595,8 @@ Entry template:
 
   8. **The judge VM's watcher could not be restarted, at all.** Found while
      deploying this branch, not by reading code: `systemctl stop
-     modelguard-watch` left the container `Up`, because
-     `ExecStop=docker compose stop modelguard-watch-live` names a *container*
+     janus-watch` left the container `Up`, because
+     `ExecStop=docker compose stop janus-watch-live` names a *container*
      where `compose stop` takes a *service*, so it stopped nothing and said so
      only to a log nobody reads. The container then outlived its unit and every
      `ExecStart` after it died on the name conflict, with `Restart=always`
@@ -2590,7 +2610,7 @@ Entry template:
 
   **The stale claims**, each one something a judge could check and find false:
   - SKILL.md, the README and `05-oss-delivery.md` told readers to
-    `pip install modelguard-datahub`. It is not published: `/simple/` 404s and
+    `pip install janus-datahub`. It is not published: `/simple/` 404s and
     no tag has been pushed, which D-072 states plainly and the three of them
     contradicted. They now name the clone-and-install path that works today and
     the `pip install` from the first release on, and the delivery plan says not
@@ -2634,14 +2654,14 @@ Entry template:
   the same two document URNs, so the write path is still idempotent under the
   new document id. `watch --once` against a healthy table printed the corrected
   `clean: no findings.` and both of the new scan log lines (`dry_run=true` for
-  the preview poll, `dry_run=false` for the write). ModelGuard-Bench was rerun
+  the preview poll, `dry_run=false` for the write). Janus-Bench was rerun
   against that graph and still scores 1.00 precision / 1.00 recall / 0.00
   false-positive rate on all three detectors with 0 duplicates, so none of the
   detector changes moved a measured number.
   **One flake worth naming rather than rerunning past:** the first integration
   run failed `test_the_assertion_run_records_the_failure_this_scan_actually_measured`
   and the identical second run passed. Cause found, not shrugged at: the live
-  `modelguard watch` service was polling the same table, an assertion run event
+  `janus watch` service was polling the same table, an assertion run event
   is a timeseries append, and the test reads the *latest* one, so the watcher's
   event can become the latest between the test's scan and its read. A test
   hazard, not a product defect; recorded as a precondition in tests/CLAUDE.md
@@ -2650,7 +2670,7 @@ Entry template:
   impact-report document id, so reports published by an earlier version no
   longer converge and are left orphaned beside the new ones on the model's page.
   The judge VM carries exactly two of them
-  (`modelguard-impact-credit_risk_v3-b02815b129df` and `-f11cac0ff133`); delete
+  (`janus-impact-credit_risk_v3-b02815b129df` and `-f11cac0ff133`); delete
   them once, or re-seed. Deliberately no legacy-id compatibility code, for the
   same reason D-070 declined it. **Also verified, closing D-070's own open
   migration note:** the judge VM's incidents were listed and there is no
@@ -2785,8 +2805,8 @@ Entry template:
   trust in the tool that the whole project sells. They were reachable from the
   demo path, not theoretical: (1) fires on any model with two leaking features,
   which the seeded scenario is one edit away from.
-- Result: `modelguard/agent/pipeline.py`, `modelguard/agent/graph.py`, and
-  `modelguard/models.py` fixed; regression tests in `tests/agent/test_pipeline.py`,
+- Result: `janus/agent/pipeline.py`, `janus/agent/graph.py`, and
+  `janus/models.py` fixed; regression tests in `tests/agent/test_pipeline.py`,
   `tests/agent/test_graph.py`, and `tests/test_models.py`, each verified red
   against a pre-fix worktree; `active_incident` promoted to `tests/conftest.py`
   now that three test modules seed one. `pytest -m "not integration"` green
@@ -2813,7 +2833,7 @@ Entry template:
   offline suite, ruff, and mypy.
   1. **Fixed:** this machine's `.venv` was missing the `mcp` package, so
      `tests/test_mcp_server.py` failed collection (`ModuleNotFoundError`) and
-     `modelguard-mcp` could not run at all. `pyproject.toml` already lists
+     `janus-mcp` could not run at all. `pyproject.toml` already lists
      `mcp` under both the `mcp` and `dev` extras; the venv had drifted from it.
      Not a repo defect (`.venv` is git-ignored), reinstalled to match the
      documented dependency set, same class of drive-by as D-058's `.env` fix.
@@ -2842,7 +2862,7 @@ Entry template:
   exact over-scoping the risk register already warns against, and it reopens
   a design question D-067 settled hours ago. Flagging it here means it is not
   forgotten if a real deployment ever does remove a leaking feature outright.
-- Result: `modelguard/agent/pipeline.py` docstring fixed;
+- Result: `janus/agent/pipeline.py` docstring fixed;
   `pytest -m "not integration"` green (367 passed), ruff and mypy clean. No
   live DataHub Quickstart on this machine to re-run the 42 integration tests
   (2.2Gi free RAM, 14G free disk at review time); offline coverage only.
@@ -2855,12 +2875,12 @@ Entry template:
   and stale-incident bugs it fixed
 - Decision: `git pull`'d main onto the VM (a fresh short-lived fine-grained PAT
   used only in the live SSH command, never written to the VM's git config, revoked
-  right after, same convention as D-062), rebuilt `modelguard:local` (`docker
-  compose build modelguard-watch`, since `docker compose run` does not
-  auto-rebuild on its own), and restarted `modelguard-watch.service`.
+  right after, same convention as D-062), rebuilt `janus:local` (`docker
+  compose build janus-watch`, since `docker compose run` does not
+  auto-rebuild on its own), and restarted `janus-watch.service`.
 - A real hiccup along the way: the restart failed once with a container-name
-  conflict (`modelguard-watch-live` already in use). `journalctl` showed why:
-  `ExecStop=/usr/bin/docker compose stop modelguard-watch-live` errors with
+  conflict (`janus-watch-live` already in use). `journalctl` showed why:
+  `ExecStop=/usr/bin/docker compose stop janus-watch-live` errors with
   `no such service`, because a container started via `docker compose run` is not
   tracked as a stoppable "service" the way `docker compose up` output is. The
   container still stops (systemd's own SIGTERM to the main PID reaches it,
@@ -2898,7 +2918,7 @@ Entry template:
      finding (20 points) plus an unowned model (10 points) landed at exactly
      70, the healthy floor, labeled `healthy` even though `gate
      --block-at-or-above high` correctly blocked the same model as
-     `critical`. `modelguard/detect/trust_score.py` now caps the band at
+     `critical`. `janus/detect/trust_score.py` now caps the band at
      `WATCH` whenever the worst finding rolled into the score is `CRITICAL`
      or `HIGH` (a live-serving model's severities), regardless of the point
      total. `MEDIUM` (a non-live model) is deliberately excluded: nothing is
@@ -2924,11 +2944,11 @@ Entry template:
   side-channel state store (a file, or a duplicate property) is another
   thing that can go stale or disagree with the graph, exactly the class of
   bug this fix exists to close.
-- Result: `modelguard/detect/blast_radius.py` gains `downstream_models`, the
+- Result: `janus/detect/blast_radius.py` gains `downstream_models`, the
   same traversal `blast_radius` already does, minus the staleness gate, so a
   *recovered* table's incident can still find which models to clear risk
-  from. `modelguard/detect/schema_drift.py` gains
-  `schema_drift_candidate_resources`. `modelguard/agent/pipeline.py` gains
+  from. `janus/detect/schema_drift.py` gains
+  `schema_drift_candidate_resources`. `janus/agent/pipeline.py` gains
   `_reconcile_stale_findings`, called from `run_scan`'s write path (never
   from `--dry-run`, resolving is a write) for all three finding types,
   matching D-040's own cleanup scope (incident resolved, leakage-risk term
@@ -2968,11 +2988,11 @@ Entry template:
   allocate a new public IP and repointed the Cloudflare A record instead,
   the same one-line fix used the first time the domain was set up.
 - Result: cold-init completed in 557 seconds with zero errors (Docker
-  install, clone, full Quickstart boot, seed, scenario, `modelguard-watch`
+  install, clone, full Quickstart boot, seed, scenario, `janus-watch`
   enablement, all in one unattended run). All 7 `datahub-*` containers came
   up healthy, including OpenSearch, and all 7 already carried
   `restart: unless-stopped`, confirming D-065's fix is real and not an
-  artifact of patching a running VM. `modelguard-watch.service` raised a
+  artifact of patching a running VM. `janus-watch.service` raised a
   real incident within seconds of boot. The two manual post-steps not
   covered by `cloud-init.yaml` (Caddy/HTTPS, frontend password) were redone
   and verified live: a real `POST /logIn` returned a valid session cookie, an
@@ -2993,7 +3013,7 @@ Entry template:
   `datahub-opensearch-1` had crashed 6 hours earlier with
   `OutOfMemoryError: unable to create native thread` (the VM's 8GB RAM is
   shared across MySQL, Kafka, OpenSearch, GMS, the frontend, datahub-actions,
-  and the modelguard-watch container), and had no restart policy, so it
+  and the janus-watch container), and had no restart policy, so it
   stayed dead. GMS and the frontend kept answering health checks the whole
   time, so search/browse was silently broken with nothing outwardly showing
   it. Fixed live (`docker update --restart unless-stopped` on all quickstart
@@ -3013,7 +3033,7 @@ Entry template:
   `POST /logIn` (got back a valid session cookie for
   `urn:li:corpuser:datahub`), a real GMS search query for `loans_raw`
   (returned 2 dataset entities, one with `hasActiveIncidents`), and
-  `journalctl` for `modelguard-watch.service` (actively logging
+  `journalctl` for `janus-watch.service` (actively logging
   `"no change (2 open finding(s))"` on its normal cadence).
 - A repeat of the D-064 footgun, caught faster this time: my sandbox's
   outbound IP and the user's real machine IP turned out to be the same
@@ -3037,7 +3057,7 @@ Entry template:
 ## D-064: Custom domain and HTTPS via Caddy, added after the demo verified live (2026-07-29)
 - Decided by: Ahmed Saad (wanted the URL to not be a raw IP)
 - Decision: Reverse-proxy the DataHub frontend behind Caddy on
-  `https://modelguard.ahmedxsaad.me`, with Caddy handling automatic Let's
+  `https://janus.ahmedxsaad.me`, with Caddy handling automatic Let's
   Encrypt certificate issuance and renewal. Documented as a new, optional,
   manual post-provision section in `docs/deploy/azure-vm.md`; not folded into
   `cloud-init.yaml` since the domain does not exist at provisioning time.
@@ -3053,7 +3073,7 @@ Entry template:
 - Why Caddy over nginx+certbot: one binary, one config block, automatic
   certificate acquisition and renewal built in, no separate certbot
   cron/timer to maintain. Verified live: `tls-alpn-01` challenge succeeded
-  and `https://modelguard.ahmedxsaad.me` returned `HTTP/2 200` with a real
+  and `https://janus.ahmedxsaad.me` returned `HTTP/2 200` with a real
   issued certificate within seconds of DNS, the two new NSG rules, and Caddy
   all being in place together.
 - Why DNS had to be "DNS only" not proxied: Cloudflare's proxy (orange
@@ -3091,19 +3111,19 @@ Entry template:
   it directly as that user.
 - Options considered: (a) keep write_files but drop its owner: field and add
   a separate chown in runcmd, (b) move the whole write to runcmd, (c) make
-  the earlier chown /opt/modelguard recursive (-R) to fix ownership without
+  the earlier chown /opt/janus recursive (-R) to fix ownership without
   moving the write.
 - Why: `cloud-init status --long` on the real VM showed `write_files` failed
   with `OSError('Unknown user or group: "getpwnam(): name not found:
   'azureuser'"')` at 17 seconds into boot: write_files runs in an earlier
   cloud-init stage than user_groups has necessarily finished in, so
   `owner: "azureuser:azureuser"` raced the account's own creation. Worse,
-  the module still created `/opt/modelguard/DataHub` as root before failing,
-  and the later `chown azureuser:azureuser /opt/modelguard` in runcmd is not
+  the module still created `/opt/janus/DataHub` as root before failing,
+  and the later `chown azureuser:azureuser /opt/janus` in runcmd is not
   recursive, so that pre-existing subdirectory stayed root-owned; the git
   clone into it then failed with Permission Denied as `azureuser`, a second,
   cascading failure from the same root cause (confirmed on the VM:
-  `/opt/modelguard/DataHub` was `drwxr-xr-x root root`, empty, no `.git`).
+  `/opt/janus/DataHub` was `drwxr-xr-x root root`, empty, no `.git`).
   Option (c) alone would have fixed the clone but not the original
   write_files race; option (b) removes the race entirely because runcmd
   guarantees both azureuser and the cloned repo already exist, and it also
@@ -3227,7 +3247,7 @@ Entry template:
   disks, 3750 IOPS, no local temp disk) at roughly a quarter of the price,
   and is non-burstable (fixed, sustained CPU, no credit bank to exhaust),
   which is a better fit than burstable for a box running three JVMs plus
-  MySQL plus `modelguard watch` concurrently. No reserved-instance or Spot
+  MySQL plus `janus watch` concurrently. No reserved-instance or Spot
   toggle was visible in the screenshots (`Display cost: Hourly` shown
   explicitly), so this is trusted as on-demand pricing, not a commitment
   rate.
@@ -3273,7 +3293,7 @@ Entry template:
 - The honest tradeoff stated plainly rather than hidden in a smaller
   headline number: `B2ms`'s 8 GiB has no margin above the stated minimum for
   a stack running GMS, OpenSearch, and Kafka as three separate JVMs plus
-  MySQL plus `modelguard watch`, and this has not been run on real hardware
+  MySQL plus `janus watch`, and this has not been run on real hardware
   to confirm it holds up. The guide documents the resize path
   (`az vm deallocate` then `az vm resize` then `az vm start`, all state
   preserved) as the answer if it does not, rather than presenting `B2ms` as a
@@ -3307,13 +3327,13 @@ Entry template:
   3. `writeback/documents.py`'s leak-path markdown fence embedded
      `leak.path_text` unescaped; a column name containing a backtick run
      could close the fence early. Sanitized before embedding.
-  4. `modelguard gate` did not wrap `run_scan`/`evaluate` in a try/except: an
+  4. `janus gate` did not wrap `run_scan`/`evaluate` in a try/except: an
      exception raised mid-scan (e.g. GMS dropping the connection after
      `_prepare`'s own check passed) propagated out as exit code 1,
      indistinguishable from a real policy violation, which is exactly the
      collapse gate.py's own docstring says a gate must never allow. Now
      remapped to `EXIT_ERROR` (2), matching `_prepare`'s existing remap.
-  5. `modelguard gate`'s `--llm-provider`/`--llm-model` were dead flags:
+  5. `janus gate`'s `--llm-provider`/`--llm-model` were dead flags:
      `--no-llm` defaulted to `True` with only a one-directional flag, so
      there was no way to ever set it `False` from the CLI, and `_resolve_llm`
      short-circuits to `None` whenever `no_llm` is true. Changed to
@@ -3337,14 +3357,14 @@ Entry template:
      empty (`{}`) the same as no snapshot at all, instead of flagging every
      current column as newly added.
   9. `skill/datahub-ml-guard/SKILL.md`'s `allowed-tools` frontmatter granted
-     Bash only for `modelguard`, `modelguard-seed`, `modelguard-scenario`,
+     Bash only for `janus`, `janus-seed`, `janus-scenario`,
      but the documented Workflow section instructs running
      `scripts/check_blast_radius.sh`, `scripts/check_leakage.sh`,
      `scripts/guard.sh`, and `scripts/seed_demo.sh` directly. Added those four
      patterns so the skill's own permission declaration does not forbid its
      documented workflow.
   Also fixed as a drive-by: this machine's untracked `.env` was missing
-  `MODELGUARD_LEAKAGE_MAX_HOPS`, present in `.env.example`; not a repo defect
+  `JANUS_LEAKAGE_MAX_HOPS`, present in `.env.example`; not a repo defect
   (`.env` is git-ignored) but corrected for the documented parity rule.
 - Options considered: report findings only, versus fix them in place. Fix
   chosen: every finding was independently verified against the actual file
@@ -3356,10 +3376,10 @@ Entry template:
   leakage, exit-code collapse, N+1 reads, non-deterministic reports);
   leaving them found-but-unfixed after a "look for gaps and fix them" review
   would be a worse outcome than not reviewing at all.
-- Result: `modelguard/writeback/terms.py`, `modelguard/agent/narrate.py`,
-  `modelguard/writeback/documents.py`, `modelguard/cli.py`,
-  `modelguard/detect/graph_reads.py`, `modelguard/detect/blast_radius.py`,
-  `modelguard/detect/schema_drift.py`, `skill/datahub-ml-guard/SKILL.md`,
+- Result: `janus/writeback/terms.py`, `janus/agent/narrate.py`,
+  `janus/writeback/documents.py`, `janus/cli.py`,
+  `janus/detect/graph_reads.py`, `janus/detect/blast_radius.py`,
+  `janus/detect/schema_drift.py`, `skill/datahub-ml-guard/SKILL.md`,
   `tests/agent/test_narrate.py`, `tests/conftest.py` all changed;
   `pytest -m "not integration"` green (353 passed).
 
@@ -3367,9 +3387,9 @@ Entry template:
 - Decided by: Ahmed Saad (confirmed the use case: a live demo judges can visit
   during the judging period, not a personal dev box), by Claude
 - Decision: `docs/deploy/azure-vm.md` (the runbook), `deploy/azure/cloud-init.yaml`
-  (first-boot provisioning), `deploy/azure/modelguard-watch.service` (the
+  (first-boot provisioning), `deploy/azure/janus-watch.service` (the
   systemd unit cloud-init installs). One VM: DataHub Quickstart plus
-  `modelguard watch` running continuously against both the seeded table and
+  `janus watch` running continuously against both the seeded table and
   model, so the graph keeps reflecting live findings without anyone needing to
   be online to demonstrate it, satisfying the submission rules' requirement
   that the project stay available "until the Judging Period ends."
@@ -3395,9 +3415,9 @@ Entry template:
   ordering dependency on DataHub's own startup: GMS can take well over a
   minute to become reachable after boot, and getting cross-service ordering
   exactly right for a multi-container stack that is not itself managed by
-  systemd is fragile. `modelguard watch` already fails fast and loudly with a
+  systemd is fragile. `janus watch` already fails fast and loudly with a
   clear `DataHubConnectionError` when GMS is not yet reachable
-  (`modelguard/client.py`), the same exit-code discipline `modelguard gate`
+  (`janus/client.py`), the same exit-code discipline `janus gate`
   relies on (D-052). Leaning on it here, `RestartSec=15` turning an expected
   first failure into a self-healing retry, is reuse of a boundary the code
   already draws correctly, not a shortcut taken because ordering was too much
@@ -3413,7 +3433,7 @@ Entry template:
 - Verified without a live VM, and the runbook says so rather than implying
   otherwise: `cloud-init.yaml`'s YAML structure parsed and asserted on with a
   real parser; every `runcmd` shell fragment extracted and passed through
-  `bash -n`; `modelguard-watch.service` passed `systemd-analyze verify`
+  `bash -n`; `janus-watch.service` passed `systemd-analyze verify`
   (installed locally for the purpose, no VM needed for this particular check).
   A new CI job, `deploy-files`, runs all three on every push, mirroring the
   `docker` and `helm` jobs' build-only, no-live-target reasoning. What none of
@@ -3421,19 +3441,19 @@ Entry template:
   working VM. The runbook's own "Verify the demo works" section exists
   because of that gap, not despite it.
 - Result: `docs/deploy/azure-vm.md`, `deploy/azure/cloud-init.yaml`,
-  `deploy/azure/modelguard-watch.service`, `deploy/CLAUDE.md`, a `deploy-files`
+  `deploy/azure/janus-watch.service`, `deploy/CLAUDE.md`, a `deploy-files`
   CI job. Not run: no Azure resource group was created, nothing was
   provisioned, no cost was incurred. Provisioning and the first real smoke
   test are the maintainer's own next step.
 
 ## D-056: A Helm chart for exactly one workload, watch, not a chart per command (2026-07-23)
 - Decided by: Ahmed Saad (asked for a Helm chart for the watch daemon), by Claude
-- Decision: `charts/modelguard-watch/` deploys `modelguard watch` as a Kubernetes
+- Decision: `charts/janus-watch/` deploys `janus watch` as a Kubernetes
   Deployment. No chart for `scan` or `gate`: both are one-shot, and a Deployment
   is the wrong primitive for something that is supposed to run once and exit,
   a `Job` or a CI step already covers that ground. The MCP server speaks stdio
   to whatever process launches it, not to a cluster; it has no chart either.
-- Why watch and only watch: it is the one ModelGuard entry point that is
+- Why watch and only watch: it is the one Janus entry point that is
   actually meant to run forever. Writing charts for the other three would have
   been packaging for its own sake, not for a workload that needs it.
 - Three defensible-looking defaults were rejected after checking what they
@@ -3478,7 +3498,7 @@ Entry template:
   proves the chart renders correct Kubernetes YAML, not that a pod starts.
 - `.github/workflows/publish-image.yml` lands so the chart has somewhere real
   to pull from: builds and pushes the existing Dockerfile image to
-  `ghcr.io/<owner>/datahub/modelguard`, gated on a version tag rather than
+  `ghcr.io/<owner>/datahub/janus`, gated on a version tag rather than
   every push to main, since publishing a public image is a visible action that
   should stay behind a maintainer's deliberate release step even though, unlike
   a PyPI upload, it is reversible. Nothing was actually pushed in this pass; no
@@ -3490,26 +3510,26 @@ Entry template:
   template`, now run by hand and by a new CI job (`helm`) on every push, are
   the real check for those files; the exclusion routes the check to the tool
   that understands the format rather than silently dropping it.
-- Result: `charts/modelguard-watch/` (Chart.yaml, values.yaml, four templates,
+- Result: `charts/janus-watch/` (Chart.yaml, values.yaml, four templates,
   README, CLAUDE.md), `.github/workflows/publish-image.yml`,
   `.github/workflows/ci.yml` gains a third-party-equivalent `helm` job mirroring
   the `docker` job's build-only, no-live-target reasoning.
 
-## D-055: The PyPI distribution is modelguard-datahub, not modelguard (2026-07-23)
+## D-055: The PyPI distribution is janus-datahub, not janus (2026-07-23)
 - Decided by: Ahmed Saad (chose the name from the options presented), by Claude
-- Decision: `pyproject.toml`'s `[project] name` becomes `modelguard-datahub`. Every
-  installed artifact keeps its existing name: the CLI is still `modelguard`, the
-  import package is still `modelguard`, the console scripts are still
-  `modelguard-mcp`/`modelguard-seed`/`modelguard-scenario`. Only what a user types
+- Decision: `pyproject.toml`'s `[project] name` becomes `janus-datahub`. Every
+  installed artifact keeps its existing name: the CLI is still `janus`, the
+  import package is still `janus`, the console scripts are still
+  `janus-mcp`/`janus-seed`/`janus-scenario`. Only what a user types
   into `pip install <X>` changes. `[project.urls]`, `authors`, `keywords`, and
   `classifiers` were added; the project had none before.
 - Why: checked before assuming the obvious name was free. It was not.
-  `https://pypi.org/pypi/modelguard/json` returns 200: an unrelated package already
-  holds the exact name `modelguard` (one release, 0.1.0, summary "TODO", apparently
+  `https://pypi.org/pypi/janus/json` returns 200: an unrelated package already
+  holds the exact name `janus` (one release, 0.1.0, summary "TODO", apparently
   abandoned). PyPI names are global and are never reclaimed because a package looks
   unused, so publishing under it was never an option, not a matter of asking. Five
   alternates were checked available before presenting the choice; `-datahub` was
-  chosen over `datahub-` because it reads as "ModelGuard, for DataHub" rather than
+  chosen over `datahub-` because it reads as "Janus, for DataHub" rather than
   leading with the sponsor's name.
 - Two real, version-specific bugs found by actually building the package, not by
   writing the config and assuming it would work: (1) setuptools>=83 implements
@@ -3524,31 +3544,31 @@ Entry template:
   same 3.11.14 interpreter the project's own `.venv` uses.
 - Verified end to end, not just built: `twine check` passes both the sdist and the
   wheel. Installed the wheel into a genuinely fresh venv (no project code, no
-  cached wheels) and confirmed all four console scripts run, `modelguard gate
+  cached wheels) and confirmed all four console scripts run, `janus gate
   --help` works, `pip show` reports the license via the modern
   `License-Expression: Apache-2.0` metadata field, and the `agent`/`mcp` extras
   are real: importing `mcp` or `langgraph` fails in the base install and succeeds
   once `[mcp]` is requested.
 - A cross-file consistency bug found and fixed in the same pass: `action.yml`'s
-  own install step still read `pip install modelguard${{ inputs.version }}`, which
+  own install step still read `pip install janus${{ inputs.version }}`, which
   after this rename would have silently installed the *wrong, unrelated* PyPI
   package into every CI run using the bundled Action. Caught by grepping the whole
   repo for the old install pattern after the rename, not by re-reading the Action
   file from memory.
-- Result: `dist/modelguard_datahub-0.1.0-{py3-none-any.whl,tar.gz}` built and
+- Result: `dist/janus_datahub-0.1.0-{py3-none-any.whl,tar.gz}` built and
   validated (not published: that needs this project's own PyPI account and
   credentials, which is this session's call to make, not something to do without
   being asked). `skill/datahub-ml-guard/SKILL.md`'s prerequisite changes from
-  "clone the ModelGuard repo, `pip install -e .`" to a one-line `pip install
-  modelguard-datahub`, closing the "modelguard-dependency wrinkle" the OSS
+  "clone the Janus repo, `pip install -e .`" to a one-line `pip install
+  janus-datahub`, closing the "janus-dependency wrinkle" the OSS
   delivery doc flagged as an expected upstream reviewer question (section 8.1).
 
 ## D-054: Docker composes with the Quickstart's network instead of reimplementing it (2026-07-23)
 - Decided by: Ahmed Saad (asked for deployment packaging: Docker, Helm, a hosted VM), by Claude
 - Decision: `Dockerfile` (multi-stage, non-root, pinned to `python:3.11.14-slim`,
   every console script installed) and `docker-compose.yml` (six services, one image,
-  differing only in entrypoint: `modelguard`, `modelguard-watch`, `modelguard-gate`,
-  `modelguard-seed`, `modelguard-scenario`, `modelguard-mcp`).
+  differing only in entrypoint: `janus`, `janus-watch`, `janus-gate`,
+  `janus-seed`, `janus-scenario`, `janus-mcp`).
 - The design choice that mattered: compose attaches to `datahub_network`, the
   Docker network `datahub docker quickstart` already creates (GMS reachable inside
   it as `datahub-gms:8080`), declared `external: true` rather than defined. Building
@@ -3560,18 +3580,18 @@ Entry template:
 - A real defect found and fixed before it shipped, not after: the first version let
   compose default the project name to the repo directory, lowercased ("datahub"),
   identical to the Quickstart's own project name. Verified live: with that default,
-  `docker compose up -d modelguard-mcp` immediately warned that every
+  `docker compose up -d janus-mcp` immediately warned that every
   datahub-quickstart container was an "orphan container for this project", and an
   ordinary `docker compose down --remove-orphans` run from this repo, the standard
   cleanup command, would have stopped the entire Quickstart believing it was
-  cleaning up only ModelGuard's own containers. Fixed with an explicit `name:
-  modelguard` at the top of the file; reverified with `--remove-orphans` that
+  cleaning up only Janus's own containers. Fixed with an explicit `name:
+  janus` at the top of the file; reverified with `--remove-orphans` that
   DataHub's containers survive.
 - A second design question resolved empirically rather than assumed: whether
   `docker compose up` with no service named should start anything. Every service
   here either needs an explicit `--table`/`--model` (a scan or gate against nothing
   is a guess, not a reproducible command) or has a real side effect
-  (`modelguard-scenario` plants a failure by default). The first attempt used a
+  (`janus-scenario` plants a failure by default). The first attempt used a
   hidden `_base` service plus `extends` and an empty-list profile override to try
   to get "runnable individually, started by nothing"; `docker compose config`
   resolved that to zero services entirely; a YAML anchor and a plain
@@ -3580,35 +3600,35 @@ Entry template:
   no profile lists nothing, `run --rm <service>` and `up <service>` (named
   explicitly) both work regardless of the active profile.
 - Verified end to end, not just built: the image runs as a non-root user (`uid=999`);
-  all four console scripts are present and on `PATH`; `modelguard-seed` reaches
-  `datahub-gms:8080` over the compose network and seeds; `modelguard gate
+  all four console scripts are present and on `PATH`; `janus-seed` reaches
+  `datahub-gms:8080` over the compose network and seeds; `janus gate
   --block-at-or-above high` on the leaking model exits 1 through both `docker run`
   and `docker compose run`, with the real process exit code checked separately from
   a piped `grep`'s, which had silently reported 0 on the first attempt;
-  `modelguard-mcp` starts and stays running (confirmed via a detached container,
+  `janus-mcp` starts and stays running (confirmed via a detached container,
   since the stdio transport blocks on stdin by design and a foreground-attached
   `docker run` with a 5-second `timeout` hung past it, which is correct MCP
   behavior, not a defect).
 - CI gains a third job, `docker`: build-only, plus `whoami` and `--help`/`command -v`
   checks, not a functional test against a live DataHub, for the same reason the
   integration suite stays off hosted runners. A second defect was caught writing
-  that job before it shipped: `modelguard-seed` and `modelguard-mcp` have no
+  that job before it shipped: `janus-seed` and `janus-mcp` have no
   argument parser at all, they connect to DataHub immediately, so a uniform
   `--help` check across all four scripts would have failed those two on a real,
   expected `DataHubConnectionError` and reported a packaging problem that did not
   exist. Split into two steps: `--help` for the two scripts that actually parse
-  arguments first (`modelguard`, `modelguard-scenario`), `command -v` for the two
+  arguments first (`janus`, `janus-scenario`), `command -v` for the two
   that do not.
 - Result: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, and the `docker`
   CI job. README gains a "Run it without a Python install" section.
 
 ## D-053: A read-only MCP server, the fourth trigger, hits criterion 1's named surface (2026-07-23)
 - Decided by: Ahmed Saad (asked for a second original feature), by Claude
-- Decision: `modelguard/mcp_server.py` exposes three tools over MCP:
+- Decision: `janus/mcp_server.py` exposes three tools over MCP:
   `check_leakage`, `check_freshness`, `check_gate`. Each wraps `run_scan` in
-  dry-run and nothing else. `modelguard-mcp` serves them over stdio.
+  dry-run and nothing else. `janus-mcp` serves them over stdio.
 - Why: the hackathon's judging criteria name the MCP Server explicitly as one of
-  the surfaces criterion 1 (Use of DataHub) rewards, and at runtime ModelGuard
+  the surfaces criterion 1 (Use of DataHub) rewards, and at runtime Janus
   used none of them, only the SDK directly. This closes that gap and gives the
   demo a second mode: instead of a terminal, an operator can ask an MCP client
   "is credit_risk_v3 leaking?" in plain language and get a real, measured answer.
@@ -3616,7 +3636,7 @@ Entry template:
   registering each with `readOnlyHint: true` and calling `run_scan` with
   `dry_run=True` unconditionally, no flag to turn it off. Not a cautious default,
   a hard boundary, for the same reason `gate` reads and does not write (D-052):
-  the model making the tool call is not ModelGuard's own narrator gated by
+  the model making the tool call is not Janus's own narrator gated by
   `--review`, it is whatever model the MCP client is running, entirely outside
   this project's control. Handing a tool like that a write capability would let
   an ordinary conversation turn into an unreviewed mutation of the governance
@@ -3626,7 +3646,7 @@ Entry template:
 - Verified live rather than assumed from the annotation: `check_leakage` on the
   seeded (leaking) model returns the leak path and a 70/100 trust score;
   `check_gate` with `block_at_or_above=high` returns BLOCKED with the same
-  violation `modelguard gate` prints; `check_freshness` on the reverted table
+  violation `janus gate` prints; `check_freshness` on the reverted table
   returns clean. `tests/test_mcp_server.py` pins the read-only property against
   the server's actual registration (`list_tools()`, the same call an MCP client
   makes), not against the constant in isolation; mutation-checked by dropping the
@@ -3638,15 +3658,15 @@ Entry template:
 
 ## D-052: A CI gate makes the "missing CI for ML" tagline literally true (2026-07-23)
 - Decided by: Ahmed Saad (asked for an original feature scoring a new point), by Claude
-- Decision: `modelguard gate` and `modelguard/gate.py` add the preventive half of
-  ModelGuard, with a reusable GitHub Action at `action.yml`. The gate runs the same
+- Decision: `janus gate` and `janus/gate.py` add the preventive half of
+  Janus, with a reusable GitHub Action at `action.yml`. The gate runs the same
   detectors `scan` runs, judges the result against a `GatePolicy`
   (`--block-at-or-above <severity>`, `--min-trust <score>`), and answers in an exit
   code: 0 shippable, 1 blocked, 2 could not tell.
 - Why this and not something else: a survey of the competing hackathon repos (a
   dozen-plus, plus the datahub-skills PR queue) found every one of them reactive:
   incident response, root-cause, change briefs, drift RCA. None prevents anything.
-  ModelGuard's own headline is "the missing CI for your ML supply chain", and until
+  Janus's own headline is "the missing CI for your ML supply chain", and until
   this landed that was aspirational, everything it did was after the fact on a graph
   that already held the mistake. A gate that fails a pull request before a leaking
   model merges is the one thing the competitive set does not do, it is what the
@@ -3668,7 +3688,7 @@ Entry template:
      gate runs: zero incidents raised, zero properties changed.
   3. **No policy blocks nothing.** A gate that failed the moment it was installed,
      before anyone said what they cared about, would be removed the same afternoon,
-     so a bare `modelguard gate` reports and passes, and says it enforced nothing.
+     so a bare `janus gate` reports and passes, and says it enforced nothing.
 - On the offline/live split, following benchmarks/metrics.py: `gate.py` is pure and
   the whole policy is a function of a ScanReport, so the arithmetic is checked
   offline (19 tests, four unsafe-pass mutations each killing the suite: an inverted
@@ -3676,7 +3696,7 @@ Entry template:
   the boundary, and a blocked verdict returning exit 0). The two claims only a real
   DataHub can settle, that the verdict tracks the graph and that a run leaves no
   trace, are three live integration tests.
-- Result: `modelguard gate` and `action.yml` ship. 353 offline tests (up from 334)
+- Result: `janus gate` and `action.yml` ship. 353 offline tests (up from 334)
   and 42 integration (up from 39), all green. The full lifecycle was walked by hand
   as a user would: a leaking model blocks with a GitHub annotation, reverting the
   leak clears the gate, the trust floor blocks the same model at a higher bar, and
@@ -3685,7 +3705,7 @@ Entry template:
   bind port 8080 (a Node process owned it) or 8081 (another owned that too), and a
   failed bind aborts the container's network attachment, so GMS fell back to public
   DNS and never came up. Moved GMS to 18080 via DATAHUB_MAPPED_GMS_PORT and pointed
-  .env at it. Not a ModelGuard issue; recorded so the next person who sees the DNS
+  .env at it. Not a Janus issue; recorded so the next person who sees the DNS
   errors does not chase the wrong thing.
 
 ## D-051: CI runs pre-commit rather than its own checks, and reports the dependency audit rather than failing on it (2026-07-22)
@@ -3694,7 +3714,7 @@ Entry template:
   jobs. `check` installs the project and runs `pre-commit run --all-files` then
   the offline test suite. `audit` runs `pip-audit` and is marked
   `continue-on-error`. The pre-commit mypy hook now covers `benchmarks/` as well
-  as `modelguard/`.
+  as `janus/`.
 - Options considered for the lint step: (a) list ruff, ruff-format and mypy
   invocations in the workflow, (b) run pre-commit. (b) chosen: (a) duplicates the
   configuration and lets the checks a developer runs locally drift from the ones
@@ -3735,9 +3755,9 @@ Entry template:
   fix nor honestly dismiss is worth telling DataHub about.
 - Two bugs in the day-old benchmark code, found by reviewing it rather than by a
   failing test: (1) `table_level_leakage` did not filter results past the hop cap,
-  though ModelGuard's own leakage detector does (D-020, DataHub over-returns above
+  though Janus's own leakage detector does (D-020, DataHub over-returns above
   two hops). On a larger graph the baseline would have inherited distant tables
-  ModelGuard never sees, and any label in one of them would have scored as a false
+  Janus never sees, and any label in one of them would have scored as a false
   positive caused by this harness rather than by the approach, which is precisely
   what benchmarks/CLAUDE.md rule 9 forbids. (2) `measure_leakage_approaches` raised
   when a precondition never landed, discarding a complete benchmark run over a slow
@@ -3752,7 +3772,7 @@ Entry template:
   submission), built by Claude
 - Decision: `benchmarks/baselines.py` scores two approaches without column-level
   lineage on the same graph, the same trials, and the same ground truth as
-  ModelGuard: table-level lineage, and table quality checks with no lineage at
+  Janus: table-level lineage, and table quality checks with no lineage at
   all. Scored per **feature** rather than per model, because every approach gets
   "does this model leak" right on a leaking graph; the question that separates
   them is *which* feature leaks, which is the one somebody has to act on.
@@ -3764,7 +3784,7 @@ Entry template:
 
   | Approach | Precision | Recall | FP rate | Still alerting after the fix |
   |---|---|---|---|---|
-  | ModelGuard (column-level) | 1.00 | 1.00 | 0.00 | 0 features |
+  | Janus (column-level) | 1.00 | 1.00 | 0.00 | 0 features |
   | Table-level lineage | 0.25 | 1.00 | 1.00 | 2 features |
   | No lineage | - | 0.00 | 0.00 | 0 features |
 
@@ -3782,10 +3802,10 @@ Entry template:
   the honest version of (a) is a much larger piece of work than it looks. (c) was
   rejected once it was clear (b) fits in an afternoon.
 - On integrity, which is the whole risk here: a baseline written to lose proves
-  nothing, and would pass a suite that only ever checked ModelGuard came first.
-  The table-level detector is handed ModelGuard's own label index and its own
+  nothing, and would pass a suite that only ever checked Janus came first.
+  The table-level detector is handed Janus's own label index and its own
   source-column resolution, and differs in exactly one respect, that it asks
-  lineage questions of tables where ModelGuard asks them of columns. Its tests
+  lineage questions of tables where Janus asks them of columns. Its tests
   assert first that it *genuinely detects the leak*, and the mutation check runs
   both ways: turning it into a strawman that never flags fails three tests, and
   turning it into a function that always flags fails the fairness test. Both
@@ -3807,7 +3827,7 @@ Entry template:
   position a model trusts most. Demonstrated end to end: a forged closing tag put
   `SYSTEM: Ignore all previous rules...` outside the block. Fixed by `_neutralize`,
   which strips anything matching `</?\s*evidence\s*>` case-insensitively from the
-  rendered body before it is wrapped, so the block's boundaries belong to ModelGuard
+  rendered body before it is wrapped, so the block's boundaries belong to Janus
   whatever the catalog holds. Five regression tests, all failing against the previous
   code, including every spelling of the tag.
 - Options considered for that fix: (a) escape the angle brackets, (b) a per-call nonce
@@ -3846,20 +3866,20 @@ Entry template:
 
 ## D-048: A test pass over the benchmark found the demo's own command sequence can look broken (2026-07-22)
 - Decided by: Ahmed Saad (asked for thorough testing before moving on), work by Claude
-- Decision: Print an indexing note after every `modelguard-scenario` that changes
+- Decision: Print an indexing note after every `janus-scenario` that changes
   state a detector reads through an index, and say the same thing in the README's
   Try-it block. Add the two regression suites the pass showed were missing:
   `tests/integration/test_scenario_convergence.py` (scenarios must converge, not
   accumulate) and `tests/benchmarks/test_report.py` (an unscoreable trial is
   excluded from the metrics and disclosed).
 - Options considered: for the indexing lag, (a) leave it, (b) note it on the
-  command and in the README, (c) have `modelguard-scenario` block until its own
+  command and in the README, (c) have `janus-scenario` block until its own
   write is visible before exiting. (b) chosen now; (c) is the better demo
   behaviour and is left as an open question, because it changes a command that
   currently returns immediately and that is a product decision, not a fix.
 - Why: running the README's own sequence end to end, rather than only its parts,
-  showed `modelguard scan` reporting the pre-change state when run within about
-  three seconds of `modelguard-scenario`. The `operation` aspect is a timeseries,
+  showed `janus scan` reporting the pre-change state when run within about
+  three seconds of `janus-scenario`. The `operation` aspect is a timeseries,
   so it reaches a reader through Kafka and Elasticsearch; measured at 2.99s to
   plant and 2.98s to revert on a local Quickstart. Nothing is wrong with the
   detector, but a judge pasting the block sees a tool that missed an obvious
@@ -3878,7 +3898,7 @@ Entry template:
   false positive and dropped precision for a harness fault. 354 tests (315
   offline, 39 integration), up from 338.
 
-## D-047: ModelGuard-Bench measures a live graph, and the sweep is what makes it mean anything (2026-07-22)
+## D-047: Janus-Bench measures a live graph, and the sweep is what makes it mean anything (2026-07-22)
 - Decided by: Ahmed Saad (chose the bench as the next build, and the core scope),
   built by Claude
 - Decision: `benchmarks/` ships three modules and a generated report.
@@ -3912,8 +3932,8 @@ Entry template:
   blast-radius recall 1/1 naming the live deployment, 0 duplicate incidents on
   rerun, trust score and band both written. Detector calls median 0.12s;
   DataHub's index convergence, reported separately so its latency is not blamed
-  on ModelGuard, median 2.85s. 34 new offline tests (304 total).
-  `modelguard/seed/scenarios.py` gained `plant/revert_leakage`, which the
+  on Janus, median 2.85s. 34 new offline tests (304 total).
+  `janus/seed/scenarios.py` gained `plant/revert_leakage`, which the
   flagship detector had no negative control without (the seeder always plants
   the leak, D-032); it sets the fine-grained lineage outright because
   `add_lineage` patches additively and cannot undo an edge.
@@ -3924,7 +3944,7 @@ Entry template:
   `transformOperation` on the leaking edge to satisfy seed/CLAUDE.md rule 5's
   "every scenario declares itself". That field is part of what GMS keys a
   fine-grained edge on, so the marked edge and the seeder's unmarked one are two
-  *different* edges: the next `modelguard-seed` added its own alongside and the
+  *different* edges: the next `janus-seed` added its own alongside and the
   column lineage grew to five. Every unit test still passed, the benchmark still
   scored 1.00, and `test_seeding_twice_leaves_the_graph_byte_for_byte_identical`
   failed. The marker was removed rather than worked around: the leak is the
@@ -3941,11 +3961,11 @@ Entry template:
 - Decided by: Ahmed Saad (requested the audit), fix applied by Claude
 - Decision: (1) docs/plan/04-improvements.md's status block, unedited since
   2026-07-09, said P2-3 (shared pydantic models) and P2-4 (central config
-  module) were "still open"; both landed (modelguard/models.py,
-  modelguard/config.py + env.py) and are now marked adopted. (2) skill/CLAUDE.md
+  module) were "still open"; both landed (janus/models.py,
+  janus/config.py + env.py) and are now marked adopted. (2) skill/CLAUDE.md
   carried the same unqualified "first ML skill in the registry" claim already
   corrected elsewhere under D-043; corrected here too. (3)
-  01-strategy-modelguard.md's two rationale-table rows asserting the "first ML
+  01-strategy-janus.md's two rationale-table rows asserting the "first ML
   skill" gap are historical decision rationale, not live status, so they were
   annotated in place (what was verified, then, and that it no longer holds,
   citing D-043) rather than rewritten. (4) examples/CLAUDE.md called its four
@@ -3962,16 +3982,16 @@ Entry template:
   upstream PR queue, at the user's request after the D-044 stash-recovery work
   surfaced how easily this repo's docs drift once nobody is re-reading them
   end to end.
-- Result: 04-improvements.md, skill/CLAUDE.md, 01-strategy-modelguard.md, and
+- Result: 04-improvements.md, skill/CLAUDE.md, 01-strategy-janus.md, and
   examples/CLAUDE.md corrected; all four CLAUDE.md edits carry a Change Log row.
   No other CLAUDE.md or plan doc in the repo was found to diverge from the code
-  on this pass (root, modelguard/ and its five subpackages, tests/, benchmarks/,
+  on this pass (root, janus/ and its five subpackages, tests/, benchmarks/,
   mcp_ext/, docs/ were all read in full and checked against the actual files
   and directory contents they describe).
 
 ## D-045: Correct the plan docs' watch description from Kafka-first to polling-shipped (2026-07-22)
 - Decided by: Ahmed Saad (requested the docs audit), fix applied by Claude
-- Decision: architecture.md, 01-strategy-modelguard.md, and the E-checklist in
+- Decision: architecture.md, 01-strategy-janus.md, and the E-checklist in
   03-production-hardening.md described `watch` as consuming DataHub's
   `MetadataChangeLog` via the Actions framework (Kafka), with polling as a
   fallback. Corrected all three to state what actually shipped: `watch` is a
@@ -3989,7 +4009,7 @@ Entry template:
   any of the other three would have believed an Actions/Kafka consumer exists.
 - Result: architecture.md section 5 (component catalog), section 8 (execution
   modes table), and section 10 ("production" posture) now state the polling
-  reality with the Kafka path marked as not built. 01-strategy-modelguard.md's
+  reality with the Kafka path marked as not built. 01-strategy-janus.md's
   scaling bullet corrected the same way. 03-production-hardening.md's
   checklist item is now checked, since the polling-fallback branch of its own
   "event-driven or a documented polling fallback" criterion is satisfied.
@@ -4008,8 +4028,8 @@ Entry template:
   2026-07-17 on a branch that went stale before merging; landed directly on
   main 2026-07-22 after a docs audit found the symlinks missing (12 of 12
   `CLAUDE.md` directories: root, benchmarks, docs, examples, mcp_ext,
-  modelguard, modelguard/agent, modelguard/detect, modelguard/seed,
-  modelguard/writeback, skill, tests).
+  janus, janus/agent, janus/detect, janus/seed,
+  janus/writeback, skill, tests).
 
 ## D-043: Drop the "first ML-reliability skill" claim after checking the upstream queue (2026-07-21)
 - Decided by: Ahmed Saad (requested the review), fix applied by Claude
@@ -4060,15 +4080,15 @@ Entry template:
 - Decision: Deliver all three points of plan section 8. (1) The `datahub-ml-guard`
   skill lands under `skill/datahub-ml-guard/` (SKILL.md + scripts/ + references/),
   mirroring the upstream datahub-enrich format. Its `scripts/` are thin bash
-  wrappers that shell out to the `modelguard` CLI (`modelguard-seed`,
-  `modelguard scan --table/--model`), not a fork of detection logic. (2) The MCP
+  wrappers that shell out to the `janus` CLI (`janus-seed`,
+  `janus scan --table/--model`), not a fork of detection logic. (2) The MCP
   contribution ships as both a thin `mcp_ext/raise_incident_tool.py` (wrapping the
   same `raiseIncident` GraphQL mutation as writeback/incidents.py, gated by
   `TOOLS_IS_MUTATION_ENABLED`, with an offline self-check) and `RFC-ml-incidents.md`.
   (3) The Most Valuable Feedback survey is assembled into `docs/most-valuable-feedback.md`
   from the 12 findings in plan section 8.3.
 - Options considered: For the skill scripts, (a) thin CLI wrappers, (b) standalone
-  Python importing modelguard, (c) embedded logic; (a) chosen (satisfies
+  Python importing janus, (c) embedded logic; (a) chosen (satisfies
   skill/CLAUDE.md rule 3, no logic fork). For the MCP tool, (a) RFC only, (b) thin
   tool file plus RFC; (b) chosen (a runnable artifact plus the metadata-model RFC
   the mlModel-incident gap actually needs).
@@ -4082,7 +4102,7 @@ Entry template:
 ## D-040: Reconcile watcher recovery and require explicit agent approval (2026-07-17)
 - Decided by: Codex, requested by the repository maintainer
 - Decision: A watch recovery resolves the active incident and removes only the
-  recovered ModelGuard risk metadata, preserving unrelated tags, terms, and flags.
+  recovered Janus risk metadata, preserving unrelated tags, terms, and flags.
   The public LangGraph API requires an approval callback unless the caller passes
   `auto_approve=True` explicitly. Polling failures retry with bounded exponential
   backoff, and the process-local checkpointer is documented as synchronous rather
@@ -4096,7 +4116,7 @@ Entry template:
 - Why: An at-risk incident, tag, and trust score that survive a healthy poll are
   operationally false and can drive unsafe decisions. Implicit writes violate the
   least-agency boundary. A watcher that exits on one transient GMS error is not an
-  always-on monitor. ModelGuard's current CLI is synchronous, so claiming durable
+  always-on monitor. Janus's current CLI is synchronous, so claiming durable
   replay from MemorySaver was misleading.
 - Result: `watch` now reconciles incident status, risk flags, tags, leakage terms,
   and trust state; retries failures up to a bounded delay; and the agent API is
@@ -4116,7 +4136,7 @@ Entry template:
   recovery), auto-approving because it is unattended.
 - Options considered: (a) StateGraph over the existing pipeline nodes, opt-in via
   --review (chosen); (b) make the agent the default write path (rejected: forces the
-  optional `agent` extra on the out-of-the-box `modelguard scan`, which must run on
+  optional `agent` extra on the out-of-the-box `janus scan`, which must run on
   core deps with no LLM); (c) the plan's original `agent/tools.py` + `AgentExecutor`
   with the Agent Context Kit toolset and umbrella `langchain` (rejected: an LLM
   tool-caller that could decide to write contradicts the design law that detection
@@ -4134,7 +4154,7 @@ Entry template:
   `--auto-approve`, and the `watch` command land on branch feat/langgraph-agent-watch.
   langgraph pinned to 1.2.9 in the `agent` extra. The checkpointer is the in-memory
   MemorySaver, and the findings/reports ride in an in-process holder rather than the
-  checkpointed state, so no ModelGuard dataclass is msgpack-serialized (which
+  checkpointed state, so no Janus dataclass is msgpack-serialized (which
   langgraph warns will be blocked in a future release). 9 new unit tests: 4 on the
   approval gate (the preview is shown before any write; approve writes, decline and
   clean write nothing) and 5 on watch's transition logic. 266 unit tests green.
@@ -4146,11 +4166,11 @@ Entry template:
   and emits an Open Data Contract Standard v3.1.0 YAML: one ODCS schema object per
   input table (columns as `physicalType` verbatim, `logicalType` mapped where
   unambiguous and omitted otherwise, `required` from the field's `nullable` flag)
-  and one `slaProperties` freshness entry per table carrying the SLA ModelGuard
-  guards. The CLI exposes it as `modelguard scan --model <m> --contract-out <path>`;
+  and one `slaProperties` freshness entry per table carrying the SLA Janus
+  guards. The CLI exposes it as `janus scan --model <m> --contract-out <path>`;
   it writes the file to disk, not the graph, and renders even on a clean or dry-run
   scan because a contract describes the model's boundary, not a finding. No volume
-  or distribution expectation is emitted: ModelGuard measures none, and fabricating
+  or distribution expectation is emitted: Janus measures none, and fabricating
   one would break writeback rule 10.
 - Options considered: (a) render to an examples/ artifact and validate with
   datacontract-cli (chosen); (b) also write the contract back to DataHub as a graph
@@ -4164,7 +4184,7 @@ Entry template:
 - Result: `writeback/contract.py` (10 unit tests), the `--contract-out` flag, and
   `examples/input-data-contract.odcs.yaml` generated from a real seeded scan and
   linted green against ODCS 3.1.0. datacontract-cli is a dev/validation tool, not a
-  runtime dependency; `modelguard/` never imports it.
+  runtime dependency; `janus/` never imports it.
 
 ## D-037: The trust score is a rollup of a scan's findings, written only for models it found something about (2026-07-16)
 - Decided by: Ghassen Naouar (chose the aggregation model), design by Claude
@@ -4173,8 +4193,8 @@ Entry template:
   (40), leakage (20), schema drift (15), freshness lag scaled by lag/SLA (15),
   missing owner (10). The weights and the band thresholds (healthy >= 70, watch
   >= 40, else at-risk) live in `config.py` as documented defaults, no env
-  plumbing. The score and band are written as `modelguard.trust_score` (number)
-  and `modelguard.trust_band` (string) structured properties on the mlModel, in
+  plumbing. The score and band are written as `janus.trust_score` (number)
+  and `janus.trust_band` (string) structured properties on the mlModel, in
   a pass after every per-finding write so the read-merge preserves the risk
   flags already set.
 - Options considered: (a) score every scanned model, writing 100 for a clean
@@ -4191,7 +4211,7 @@ Entry template:
   score reflects the scan's scope, which is documented on the detector.
 - Result: `TrustScore`/`TrustBand` in models.py; `trust_inputs_from_findings`
   reduces findings to inputs, `trust_score` applies the weights; the pipeline's
-  `_trust_scores`/`_persist_trust` run the pass. `modelguard.trust_band` added to
+  `_trust_scores`/`_persist_trust` run the pass. `janus.trust_band` added to
   the props YAML. 7 unit tests plus pipeline coverage; the phase 2 drift/trust
   integration gate asserts a score lands on the live model.
 
@@ -4200,7 +4220,7 @@ Entry template:
 - Decision: P3 (`detect/schema_drift.py`) reads a schema fingerprint captured on
   the training run at seed/training time (a JSON map of input dataset URN to
   `field_path -> native_type`, in the run's `customProperties` under
-  `modelguard.training_schema`) and diffs it against the input dataset's current
+  `janus.training_schema`) and diffs it against the input dataset's current
   `schemaMetadata`. Added, removed, and retyped columns each become a
   `SchemaChange`; a drifted input raises a `DATA_SCHEMA` incident on the dataset.
 - Options considered: (a) reconstruct the training-time schema from DataHub's
@@ -4244,7 +4264,7 @@ Entry template:
 - Options considered: (a) open the PR as-is and fix findings in follow-ups,
   (b) fix everything the review surfaced before opening the PR.
 - Why: Two of the findings were directly reachable through the flagship demo
-  command itself, `modelguard scan --table loans_raw --model credit_risk_v3`,
+  command itself, `janus scan --table loans_raw --model credit_risk_v3`,
   because `credit_risk_v3` is simultaneously downstream of `loans_raw`'s blast
   radius and independently leaking its own label. Shipping a demo command that
   silently corrupts its own output would have been worse than the delay of
@@ -4287,9 +4307,9 @@ Entry template:
   third mechanism for the same problem. Converting everything to one pattern
   now would be premature for two concrete subclasses; revisit when the third
   detector (schema drift) lands and the actual shape of the problem is known.
-  `leakage_max_hops` also has no `MODELGUARD_*` env override unlike the other
+  `leakage_max_hops` also has no `JANUS_*` env override unlike the other
   three `ScanConfig` thresholds: fixed, since it was a one-line gap against an
-  explicit existing rule (modelguard/CLAUDE.md rule 3), not a design question.
+  explicit existing rule (janus/CLAUDE.md rule 3), not a design question.
 
 ## D-034: Phase 1 merged to main; Phase 2 branches from a clean base (2026-07-13)
 - Decided by: Ahmed Saad
@@ -4324,21 +4344,21 @@ Entry template:
 - Decided by: Ahmed Saad (chose the glossary term over a structured property or
   config value), verified against a live GMS by Claude
 - Decision: A column is a model's label when it carries the
-  urn:li:glossaryTerm:modelguard.label term, checked two ways: the term aspect
-  directly on the schemaField (what ModelGuard and the seeder write), and
+  urn:li:glossaryTerm:janus.label term, checked two ways: the term aspect
+  directly on the schemaField (what Janus and the seeder write), and
   editableSchemaMetadata on the parent dataset (what the DataHub UI writes when
   a human tags a column by hand). Both were emitted and read back against a live
   Quickstart before this was decided.
 - Options considered: (a) a structured property on the dataset naming the label
   column, (b) a glossary term on the column, checked on both routes, (c) a
-  MODELGUARD_LABEL_COLUMN config value.
+  JANUS_LABEL_COLUMN config value.
 - Why: (c) is a property of one scan's config, not of the data, and does not
   scale past one model. (a) works but is invisible in the UI's own vocabulary.
   (b) is what a data team already reaches for, and reading both write paths
-  means a human declaring a label in the UI, touching no ModelGuard config,
+  means a human declaring a label in the UI, touching no Janus config,
   makes leakage detection start working on their model.
-- Result: modelguard/writeback/terms.py (ensure_term, add_term, read_terms),
-  read-merge-emit like labels.py. modelguard/seed/seed_ml_graph.py declares the
+- Result: janus/writeback/terms.py (ensure_term, add_term, read_terms),
+  read-merge-emit like labels.py. janus/seed/seed_ml_graph.py declares the
   seeded label. config.py holds the term URN with a default, because it is a
   name, not a credential (D-029's distinction).
 
@@ -4364,9 +4384,9 @@ Entry template:
 
 ## D-030: The LLM is provider-agnostic (2026-07-10)
 - Decided by: Ghassen Naouar
-- Decision: ModelGuard names no vendor. `MODELGUARD_LLM_PROVIDER` selects one of
-  anthropic, openai, or google; `MODELGUARD_LLM_MODEL` is the provider's model id
-  verbatim; `MODELGUARD_LLM_API_KEY` is the credential. `modelguard/llm.py` is the
+- Decision: Janus names no vendor. `JANUS_LLM_PROVIDER` selects one of
+  anthropic, openai, or google; `JANUS_LLM_MODEL` is the provider's model id
+  verbatim; `JANUS_LLM_API_KEY` is the credential. `janus/llm.py` is the
   only module allowed to import a vendor SDK or name a vendor's model, and it is
   the only place a new provider is added. `--llm-provider` and `--llm-model`
   override the first two; the key is deliberately not a flag, because a credential
@@ -4388,7 +4408,7 @@ Entry template:
 
 ## D-029: One module reads the environment, and identity values have no defaults (2026-07-10)
 - Decided by: Ghassen Naouar (rule), implemented by Claude
-- Decision: `modelguard/env.py` is the single entry point for configuration. It is
+- Decision: `janus/env.py` is the single entry point for configuration. It is
   the only module that calls `load_dotenv` and the only one that touches
   `os.environ`. Values that identify a system, an account, or a vendor (server
   URLs, tokens, API keys, provider names, model ids) get no default and no
@@ -4399,8 +4419,8 @@ Entry template:
 - Options considered: (a) let each module read what it needs, (b) centralize in
   env.py, (c) centralize and additionally forbid defaults for identity values.
 - Why: this was not hypothetical. `load_dotenv` ran only inside
-  `client.connect()`, and `modelguard scan` builds its `ScanConfig` *before* it
-  connects, so `MODELGUARD_FRESHNESS_SLA_HOURS=99` in `.env` was silently ignored
+  `client.connect()`, and `janus scan` builds its `ScanConfig` *before* it
+  connects, so `JANUS_FRESHNESS_SLA_HOURS=99` in `.env` was silently ignored
   and the built-in 6 hour default was used instead. Whether a configured value was
   honored depended on whether something had already opened a DataHub connection.
   Configuration that depends on call order is configuration that lies. Separately,
@@ -4415,11 +4435,11 @@ Entry template:
   exception message can no longer put that key in our logs. `.env` and
   `.env.example` now carry an identical key set, so copying the example produces a
   working run; the retired `ANTHROPIC_API_KEY` migrates to
-  `MODELGUARD_LLM_API_KEY`.
+  `JANUS_LLM_API_KEY`.
 
 ## D-028: Phase 1 gate PASSED; the core loop is closed (2026-07-10)
 - Decided by: Claude (for Ghassen Naouar), per the plan's section 4.3
-- Decision: Phase 1 (Problem 2, end to end) is complete. `modelguard scan
+- Decision: Phase 1 (Problem 2, end to end) is complete. `janus scan
   --table loans_raw` detects the planted stale load, traverses the blast radius
   into the live model, and writes back an incident, a tag, structured
   properties, a guarding assertion plus its measured result, and a Model Impact
@@ -4463,7 +4483,7 @@ Entry template:
 - Decision: The guarding assertion is written three ways: as open-assertions
   YAML in `examples/`, as an `assertionInfo` aspect so it appears on the
   dataset's Quality tab, and as an `assertionRunEvent` carrying the freshness
-  result ModelGuard actually computed during that scan.
+  result Janus actually computed during that scan.
 - Options considered: (a) YAML artifact only, (b) YAML plus the assertion
   entity, (c) YAML plus entity plus a run event.
 - Why: (c) is the strongest demo and, importantly, it is honest here. The
@@ -4494,7 +4514,7 @@ Entry template:
   never converge. Idempotency is not optional (root CLAUDE.md code rule 5).
 - Result: The assertion URN is a guid over `(entity, type, id_raw)`, so it is
   stable per table, and the aspect is now byte-identical across reruns. The
-  source type is `INFERRED`: ModelGuard derived this check from an observed
+  source type is `INFERRED`: Janus derived this check from an observed
   failure rather than a human authoring it.
 
 ## D-024: Refuse a freshness SLA of a day or more (2026-07-10)
@@ -4584,7 +4604,7 @@ Entry template:
 
 ## D-019: Week 1 gate PASSED; no pivot to MigrationCopilot (2026-07-10)
 - Decided by: Claude (for Ghassen Naouar), per the plan's kill-criterion
-- Decision: ModelGuard clears the Week 1 gate. The project continues. The
+- Decision: Janus clears the Week 1 gate. The project continues. The
   MigrationCopilot fallback is not triggered.
 - Evidence, against DataHub Quickstart v1.5.0.6 with acryl-datahub 1.6.0.13:
   (a) READ: `get_lineage(source_column="prior_default_flag", direction="upstream")`
@@ -4836,21 +4856,21 @@ Entry template:
 ## D-002: Adopt the plan's repo layout at the existing repo root (2026-07-08)
 - Decided by: Claude (for Ahmed Saad), per the plan
 - Decision: Use the layout from docs/plan/02-implementation-plan.md section 2,
-  placed directly at this repo's root (modelguard/ package plus skill/,
+  placed directly at this repo's root (janus/ package plus skill/,
   mcp_ext/, examples/, benchmarks/, tests/ as siblings).
-- Options considered: (a) nested modelguard/ project folder inside the repo,
+- Options considered: (a) nested janus/ project folder inside the repo,
   (b) plan layout at the repo root, (c) src/ layout.
 - Why: The repo root is already the project; nesting adds a pointless level.
   src/ layout is a real alternative but deviates from the plan; raised in
   docs/plan/04-improvements.md instead of decided unilaterally.
 - Result: Structure created 2026-07-08. Note: the repo is named DataHub while
-  the project is ModelGuard; renaming is proposed in 04-improvements.md.
+  the project is Janus; renaming is proposed in 04-improvements.md.
 
-## D-001: Build ModelGuard, category 3 (2026-07-08)
+## D-001: Build Janus, category 3 (2026-07-08)
 - Decided by: Ahmed Saad
-- Decision: Go with the plan folder: ModelGuard, Production ML Agents
+- Decision: Go with the plan folder: Janus, Production ML Agents
   (category 3), with MigrationCopilot as the documented Week 1 fallback.
-- Options considered: See docs/plan/01-strategy-modelguard.md (category
+- Options considered: See docs/plan/01-strategy-janus.md (category
   analysis) and docs/more.md / docs/less.md (earlier candidate ideas).
 - Why: Verified least-crowded category with the highest differentiation and
   maximal write-back surface; full argument in the strategy doc.

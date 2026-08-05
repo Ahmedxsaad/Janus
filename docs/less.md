@@ -69,7 +69,7 @@ Flow:
 **Demo narrative for the video:** "3 AM. A pipeline silently breaks. No human notices. Watch what happens."
 **Risks:** Actions framework + Kafka adds setup complexity - mitigate with a polling mode fallback; incidents API on OSS needs checking (GraphQL supports raising incidents on OSS; verify early).
 
-### Path B - "ModelGuard": Production ML Protection Suite (Challenge 3, sharper scope)
+### Path B - "Janus": Production ML Protection Suite (Challenge 3, sharper scope)
 Subset of A, focused purely on ML:
 - **Target-leakage detector:** walk column-level lineage from each model's features back to sources; flag features derived from the label's source column. (DataHub blog names this exact failure mode as needing column-level lineage.)
 - **Training-serving contract:** compare training dataset schema snapshot vs. current schema (schema history) → flag drifted inputs.

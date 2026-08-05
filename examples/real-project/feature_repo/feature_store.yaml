@@ -1,5 +1,5 @@
-# The repo's own configuration. `modelguard link --from feast` never reads it:
-# the adapter parses churn.py and nothing else, offline (modelguard/adapters).
+# The repo's own configuration. `janus link --from feast` never reads it:
+# the adapter parses churn.py and nothing else, offline (janus/adapters).
 # It is here because a Feast repo has one, and because a reader should be able to
 # see that this repo points at the same warehouse the rest of the example does.
 #
