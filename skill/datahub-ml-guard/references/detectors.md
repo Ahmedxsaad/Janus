@@ -1,9 +1,23 @@
-# The four detectors
+# The detectors
 
 Each is deterministic Python: it reads the graph, applies a threshold, and returns typed
 findings. None call a language model and none write; the write-back is a separate, idempotent
 step. Findings are auditable because the evidence is a fact DataHub already holds (a lineage
 path, a schema snapshot, an operation timestamp), not a model's assertion.
+
+Seven finding types ship. The four below are documented in full because they are the ones a
+first-time reader needs; the three that follow read the same graph the same way and are
+summarised at the end.
+
+| Finding type | What it says |
+| --- | --- |
+| `upstream-freshness` | A table past its SLA, and the models downstream of it |
+| `target-leakage` | A feature that derives from its own label column |
+| `input-schema-drift` | The training-time schema no longer matches the input's |
+| `sensitive-source` | A feature derives from a column the organization classified |
+| `deprecated-input` | A model trains on a table its owners marked deprecated |
+| `proxy-candidate` | A feature shares an ancestor with a protected attribute |
+| `table-level-risk` | The degraded answer for a model with no column-level link |
 
 ## Target leakage (the flagship)
 
@@ -111,3 +125,42 @@ structured properties on the mlModel, plus a rollup Model Impact Report.
 
 Cite: Sculley et al. 2015 (surrounding debt dominates reliability) and Mitchell et al.,
 "Model Cards for Model Reporting" (FAT* 2019).
+
+## The three governance detectors
+
+These read the part of the graph somebody else already filled in: a classification, a
+deprecation flag, a protected-attribute term. Nothing about the data is wrong; what is wrong
+is what a model was allowed to see, or that it depends on something with a decommission date.
+
+**Sensitive source** is the leakage walk with a different mark. A feature derives, through
+column lineage, from a column tagged or termed as restricted. It reports the same auditable
+chain. It is configuration-gated and has no default: with no classification named it reports
+**not evaluated**, never clean, because a guessed classification URN either matches nothing or
+matches a term that means something else in your catalog.
+
+```bash
+MODELGUARD_SENSITIVE_TAG_URNS=urn:li:tag:PII,urn:li:tag:Confidential
+MODELGUARD_SENSITIVE_TERM_URNS=urn:li:glossaryTerm:Classification.Restricted
+```
+
+**Deprecated input** needs no configuration: `deprecation` is DataHub's own aspect with one
+meaning everywhere. A model trains on a table its owners marked deprecated, and neither team
+has a way to know about the other. Capped at `medium` severity, because it is a deadline
+rather than a defect.
+
+**Proxy candidate** finds a feature that shares an ancestor with a protected attribute without
+either descending from the other. It is reported for human review and never as discrimination,
+capped at `medium`: two columns sharing an ancestor is a structural fact, and whether that
+makes one a stand-in for the other is a question about the data that no walk of a metadata
+graph can answer.
+
+## Table-level risk, the degraded mode
+
+Until a model is linked, none of the column-level checks can run on it. Rather than only
+listing what it could not do, a scan reports what it *can* see about the tables the model
+trains on: past its freshness SLA, deprecated, or holding a classified column.
+
+It is its own finding type and never merged with the others, because it answers a weaker
+question with weaker evidence. It says so out loud, quoting the measured precision of
+table-level reasoning (0.25) against the question precision answers: which feature carries the
+problem. It never outranks a column-level finding. `modelguard link` is what upgrades it.

@@ -146,7 +146,7 @@ demand, which is what makes the demo reproducible and the benchmark scoreable.
   asked to eyeball a lineage graph.
 - **A `raise_incident` MCP tool** for `acryldata/mcp-server-datahub`, which
   today has no incident-write tool, with an RFC for first-class ML incidents.
-- **Fourteen reproducible bug reports and documentation gaps** found while
+- **Sixteen reproducible bug reports and documentation gaps** found while
   building, each with a repro and a workaround.
 
 One of those is a genuine finding about the metadata model: DataHub refuses an

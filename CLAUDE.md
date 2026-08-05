@@ -56,8 +56,12 @@ Source of truth for what we build:
 4. Design law: detection is deterministic Python; the LLM only explains,
    ranks, and drafts text. It never decides whether a finding exists and
    never composes raw GraphQL (docs/plan/architecture.md section 2).
-5. Every DataHub write is idempotent, keyed by (resourceUrn, finding_type,
-   run_id), with read-before-write. Reruns must never duplicate.
+5. Every DataHub write is idempotent, with read-before-write, and reruns must
+   never duplicate. An incident's key is (resource_urn, incident_type, title)
+   over the resource's *active* incidents; a document's is the entity plus the
+   finding type. run_id is deliberately NOT in any key: it changes every run, so
+   including it would make each scan raise a fresh copy of the same finding. It
+   is stamped into the body as provenance instead (D-013).
 6. Configuration enters the process in exactly one module: modelguard/env.py.
    It is the only place that calls load_dotenv and the only place that touches
    os.environ. Two tests enforce this; do not weaken them.

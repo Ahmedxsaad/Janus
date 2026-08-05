@@ -687,7 +687,7 @@ def _neutralize(text: str) -> str:
     return _DELIMITER_LOOKALIKE.sub(_NEUTRALIZED, text)
 
 
-def grounding_facts(finding: Finding) -> str:
+def grounding_facts(finding: Finding, context: str | None = None) -> str:
     """Every fact the narrator is permitted to speak from, as one block of text.
 
     This is the whole of it: :attr:`Finding.evidence` plus the per-type detail,
@@ -700,22 +700,39 @@ def grounding_facts(finding: Finding) -> str:
     exactly this text (T-10). Deriving the grounding set separately there would
     be a second copy of the answer, free to drift from the prompt the model
     actually saw, and the measurement would then be of the copy.
+
+    Args:
+        finding: The already-decided finding.
+        context: Optional organizational context (owners, domain, descriptions)
+            read through the Agent Context Kit by
+            :func:`modelguard.agent.context_kit.catalog_context`. It joins the
+            grounding set rather than being appended to the prompt separately,
+            for the reason in the paragraph above: a fact the model can see and
+            the faithfulness checker cannot would be scored as a hallucination
+            every time the narrator used it correctly.
     """
     facts = "\n".join(f"{key}: {value}" for key, value in sorted(finding.evidence.items()))
-    return f"{facts}{_evidence_detail(finding)}"
+    body = f"{facts}{_evidence_detail(finding)}"
+    if context:
+        body = f"{body}\n\nCatalog context:\n{context}"
+    return body
 
 
-def _evidence_prompt(finding: Finding) -> str:
+def _evidence_prompt(finding: Finding, context: str | None = None) -> str:
     """Render the evidence as a delimited, untrusted block for the model.
 
     The body is neutralized as a whole, after rendering, so a delimiter split
     across a key and its value, or introduced by the per-type detail, is caught
     just the same as one sitting inside a single name.
+
+    Catalog context is inside the block for exactly that reason: owners and
+    descriptions are editable by anyone with catalog access, so it is the same
+    attacker-reachable text as a dataset name and gets the same treatment.
     """
-    return f"<evidence>\n{_neutralize(grounding_facts(finding))}\n</evidence>"
+    return f"<evidence>\n{_neutralize(grounding_facts(finding, context))}\n</evidence>"
 
 
-def _llm_narrative(finding: Finding, llm: LLMConfig) -> str:
+def _llm_narrative(finding: Finding, llm: LLMConfig, context: str | None = None) -> str:
     """Ask the configured model for the assessment prose.
 
     Raises:
@@ -723,7 +740,7 @@ def _llm_narrative(finding: Finding, llm: LLMConfig) -> str:
     """
     chat_model = build_chat_model(llm)
     response = chat_model.invoke(
-        [("system", _system_prompt(finding)), ("human", _evidence_prompt(finding))]
+        [("system", _system_prompt(finding)), ("human", _evidence_prompt(finding, context))]
     )
 
     # AIMessage.text is a property in langchain-core 1.x; calling it is deprecated.
@@ -748,7 +765,7 @@ def _safe_reason(exc: Exception, llm: LLMConfig) -> str:
     return f"{type(exc).__name__}: {scrub(str(exc), llm.secret())}"
 
 
-def narrate(finding: Finding, llm: LLMConfig | None) -> Narrative:
+def narrate(finding: Finding, llm: LLMConfig | None, context: str | None = None) -> Narrative:
     """Produce the assessment prose for a finding.
 
     Args:
@@ -756,6 +773,10 @@ def narrate(finding: Finding, llm: LLMConfig | None) -> Narrative:
         llm: The configured model, or None to write the deterministic template.
             None is what ``--no-llm`` passes, what the unit tests pass, and what
             an unconfigured environment produces.
+        context: Optional organizational context from the Agent Context Kit. It
+            reaches the model only: the template narrative ignores it, so a scan
+            with no LLM configured is byte-identical whether or not the kit is
+            installed.
 
     Returns:
         The prose and where it came from. This function does not raise: a failed
@@ -774,7 +795,7 @@ def narrate(finding: Finding, llm: LLMConfig | None) -> Narrative:
         extra=phase("narrating", finding_type=str(finding.finding_type)),
     )
     try:
-        return Narrative(_llm_narrative(finding, llm), NarrativeSource.LLM)
+        return Narrative(_llm_narrative(finding, llm, context), NarrativeSource.LLM)
     except Exception as exc:  # noqa: BLE001
         # Deliberately blind. An uninstalled provider package, a DNS failure, a
         # 429, an over-long reply: none is worth failing a scan over, because the

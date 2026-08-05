@@ -16,6 +16,52 @@ Entry template:
 
 ---
 
+## D-135: The Agent Context Kit grounds the narrator, and cannot be installed (2026-08-05)
+- Decided by: Claude (for Ahmed Saad).
+- Decision: `modelguard/agent/context_kit.py` reads organizational context for a
+  finding through DataHub's own Agent Context Kit (`datahub-agent-context`) and
+  hands it to the narrator: owners, domain, description, and the catalog's own
+  `health` for the asset. It is declared in pyproject as a commented-out extra
+  rather than an installable one, because it cannot be installed here at all.
+- Options considered: (a) skip the kit entirely, as the project had until now;
+  (b) give the narrator the kit's tools as a LangChain tool-caller so it can
+  explore the catalog; (c) call the kit's read-only toolset as a library, with
+  ModelGuard choosing what to fetch.
+- Why (c): (b) is the tempting one and it breaks the design law. The kit's tools
+  are exactly what an LLM tool-caller drives, and handing them to the narrator
+  would let a model decide which parts of the catalog an incident may mention,
+  which is the class of decision this project keeps out of a model's hands
+  (D-039 rejected the same thing for the same reason). (c) uses the kit for what
+  it is good at, the read, while the URNs come from the finding and the tool is
+  fixed. The context joins `grounding_facts` rather than being appended to the
+  prompt separately, because a fact the model can see and `benchmarks/
+  faithfulness.py` cannot would score as a hallucination every time the narrator
+  used it correctly (T-10). It enters inside the delimited untrusted block and is
+  neutralized with the rest, since a description is catalog text anybody with
+  access can edit (OWASP LLM01). It is never fetched when no LLM is configured:
+  the template narrative does not read it, so `--no-llm` would otherwise pay for
+  catalog reads whose result is discarded.
+- Result: 16 tests, full suite 950 offline green, ruff and mypy clean, and a live
+  scan byte-identical to before. The kit's shapes are [verified] against 1.7.0
+  driven at a live GMS rather than assumed: `build_langchain_tools(client)`
+  returns ten tools and zero mutations at its default, `get_entities` returns a
+  bare list, and a dataset keeps its description under `editableProperties` while
+  an mlModel keeps it at the top level.
+  The blocker, measured: every `datahub-agent-context` release from 1.6.0.6
+  onward pins `acryl-datahub[datahub-rest]==1.6.0.6` exactly, including 1.7.0,
+  while this project pins 1.6.0.13. pip answers `ResolutionImpossible` for the
+  pair. 1.5.0.19 pinned 1.5.0.19, so the pin tracked the release and then stopped,
+  which reads as release automation that no longer propagates the version bump
+  into the dependency. Declaring the extra would ship an install command that
+  cannot succeed, so it is commented out with the measurement beside it, and the
+  integration starts working the moment the pin is loosened. Reported upstream as
+  feedback #16. This is also why the strategy doc's Stage-1 line claiming the kit
+  was in use is corrected rather than left: the claim was aspirational, and the
+  honest version is stronger, because the reason it is not in use is a packaging
+  defect worth reporting rather than a thing the project failed to do.
+
+---
+
 ## D-134: Full-implementation review of phases 0-7 (2026-08-05)
 - Decided by: Claude (for Ghassen Naouar).
 - Decision: A recall-biased review of the whole `modelguard/` package against a

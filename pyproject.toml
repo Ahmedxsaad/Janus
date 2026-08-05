@@ -99,11 +99,29 @@ google = ["langchain-google-genai==4.2.7"]
 # The human-approval agent (modelguard/agent/graph.py) and `scan --review`.
 # Only langgraph is needed: the StateGraph's nodes call ModelGuard's own
 # deterministic detect/write functions, so there is no LLM tool-caller and thus
-# no umbrella `langchain` or `datahub-agent-context` dependency. The narrator's
-# langchain-core comes from whichever provider extra is installed.
+# no umbrella `langchain` dependency. The narrator's langchain-core comes from
+# whichever provider extra is installed.
 agent = [
     "langgraph==1.2.9",
 ]
+# DataHub's own Agent Context Kit, read-only, used by
+# modelguard/agent/context_kit.py to ground the narrator in the organizational
+# context a detector does not collect (owners, domain, description, and the
+# catalog's own health for the asset).
+#
+# NOT an installable extra, deliberately, and this is not an oversight: every
+# release of datahub-agent-context from 1.6.0.6 onward pins
+# `acryl-datahub[datahub-rest]==1.6.0.6` exactly, including 1.7.0, while this
+# project pins 1.6.0.13. pip answers ResolutionImpossible for the pair, so
+# declaring the extra would ship an install command that cannot succeed.
+# Measured, and reported upstream as feedback #16. The integration is written to
+# the kit's public API and degrades to None when it is absent, so it starts
+# working the moment that pin is loosened, or today in an environment pinned to
+# acryl-datahub 1.6.0.6:
+#
+#   pip install "datahub-agent-context[langchain]"
+#
+# context = ["datahub-agent-context[langchain]"]  # blocked: see above
 # modelguard-mcp: the detectors exposed conversationally, read-only, for an MCP
 # client such as Claude Desktop (modelguard/mcp_server.py). Optional because the
 # batch scan, watch, and gate paths need no MCP runtime at all, and this is a
@@ -225,6 +243,15 @@ warn_unreachable = true
 [[tool.mypy.overrides]]
 module = ["datahub.*"]
 follow_untyped_imports = true
+
+# DataHub's Agent Context Kit, imported only inside try/except ImportError in
+# modelguard/agent/context_kit.py. It cannot be installed here at all (its
+# releases pin acryl-datahub==1.6.0.6 against this project's 1.6.0.13, see the
+# optional-dependencies note above), so mypy has nothing to resolve and the
+# absence is the expected state rather than a missing dev dependency.
+[[tool.mypy.overrides]]
+module = ["datahub_agent_context.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -141,7 +141,7 @@ Two issues:
 
 ### Bonus: open-source contribution - strong
 
-The skill, the `mcp_ext` tool with its RFC, and fourteen reproducible feedback
+The skill, the `mcp_ext` tool with its RFC, and sixteen reproducible feedback
 items with repros and workarounds. Nothing needed here except actually filing
 them, which `docs/plan/05-oss-delivery.md` covers.
 
