@@ -16,6 +16,41 @@ Entry template:
 
 ---
 
+## D-142: The remaining work is a delivery checklist, and the plan docs become judge-facing (2026-08-06)
+- Decided by: Ghassen Naouar.
+- Decision: Three things at once. (a) `plan/11-judge-readiness.md` lands as the
+  single checklist for everything between the merged codebase and a scored
+  submission: publish, contribute, explain, verify, record, submit. (b) The
+  plan docs are rewritten **in place** into documents whose only job is to
+  explain the built product to a reader who has never seen the repository; the
+  internal deliberation docs (04, 06, 07, 08, 09, 10) leave the top level.
+  (c) The new architecture diagrams are PlantUML, mainly sequence diagrams,
+  matching docs/CLAUDE.md rule 4 rather than deviating to mermaid.
+- Options considered:
+  - For the docs: (i) add a new judge-facing layer and leave `plan/` as build
+    history, (ii) rewrite `plan/` in place, (iii) treat `site/` as the judge
+    doc and keep `docs/` internal. Chose (ii).
+  - For the diagrams: (i) mermaid, which GitHub renders natively, (ii)
+    PlantUML per the existing rule, (iii) PlantUML plus committed images.
+    Chose (ii).
+- Why: A judge arriving at the repository should find one set of documents that
+  explains the product, not two sets where one is a build plan and the other
+  is an adversarial audit of our own weaknesses. Rewriting in place means there
+  is no wrong door. PlantUML keeps one diagram language across the repo rather
+  than a second one that exists only in the new docs.
+- Known cost, recorded rather than hidden: rewriting in place breaks the
+  decision log's references to plan docs by section number, and GitHub does not
+  render PlantUML, so a judge reading in a browser sees raw source unless
+  images are committed or a proxy link is used. Both are carried as explicit
+  `[decision]` items inside 11-judge-readiness.md (J-03 and J-04) rather than
+  resolved here, because each changes what the rewrite actually does.
+- Result: `docs/plan/11-judge-readiness.md`, seven phases (J-01 publish to
+  PyPI, J-02 OSS PRs, J-03 doc rewrite, J-04 diagrams, J-05 user-perspective
+  package test, J-06 demo video, J-07 submission gate), each sequencing the
+  runbooks that already exist rather than restating them. The doc names what is
+  deliberately excluded: no new features, no fixing 07's open weaknesses, no
+  benchmark rerun.
+
 ## D-141: The page explains mechanisms with diagrams, not paragraphs (2026-08-06)
 - Decided by: Ghassen Naouar.
 - Decision: Five diagrams land beside the one the page already had, each
