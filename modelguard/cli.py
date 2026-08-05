@@ -49,6 +49,7 @@ from modelguard.gate import (
     github_annotations,
     summary,
 )
+from modelguard.lifecycle import mttr_by_type, read_lifecycles
 from modelguard.llm import LLMConfig, llm_config_from_env
 from modelguard.logs import LOG_FIELDS, configure_logging, logfmt
 from modelguard.models import (
@@ -1519,6 +1520,8 @@ def inventory(
         else:
             console.print(f"[green]{name}[/green]  clean, every check ran")
 
+    _print_lifecycle(conn, config, model_urns)
+
     if unchecked:
         console.print(
             f"\n[dim]{unchecked} model(s) have nothing linking them to their training "
@@ -1527,6 +1530,25 @@ def inventory(
             "graph is silent, declare it yourself: modelguard link --model <name> "
             "--features <table> --label-column <column>[/dim]"
         )
+
+
+def _print_lifecycle(
+    conn: DataHubConnection, config: ScanConfig, model_urns: tuple[str, ...]
+) -> None:
+    """Print how long ModelGuard's own findings have stayed open (T-16).
+
+    Printed after the per-model list rather than before it: the list says what is
+    wrong now, and this says whether anything ever gets fixed. Silent when
+    ModelGuard has never raised an incident on this graph, because a table of
+    zeroes on a first run is noise, not a measurement.
+    """
+    rows = [row for row in mttr_by_type(read_lifecycles(conn, config, model_urns)) if row.raised]
+    if not rows:
+        return
+
+    console.print("\n[bold]Incident lifecycle[/bold]  (ModelGuard's own writes)")
+    for row in rows:
+        console.print(f"  {row.describe()}")
 
 
 @app.command()
