@@ -21,19 +21,19 @@ from datahub.metadata.schema_classes import (
 from datahub.metadata.urns import SchemaFieldUrn, Urn
 from datahub.sdk.lineage_client import LineagePath, LineageResult
 
-from modelguard.argos.events import ENV_UI_URL
-from modelguard.argos.window import ENV_BINARY
-from modelguard.client import DataHubConnection
-from modelguard.companion import ENV_OWNER
-from modelguard.config import TABLE_LEVEL_PRECISION
-from modelguard.llm import ENV_LLM_API_KEY, ENV_LLM_MODEL, ENV_LLM_PROVIDER
-from modelguard.logs import ENV_LOG_FORMAT
-from modelguard.mcl import (
+from janus.argos.events import ENV_UI_URL
+from janus.argos.window import ENV_BINARY
+from janus.client import DataHubConnection
+from janus.companion import ENV_OWNER
+from janus.config import TABLE_LEVEL_PRECISION
+from janus.llm import ENV_LLM_API_KEY, ENV_LLM_MODEL, ENV_LLM_PROVIDER
+from janus.logs import ENV_LOG_FORMAT
+from janus.mcl import (
     ENV_KAFKA_BOOTSTRAP,
     ENV_KAFKA_GROUP_ID,
     ENV_SCHEMA_REGISTRY_URL,
 )
-from modelguard.models import (
+from janus.models import (
     BlastRadius,
     ChangeKind,
     Deduction,
@@ -56,7 +56,7 @@ from modelguard.models import (
     TrustBand,
     TrustScore,
 )
-from modelguard.telemetry import ENV_OTEL_ENDPOINT, ENV_OTEL_HEADERS
+from janus.telemetry import ENV_OTEL_ENDPOINT, ENV_OTEL_HEADERS
 
 
 @dataclass(frozen=True)
@@ -100,7 +100,7 @@ class FakeGraph:
         self.emitted: list[Any] = []
         self.graphql_calls: list[tuple[str, dict[str, Any] | None]] = []
         self.filter_calls: list[tuple[tuple[str, ...], tuple[Any, ...]]] = []
-        #: What modelguard.discovery's model scroll answers with. Populated by
+        #: What janus.discovery's model scroll answers with. Populated by
         #: make_connection from the same list FakeSearch replays, so a test that
         #: seeds search results gets them through both discovery paths without
         #: having to know which one the code under test happens to take.
@@ -143,8 +143,8 @@ class FakeGraph:
 
     def execute_graphql(self, query: str, variables: dict[str, Any] | None = None, **_: Any) -> Any:
         self.graphql_calls.append((query, variables))
-        if "modelguardScrollModels" in query:
-            # modelguard.discovery hand-writes this one because the SDK's search
+        if "janusScrollModels" in query:
+            # janus.discovery hand-writes this one because the SDK's search
             # cannot turn off DataHub's hiding of non-latest versions. Answered
             # here rather than through graphql_response so a test setting that
             # for an incident mutation does not also have to describe a scroll.
@@ -333,7 +333,7 @@ def make_connection(graph: FakeGraph, client: FakeClient | None = None) -> DataH
     """Wrap the fakes in the connection object the package expects.
 
     Model discovery reads through the graph's GraphQL scroll rather than the
-    search client (modelguard/discovery.py), so the search fixture is copied
+    search client (janus/discovery.py), so the search fixture is copied
     across here. Without it a test would seed models one way and the code would
     look for them the other, and pass by finding nothing.
     """
@@ -412,7 +412,7 @@ CLEAN_COLUMN_URN = f"urn:li:schemaField:({FEATURE_TABLE_URN},applicant_income)"
 INCOME_COLUMN_URN = f"urn:li:schemaField:({TABLE_URN},income)"
 CLEAN_FEATURE_URN = "urn:li:mlFeature:(credit_risk,applicant_income)"
 
-LABEL_TERM_URN = "urn:li:glossaryTerm:modelguard.label"
+LABEL_TERM_URN = "urn:li:glossaryTerm:janus.label"
 
 
 def make_leakage_finding(
@@ -605,7 +605,7 @@ def make_sensitive_source_finding(
             sensitive_column_urn=INCOME_COLUMN_URN,
             sensitive_column_name="income",
             sensitive_dataset_name="ecommerce.public.loans_raw",
-            marker_urn="urn:li:tag:modelguard.sensitive",
+            marker_urn="urn:li:tag:janus.sensitive",
             column_path=("applicant_income", "income"),
         ),
     )
@@ -637,7 +637,7 @@ def make_proxy_candidate_finding(
             ),
             protected_column_name="income_bracket_demographic",
             protected_dataset_name="ecommerce.public.customer_features",
-            marker_urn="urn:li:tag:modelguard.protected-attribute",
+            marker_urn="urn:li:tag:janus.protected-attribute",
             ancestor_urn=INCOME_COLUMN_URN,
             ancestor_name="income",
             ancestor_dataset_name="ecommerce.public.loans_raw",
@@ -712,7 +712,7 @@ def make_trust_score(
     )
 
 
-#: URN prefixes of the entities ModelGuard emits about *itself*: the agent's
+#: URN prefixes of the entities Janus emits about *itself*: the agent's
 #: dataFlow, its scan dataJob, and one dataProcessInstance per run (T-04).
 OWN_RUN_PREFIXES = ("urn:li:dataFlow:", "urn:li:dataJob:", "urn:li:dataProcessInstance:")
 
@@ -722,7 +722,7 @@ def emitted_about_the_graph(graph: FakeGraph) -> list[Any]:
 
     Every scan writes its own process run into the graph, so ``graph.emitted``
     is never empty any more. A test that means "this healthy target was left
-    untouched" is asking about the guarded entities, not about ModelGuard's own
+    untouched" is asking about the guarded entities, not about Janus's own
     run record, so it filters that record out rather than asserting a silence
     that no longer exists.
     """

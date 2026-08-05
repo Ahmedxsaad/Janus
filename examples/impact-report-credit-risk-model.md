@@ -29,7 +29,7 @@ Traversed downstream from the failing table across column-level warehouse lineag
   - `urn:li:mlFeature:(credit_risk,applicant_income)`
   - `urn:li:mlFeature:(credit_risk,prior_default_flag)`
 
-## What ModelGuard did
+## What Janus did
 
 1. Raised a `FRESHNESS` incident on the failing table.
 2. Tagged every at-risk model so it surfaces in search.
@@ -38,4 +38,4 @@ Traversed downstream from the failing table across column-level warehouse lineag
 
 ## Caveats
 
-Freshness here is derived from metadata DataHub already holds. ModelGuard did not query the warehouse. Scheduled evaluation of assertions and anomaly detection are DataHub Cloud features; the check logic above is ModelGuard's own.
+Freshness here is derived from metadata DataHub already holds. Janus did not query the warehouse. Scheduled evaluation of assertions and anomaly detection are DataHub Cloud features; the check logic above is Janus's own.

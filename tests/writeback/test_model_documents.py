@@ -10,9 +10,9 @@ unrecorded rather than quietly omitted.
 
 from __future__ import annotations
 
-from modelguard.detect.coverage import Unevaluated
-from modelguard.models import ModelRef
-from modelguard.writeback.model_documents import (
+from janus.detect.coverage import Unevaluated
+from janus.models import ModelRef
+from janus.writeback.model_documents import (
     NOT_RECORDED,
     FeatureProvenance,
     ModelFacts,
@@ -132,7 +132,7 @@ class TestNothingIsQuietlyOmitted:
             check="sensitive source",
             target_urn=MODEL_URN,
             reason="no classification is configured",
-            remedy="Set MODELGUARD_SENSITIVE_TAG_URNS.",
+            remedy="Set JANUS_SENSITIVE_TAG_URNS.",
         )
         facts = _facts(gaps=(gap,))
 

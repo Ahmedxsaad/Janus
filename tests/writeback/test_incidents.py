@@ -15,7 +15,7 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
 )
 
-from modelguard.writeback.incidents import (
+from janus.writeback.incidents import (
     INCIDENT_ENTITY_TYPES,
     INCIDENT_TYPES,
     IncidentWriteError,
@@ -173,7 +173,7 @@ def test_first_raise_creates_and_stamps_the_run_id():
     payload = variables["input"]
     assert payload["resourceUrn"] == COLUMN
     assert payload["type"] == "FIELD"
-    assert "Raised by ModelGuard run run-1." in payload["description"]
+    assert "Raised by Janus run run-1." in payload["description"]
 
 
 def test_second_raise_of_the_same_finding_reuses_the_open_incident():

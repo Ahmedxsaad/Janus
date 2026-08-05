@@ -1,0 +1,128 @@
+# Declarations of every structured property Janus writes onto the graph.
+# This file is the single source of truth: writeback/properties.py loads it and
+# emits the definitions. Keep qualified names prefixed with "janus." so a
+# reader can tell at a glance which properties this agent owns.
+#
+# value_type is a DataHub built-in data type name (number, string, date, urn).
+# entity_types are DataHub entity type names as they appear in URNs (mlModel).
+version: 1
+properties:
+  - qualified_name: janus.trust_score
+    display_name: Janus Trust Score
+    description: >-
+      Model reliability score from 0 to 100, derived from upstream assertion
+      failures, target leakage, input schema drift, freshness lag, and ownership.
+    value_type: number
+    cardinality: SINGLE
+    entity_types: [mlModel]
+
+  - qualified_name: janus.trust_band
+    display_name: Janus Trust Band
+    description: >-
+      The reliability band the trust score falls in: healthy, watch, or at-risk.
+      A human-readable summary of janus.trust_score.
+    value_type: string
+    cardinality: SINGLE
+    entity_types: [mlModel]
+
+  - qualified_name: janus.risk_flags
+    display_name: Janus Risk Flags
+    description: >-
+      The named risks that reduced the trust score, one value per finding type.
+    value_type: string
+    cardinality: MULTIPLE
+    entity_types: [mlModel]
+
+  - qualified_name: janus.run_id
+    display_name: Janus Run ID
+    description: >-
+      Identifier of the Janus run that last wrote to this entity. Every
+      write in a run carries the same value, which makes the audit trail
+      reconstructable and the writes idempotent.
+    value_type: string
+    cardinality: SINGLE
+    entity_types: [mlModel]
+
+  - qualified_name: janus.trust_history
+    display_name: Janus Trust History
+    description: >-
+      One entry per scan that scored this model, oldest first, as
+      "<ISO-8601 UTC>|<run_id>|<score>|<band>|<deductions>|<scoring_version>".
+      A score on its own says nothing: 82 matters only next to the 95 it was
+      last Tuesday. The list is capped, so it is a recent trend rather than an
+      unbounded log.
+    value_type: string
+    cardinality: MULTIPLE
+    entity_types: [mlModel]
+
+  - qualified_name: janus.scoring_version
+    display_name: Janus Scoring Version
+    description: >-
+      The version of the scoring function that produced janus.trust_score.
+      Two scores are comparable only when the same weights, band boundaries and
+      contributing findings produced them, so a drop across a version change is
+      a release and not a regression.
+    value_type: number
+    cardinality: SINGLE
+    entity_types: [mlModel]
+
+  - qualified_name: janus.open_leak_columns
+    display_name: Janus Open Leak Columns
+    description: >-
+      Source columns this model currently has an open target-leakage incident
+      on. Janus writes it to be able to close an incident whose column was
+      deleted outright, which is the most common way a leak is actually fixed
+      and leaves no lineage to walk back through.
+    value_type: string
+    cardinality: MULTIPLE
+    entity_types: [mlModel]
+
+  # The only property that does not describe somebody else's asset. It describes
+  # this agent's reach across the whole catalog, so it hangs on Janus's own
+  # dataFlow, the entity every scan run already belongs to. A dataFlow carrying a
+  # structured property is verified against a live GMS, not assumed (T-15).
+  - qualified_name: janus.coverage_history
+    display_name: Janus Guard Coverage History
+    description: >-
+      One entry per catalog sweep, oldest first, as
+      "<ISO-8601 UTC>|<run_id>|<models>|<covered>/<total>|<check>=<covered>/<total>,...".
+      What fraction of this catalog's models each check can actually be run
+      against. It measures how much has been declared, not how healthy the
+      models are, so the direction over time is the only part worth acting on.
+    value_type: string
+    cardinality: MULTIPLE
+    entity_types: [dataFlow]
+
+  # The three below are not findings: they are what `janus link` was told,
+  # kept so it can be re-run without repeating the arguments. They live in
+  # structuredProperties rather than in mlModelProperties precisely because they
+  # have to survive the next ingestion run: DataHub's mlflow source upserts the
+  # whole mlModelProperties aspect, which drops the mlFeatures link writes
+  # (observed live, D-074). Structured properties are a separate aspect that
+  # ingestion does not touch, so the declaration outlives it and can be replayed.
+  - qualified_name: janus.feature_table
+    display_name: Janus Feature Table
+    description: >-
+      The dataset whose columns this model was linked to as its features, as
+      declared by `janus link`.
+    value_type: string
+    cardinality: SINGLE
+    entity_types: [mlModel]
+
+  - qualified_name: janus.label_column
+    display_name: Janus Label Column
+    description: >-
+      The schemaField URN of the column this model predicts, as declared by
+      `janus link`.
+    value_type: string
+    cardinality: SINGLE
+    entity_types: [mlModel]
+
+  - qualified_name: janus.excluded_columns
+    display_name: Janus Excluded Columns
+    description: >-
+      Columns of the feature table that are not features of this model (join
+      keys, partition columns), as declared by `janus link`.
+    value_type: string
+    cardinality: MULTIPLE
+    entity_types: [mlModel]

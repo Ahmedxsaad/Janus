@@ -1,7 +1,7 @@
 """Land the raw churn extract in the warehouse, the way an EL job would.
 
 Public dataset: IBM's Telco customer churn (7043 customers, one row each).
-Nothing here is ModelGuard-specific; it is the "we have a warehouse" starting
+Nothing here is Janus-specific; it is the "we have a warehouse" starting
 point every real project already has before any of this matters.
 """
 

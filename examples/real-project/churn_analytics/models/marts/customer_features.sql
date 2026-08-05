@@ -8,7 +8,7 @@
 -- production, where nobody knows yet whether the customer will churn.
 --
 -- Delete that last line to play the fix: rebuild, re-ingest, re-link, rescan,
--- and ModelGuard closes the incident it raised.
+-- and Janus closes the incident it raised.
 select
     customer_id,
     tenure_months,

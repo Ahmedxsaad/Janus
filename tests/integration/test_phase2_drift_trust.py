@@ -2,7 +2,7 @@
 
 docs/plan/02-implementation-plan.md sections 5.2 and 5.3 state it. After the model
 is trained, its input table's schema drifts from the snapshot captured on the
-training run. ``modelguard scan --model credit_risk_v3`` must detect the drift,
+training run. ``janus scan --model credit_risk_v3`` must detect the drift,
 raise a DATA_SCHEMA incident on the drifted input dataset, and roll every risk it
 found about the model into a trust score written as a structured property.
 
@@ -30,17 +30,17 @@ from datahub.metadata.schema_classes import (
     IncidentStateClass,
 )
 
-from modelguard.agent.pipeline import run_scan
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.detect.schema_drift import schema_drift_findings
-from modelguard.models import FindingType, SchemaDriftFinding, Severity, TrustBand
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.scenarios import plant_schema_drift, revert_schema_drift
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.incidents import INCIDENT_ON_RELATIONSHIP, resolve_incident
-from modelguard.writeback.labels import read_tags
-from modelguard.writeback.properties import (
+from janus.agent.pipeline import run_scan
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.detect.schema_drift import schema_drift_findings
+from janus.models import FindingType, SchemaDriftFinding, Severity, TrustBand
+from janus.seed import graph_spec as spec
+from janus.seed.scenarios import plant_schema_drift, revert_schema_drift
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.incidents import INCIDENT_ON_RELATIONSHIP, resolve_incident
+from janus.writeback.labels import read_tags
+from janus.writeback.properties import (
     RISK_FLAGS,
     TRUST_BAND,
     TRUST_SCORE,

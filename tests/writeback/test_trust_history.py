@@ -15,10 +15,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from modelguard.config import SCORING_VERSION
-from modelguard.models import TrustScore
-from modelguard.writeback.properties import TRUST_HISTORY, assign_properties
-from modelguard.writeback.trust_history import (
+from janus.config import SCORING_VERSION
+from janus.models import TrustScore
+from janus.writeback.properties import TRUST_HISTORY, assign_properties
+from janus.writeback.trust_history import (
     HISTORY_LIMIT,
     TrustEntry,
     append_entry,

@@ -29,11 +29,11 @@ from datahub.metadata.schema_classes import (
 )
 from datahub.metadata.urns import StructuredPropertyUrn
 
-from modelguard.agent.pipeline import FindingWrites, ScanReport, new_run_id, run_scan
-from modelguard.config import ScanConfig
-from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
-from modelguard.models import FindingType, Severity
-from modelguard.writeback.properties import OPEN_LEAK_COLUMNS, RISK_FLAGS, RUN_ID
+from janus.agent.pipeline import FindingWrites, ScanReport, new_run_id, run_scan
+from janus.config import ScanConfig
+from janus.detect.leakage import SOURCE_COLUMN_PROPERTY
+from janus.models import FindingType, Severity
+from janus.writeback.properties import OPEN_LEAK_COLUMNS, RISK_FLAGS, RUN_ID
 from tests.conftest import (
     CLEAN_COLUMN_URN,
     CLEAN_FEATURE_URN,
@@ -233,9 +233,9 @@ def test_the_at_risk_model_gets_a_trust_score_and_band():
     # alongside the risk flags an earlier per-finding write set.
     properties = _aspects_of(graph, StructuredPropertiesClass)
     final = {a.propertyUrn.rsplit(":", 1)[-1]: a.values for a in properties[-1].properties}
-    assert final["modelguard.trust_score"] == [35.0]
-    assert final["modelguard.trust_band"] == ["at-risk"]
-    assert final["modelguard.risk_flags"] == ["upstream-freshness"]
+    assert final["janus.trust_score"] == [35.0]
+    assert final["janus.trust_band"] == ["at-risk"]
+    assert final["janus.risk_flags"] == ["upstream-freshness"]
 
 
 def test_the_score_band_and_history_land_in_one_write_not_three():
@@ -255,9 +255,9 @@ def test_the_score_band_and_history_land_in_one_write_not_three():
     written = _aspects_of(graph, StructuredPropertiesClass)
     assert len(written) == 2
     final = {a.propertyUrn.rsplit(":", 1)[-1]: a.values for a in written[-1].properties}
-    assert final["modelguard.trust_score"] == [35.0]
-    assert final["modelguard.trust_band"] == ["at-risk"]
-    assert [entry.split("|")[1] for entry in final["modelguard.trust_history"]] == ["scan-fixed"]
+    assert final["janus.trust_score"] == [35.0]
+    assert final["janus.trust_band"] == ["at-risk"]
+    assert [entry.split("|")[1] for entry in final["janus.trust_history"]] == ["scan-fixed"]
 
 
 def test_the_guarding_assertion_and_its_measured_result_are_both_written():
@@ -890,8 +890,8 @@ def test_one_feature_recovering_does_not_clear_a_model_another_still_endangers()
         for assignment in properties.properties
     }
     assert assigned[RISK_FLAGS] == [str(FindingType.TARGET_LEAKAGE)]
-    assert assigned["modelguard.trust_score"] == [report.trust[0].score.value]
-    assert assigned["modelguard.trust_band"] != ["healthy"]
+    assert assigned["janus.trust_score"] == [report.trust[0].score.value]
+    assert assigned["janus.trust_band"] != ["healthy"]
 
     tags = graph.get_aspect(MODEL_URN, GlobalTagsClass)
     assert tags is not None
@@ -988,7 +988,7 @@ def test_a_recovered_table_records_the_passing_assertion_run():
     The guarding assertion's latest run event is the FAILURE written when the
     table went stale. A recovery that never writes a SUCCESS leaves the table
     reading, in the DataHub UI, as permanently breaching the very assertion
-    ModelGuard wrote to guard it (D-070).
+    Janus wrote to guard it (D-070).
     """
     graph = _graph(lag_hours=1.0)
     client = _client()
@@ -1031,7 +1031,7 @@ def test_every_scan_logs_its_counts_and_timings_keyed_by_run_id(caplog):
     graph = _graph(30.0)
     graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
 
-    with caplog.at_level("INFO", logger="modelguard.agent.pipeline"):
+    with caplog.at_level("INFO", logger="janus.agent.pipeline"):
         report = _scan(graph, _client())
 
     line = _scan_log_line(caplog)
@@ -1046,7 +1046,7 @@ def test_every_scan_logs_its_counts_and_timings_keyed_by_run_id(caplog):
 
 def test_a_dry_run_logs_that_it_previewed_rather_than_wrote(caplog):
     """The counts have to tell a preview from a write, or they mislead."""
-    with caplog.at_level("INFO", logger="modelguard.agent.pipeline"):
+    with caplog.at_level("INFO", logger="janus.agent.pipeline"):
         report = _scan(_graph(30.0), _client(), dry_run=True)
 
     line = _scan_log_line(caplog)

@@ -18,7 +18,7 @@ from benchmarks.faithfulness import (
     report,
     urns_in,
 )
-from modelguard.agent.narrate import grounding_facts, narrate
+from janus.agent.narrate import grounding_facts, narrate
 from tests.conftest import (
     MODEL_URN,
     make_deprecated_input_finding,

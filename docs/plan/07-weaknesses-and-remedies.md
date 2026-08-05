@@ -53,9 +53,9 @@ answer, lose data, or block adoption outright.
 Three call sites pass `count=config.lineage_result_cap` (default 500) and none
 of them inspects how many results came back:
 
-- `modelguard/detect/column_marks.py:203` (the leakage and sensitive-source walk)
-- `modelguard/detect/blast_radius.py:145` (the downstream traversal)
-- `modelguard/writeback/link.py:181` (the label's own lineage)
+- `janus/detect/column_marks.py:203` (the leakage and sensitive-source walk)
+- `janus/detect/blast_radius.py:145` (the downstream traversal)
+- `janus/writeback/link.py:181` (the label's own lineage)
 
 The SDK's signature confirms there is no continuation token to miss:
 
@@ -114,7 +114,7 @@ Unevaluated(
         "seen every ancestor and a leak beyond the cap would be missed"
     ),
     remedy=(
-        "Raise MODELGUARD_LINEAGE_RESULT_CAP, or narrow the scan to the model "
+        "Raise JANUS_LINEAGE_RESULT_CAP, or narrow the scan to the model "
         "whose lineage is wide."
     ),
 )
@@ -157,18 +157,18 @@ dependencies = [
 ```
 
 The comment above it reads "Pins are exact." That is the correct policy for an
-*application*. `modelguard-datahub` is now a **library** on PyPI, and the policy
+*application*. `janus-datahub` is now a **library** on PyPI, and the policy
 inverts.
 
 ### Why it matters
 
 `pydantic==2.13.4` alone will conflict with a large share of the Python data
 ecosystem. Any environment that already holds pydantic 2.12 or 2.14 (FastAPI,
-LangChain, dbt adapters, most ML tooling) either has ModelGuard force a change to
+LangChain, dbt adapters, most ML tooling) either has Janus force a change to
 a shared dependency, or fails to resolve. The same applies to `rich`, which
 `pip`, `poetry` and dozens of CLIs depend on.
 
-The practical outcome is that `pip install modelguard-datahub` works in a fresh
+The practical outcome is that `pip install janus-datahub` works in a fresh
 venv and fails in the environment where somebody actually wants it: next to their
 training code. That is a silent adoption killer, and it is invisible from the
 maintainers' side because the development venv is the fresh one.
@@ -209,13 +209,13 @@ combination stays exact while the *published* contract stays wide:
 ### How to verify
 
 A CI job that installs the wheel into an environment seeded with a deliberately
-different pydantic patch and asserts the install succeeds and `modelguard --help`
+different pydantic patch and asserts the install succeeds and `janus --help`
 runs:
 
 ```bash
 pip install "pydantic==2.12.0"
 pip install dist/*.whl
-python -c "import modelguard; modelguard.scan_model"
+python -c "import janus; janus.scan_model"
 ```
 
 That job is the regression test for this whole class of problem.
@@ -228,7 +228,7 @@ That job is the regression test for this whole class of problem.
 
 ### Evidence
 
-`modelguard/writeback/properties.py:196-213`, `assign_properties`:
+`janus/writeback/properties.py:196-213`, `assign_properties`:
 
 ```python
 existing = conn.graph.get_aspect(entity_urn, StructuredPropertiesClass)
@@ -250,7 +250,7 @@ hypothetical here:
 - `watch` on a table and `watch` on a model, both reaching the same downstream
   model, which is the recommended production deployment.
 - `scan --all-models` where two models share a stale upstream.
-- A `watch` daemon and an engineer running `modelguard scan` by hand, which is
+- A `watch` daemon and an engineer running `janus scan` by hand, which is
   the normal way somebody investigates what the daemon just reported.
 
 The project already knows the symptom: tests/CLAUDE.md rule 2 records an
@@ -266,7 +266,7 @@ Nothing in the README or the docs tells an operator not to run two watchers.
 Three layers, in increasing cost. Do the first two now.
 
 **1. Document and enforce the safe deployment.** One `watch` per graph is the
-supported topology. Say so in `charts/modelguard-watch/README.md` and set the
+supported topology. Say so in `charts/janus-watch/README.md` and set the
 Deployment's `replicas` to 1 with `strategy: Recreate`, so a rolling update never
 runs two pods at once:
 
@@ -314,11 +314,11 @@ for the same property, which is the honest boundary to document.
 
 ### Evidence
 
-`run_scan` and `_write_back` in `modelguard/agent/pipeline.py` contain **no**
+`run_scan` and `_write_back` in `janus/agent/pipeline.py` contain **no**
 `try`/`except`. Verified:
 
 ```bash
-grep -n 'try:\|except' modelguard/agent/pipeline.py   # no handler in either function
+grep -n 'try:\|except' janus/agent/pipeline.py   # no handler in either function
 ```
 
 `_write_back` performs, in order: raise incident, upsert assertion, record
@@ -385,9 +385,9 @@ what CI acts on.
 
 ### Evidence
 
-`modelguard/client.py:127-138` calls `graph.test_connection()` and nothing else.
+`janus/client.py:127-138` calls `graph.test_connection()` and nothing else.
 That proves the host answers; it says nothing about whether this GMS supports
-what ModelGuard is about to do.
+what Janus is about to do.
 
 The project depends on server behaviour that is genuinely version-sensitive and
 was verified against exactly one version. D-021 records that
@@ -399,7 +399,7 @@ at different times.
 ### Why it matters
 
 A user on an older GMS gets a raw GraphQL validation error from the middle of a
-write, after ModelGuard has already raised an incident. The message names a
+write, after Janus has already raised an incident. The message names a
 DataHub type they have never heard of. Nothing points at the actual cause, which
 is that their server is too old.
 
@@ -436,7 +436,7 @@ def server_warning(graph: DataHubGraph) -> str | None:
         if config.is_version_at_least(MINIMUM_VERIFIED_GMS):
             return None
         return (
-            f"DataHub at this endpoint reports {config.service_version}. ModelGuard "
+            f"DataHub at this endpoint reports {config.service_version}. Janus "
             f"is verified against {MINIMUM_VERIFIED_GMS} and later; incident and "
             "structured-property writes may be rejected by this server."
         )
@@ -472,8 +472,8 @@ guessing is worse than silence here.
 original detectors. Every element of that measurement is authored by this
 project:
 
-- the graph, by `modelguard-seed`
-- the failures, by `modelguard/seed/scenarios.py`
+- the graph, by `janus-seed`
+- the failures, by `janus/seed/scenarios.py`
 - the ground-truth labels, by `benchmarks/inject.py`
 - the competing approaches, by `benchmarks/baselines.py`
 
@@ -552,12 +552,12 @@ documentation and should be labelled as such.
 
 ### Evidence
 
-`modelguard/config.py`: 40 for an upstream failure, 20 leakage, 15 drift, 15
+`janus/config.py`: 40 for an upstream failure, 20 leakage, 15 drift, 15
 freshness lag, 10 missing owner, and now 15 sensitive source and 5 deprecated
 input. The docstring is candid: "the plan's illustrative values (section 5.3)".
 
-That number is written to `modelguard.trust_score` on the model, rendered as a
-band, published in the impact report, and accepted by `modelguard gate
+That number is written to `janus.trust_score` on the model, rendered as a
+band, published in the impact report, and accepted by `janus gate
 --min-trust 80` as a build-blocking policy input.
 
 ### Why it matters
@@ -659,7 +659,7 @@ publishes the governance detectors' first real precision and recall, plus the
 scale table:
 
 ```bash
-modelguard-seed
+janus-seed
 python -m benchmarks.run_bench --out benchmarks/RESULTS.md
 ```
 
@@ -681,7 +681,7 @@ already has the pattern. The three worth adding:
   assert the resulting link matches the hand-written one.
 
 **3. Make the gap visible.** A CI job that fails when a module under
-`modelguard/` has no corresponding integration or benchmark reference would keep
+`janus/` has no corresponding integration or benchmark reference would keep
 this from recurring, though a simpler discipline is a line in the PR template.
 
 ### How to verify
@@ -758,7 +758,7 @@ matrix exactly.
 
 ### Evidence
 
-`modelguard/writeback/link_infer.py:_feature_dataset` resolves the feature table
+`janus/writeback/link_infer.py:_feature_dataset` resolves the feature table
 from `DataProcessInstanceInputClass` on the model's training runs, and raises
 when there is none:
 
@@ -782,7 +782,7 @@ So `--infer` refuses on precisely the stack this project validated against.
 `--infer` was built (D-080) to remove the adoption cliff where every model needs
 four hand-typed arguments. On the seeded demo graph it works, because the seeder
 writes the run inputs. On a real mlflow ingest it declines. The cliff is intact
-for the users it was meant to help, and the README's framing ("ask ModelGuard to
+for the users it was meant to help, and the README's framing ("ask Janus to
 work it out for you") oversells what will happen on their catalog.
 
 ### Proposed fix
@@ -842,7 +842,7 @@ that counts here, and it is the same test that should have caught this.
 
 ### Evidence
 
-From `modelguard/writeback/link.py` and D-074: DataHub's mlflow source upserts
+From `janus/writeback/link.py` and D-074: DataHub's mlflow source upserts
 the whole `mlModelProperties` aspect and drops the features `link` attached, so
 the link must be replayed after every ingestion. `link --all` exists for exactly
 this and is the documented remedy.
@@ -854,7 +854,7 @@ scheduled job, and the Helm chart deploys only `watch`.
 
 This is the project's central adoption risk, and it is structural rather than a
 bug. The value proposition requires a link that decays on a schedule the user
-does not control. A team adopts ModelGuard, sees it work, and three weeks later
+does not control. A team adopts Janus, sees it work, and three weeks later
 their nightly ingest has silently reverted every model to "not checked". The
 scan will say so honestly (that is what `coverage.py` is for), which converts a
 silent failure into a visible one, but the tool still stopped working and
@@ -863,7 +863,7 @@ somebody has to notice and go re-run a command.
 ### Proposed fix
 
 **1. Ship the scheduled replay, since the chart already deploys a daemon.** Add a
-`link --all` CronJob to `charts/modelguard-watch`, off by default, one values
+`link --all` CronJob to `charts/janus-watch`, off by default, one values
 block to enable:
 
 ```yaml
@@ -884,12 +884,12 @@ rather than only the call:
 # place for it: the link is re-declared by the same run that creates the model,
 # so an ingest that drops it is repaired on the next training run rather than by
 # somebody remembering.
-mlflow.log_param("modelguard_features", FEATURE_TABLE)   # also feeds --infer (F10)
+mlflow.log_param("janus_features", FEATURE_TABLE)   # also feeds --infer (F10)
 link_model(model=..., features=FEATURE_TABLE, label_column=...)
 ```
 
-**3. Report the decay as a first-class finding.** ModelGuard can detect its own
-broken link: a model with a recorded `modelguard.feature_table` property but no
+**3. Report the decay as a first-class finding.** Janus can detect its own
+broken link: a model with a recorded `janus.feature_table` property but no
 `mlFeatures` has been de-linked by an ingest. That is a positive-evidence check,
 cheap, and it turns the failure into something `inventory` and `watch` surface:
 
@@ -898,7 +898,7 @@ Unevaluated(
     check="target leakage",
     reason="this model was linked on <date> but its features are gone, which is "
            "what an mlflow ingest does to mlModelProperties (D-074)",
-    remedy="Replay it: modelguard link --all",
+    remedy="Replay it: janus link --all",
 )
 ```
 
@@ -918,16 +918,16 @@ makes the gap visible rather than silent.
 ### Status: CLOSED (D-132, T-20)
 
 All four remedies are in place, and the last of them is what actually closes it.
-Steps 1 to 3 landed earlier: the CronJob ships in `charts/modelguard-watch`, the
+Steps 1 to 3 landed earlier: the CronJob ships in `charts/janus-watch`, the
 README's training-script section shows the two-line integration, and
 `coverage.py`'s `_DELINKED` gap tells a model an ingest de-linked apart from one
 nobody ever linked (D-092).
 
 What stayed open was the sentence above: *"somebody has to notice and go re-run a
-command"*. `modelguard watch --events` removes that. It consumes DataHub's own
+command"*. `janus watch --events` removes that. It consumes DataHub's own
 `MetadataChangeLog`, sees the `mlModelProperties` upsert that drops the features
 on **any** model in the catalog, and replays the recorded link with no human
-action (`modelguard/mcl.py`, `modelguard/reconcile.py`).
+action (`janus/mcl.py`, `janus/reconcile.py`).
 
 Verified as this section asks and as the plan asks: a model ingested through
 DataHub's own mlflow source three times against a live Quickstart. The second
@@ -954,7 +954,7 @@ feedback #14.
 
 ### Evidence
 
-`modelguard/cli.py:1012-1016`:
+`janus/cli.py:1012-1016`:
 
 ```python
 except Exception as exc:  # a daemon must survive SDK failures
@@ -1017,7 +1017,7 @@ console with the token scrubbed and the message intact. The existing
 
 ### Evidence
 
-`modelguard/llm.py:150-156` constructs the chat model with `model`, `api_key`,
+`janus/llm.py:150-156` constructs the chat model with `model`, `api_key`,
 `temperature` and `max_tokens`. No timeout, and no retry cap.
 
 `narrate` wraps the call in `except Exception` and falls back to the template, so
@@ -1071,7 +1071,7 @@ the guarantee the README makes: detection never depends on the LLM.
 
 ### Evidence
 
-`modelguard/cli.py:_watch_once` runs `run_scan(..., dry_run=True)` to compute the
+`janus/cli.py:_watch_once` runs `run_scan(..., dry_run=True)` to compute the
 finding signature, and then, when the signature changed, runs `run_scan(...)`
 again for real. Every detector, every lineage traversal, and every coverage check
 runs twice per transition.
@@ -1120,7 +1120,7 @@ the ceiling.
 
 ### Evidence
 
-`modelguard/cli.py:_model_urns`:
+`janus/cli.py:_model_urns`:
 
 ```python
 urns = sorted(str(urn) for urn in conn.client.search.get_urns(filter=F.entity_type("mlModel")))
@@ -1132,7 +1132,7 @@ generator is fully consumed by `sorted()` before the slice.
 
 ### Why it matters
 
-`modelguard inventory --limit 50` reads as "look at 50 models". On a catalog with
+`janus inventory --limit 50` reads as "look at 50 models". On a catalog with
 20,000 models it enumerates all 20,000, paging through search, and then discards
 19,950. The flag that exists to bound the work does not bound the work.
 
@@ -1218,7 +1218,7 @@ URN across all candidate columns first, then fetch their `incidentInfo` in one
 batch.
 
 **3. Skip the walk entirely when nothing could be open.** The model records
-`modelguard.open_leak_columns` (D-074). If that property is empty and this scan
+`janus.open_leak_columns` (D-074). If that property is empty and this scan
 raised no column finding, there is nothing to reconcile and the whole loop can be
 skipped. That is the common case on a healthy catalog, which is most scans.
 
@@ -1239,10 +1239,10 @@ that must fall, and it is already the diagnostic the scale table reports.
 ### Evidence
 
 Measured with `ast`, counting docstrings and comment lines against total lines
-under `modelguard/`:
+under `janus/`:
 
 ```
-TOTAL modelguard/: 11,680 lines, 7,140 docstring, 466 comment => 65% prose
+TOTAL janus/: 11,680 lines, 7,140 docstring, 466 comment => 65% prose
 ```
 
 Worst offenders by share:
@@ -1299,7 +1299,7 @@ removing it let somebody reintroduce a bug the decision log records? If yes, kee
 PyPI long description. The top 120 lines (what it is, the measured claim, install,
 one worked example) are what anyone reads. Move the rest to `docs/`.
 
-Expected outcome: `modelguard/` around 45% prose, which is still high and
+Expected outcome: `janus/` around 45% prose, which is still high and
 appropriate for this kind of code, without the essays.
 
 ---
@@ -1310,7 +1310,7 @@ appropriate for this kind of code, without the essays.
 
 ### Evidence
 
-`modelguard/cli.py` holds: entity resolution (`resolve_table`, `resolve_model`,
+`janus/cli.py` holds: entity resolution (`resolve_table`, `resolve_model`,
 `_model_urns`), console rendering (nine `_print_*` functions), the watch loop and
 its state machine, the inference proposal printer, and five Typer commands with
 their argument surfaces.
@@ -1330,10 +1330,10 @@ them.
 Split along the seams that already exist, without changing behaviour:
 
 ```
-modelguard/cli/__init__.py    the Typer app and command registration
-modelguard/cli/resolve.py     resolve_table, resolve_model, _model_urns
-modelguard/cli/display.py     the _print_* family, plus _print_proposal
-modelguard/cli/watch.py       WatchState, _watch_once, _announce_watch_change
+janus/cli/__init__.py    the Typer app and command registration
+janus/cli/resolve.py     resolve_table, resolve_model, _model_urns
+janus/cli/display.py     the _print_* family, plus _print_proposal
+janus/cli/watch.py       WatchState, _watch_once, _announce_watch_change
 ```
 
 `render.py` already established that rendering is separable and pure. `display.py`

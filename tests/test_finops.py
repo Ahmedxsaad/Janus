@@ -18,8 +18,8 @@ from datahub.metadata.schema_classes import (
     TimeStampClass,
 )
 
-from modelguard.config import ScanConfig
-from modelguard.finops import model_usage, report
+from janus.config import ScanConfig
+from janus.finops import model_usage, report
 from tests.conftest import (
     DEPLOYMENT_URN,
     FEATURE_TABLE_URN,

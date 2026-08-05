@@ -13,7 +13,7 @@ import asyncio
 
 from mcp.types import ToolAnnotations
 
-from modelguard.mcp_server import _READ_ONLY, _render_finding, create_server
+from janus.mcp_server import _READ_ONLY, _render_finding, create_server
 from tests.conftest import make_finding, make_leakage_finding, make_schema_drift_finding
 
 

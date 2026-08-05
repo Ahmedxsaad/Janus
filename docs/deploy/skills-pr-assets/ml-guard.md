@@ -26,5 +26,5 @@ Detection is deterministic: the skill never asks a language model whether a
 finding exists. Writes back (incident, trust score, guarding assertion, impact
 report) are gated on human approval.
 
-If no arguments provided, run `modelguard inventory` and report what is
+If no arguments provided, run `janus inventory` and report what is
 checkable in this catalog and what metadata is missing.

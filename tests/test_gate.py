@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import pytest
 
-from modelguard.agent.pipeline import FindingWrites, ScanReport, TrustWrite
-from modelguard.config import SCORE_PROVENANCE
-from modelguard.gate import (
+from janus.agent.pipeline import FindingWrites, ScanReport, TrustWrite
+from janus.config import SCORE_PROVENANCE
+from janus.gate import (
     EXIT_BLOCKED,
     EXIT_ERROR,
     EXIT_PASS,
@@ -26,14 +26,14 @@ from modelguard.gate import (
     github_annotations,
     summary,
 )
-from modelguard.models import Finding, Severity, TrustBand
+from janus.models import Finding, Severity, TrustBand
 from tests.conftest import MODEL_URN, make_trust_score
 from tests.conftest import make_finding as _finding
 from tests.conftest import make_leakage_finding as _leakage_finding
 
 
 def _narrative(finding):  # noqa: ANN202 - a stand-in, never asserted on
-    from modelguard.agent.narrate import narrate
+    from janus.agent.narrate import narrate
 
     return narrate(finding, None)
 
@@ -200,7 +200,7 @@ def test_each_violation_becomes_one_github_annotation():
     lines = github_annotations(verdict)
 
     assert len(lines) == 2
-    assert all(line.startswith("::error title=ModelGuard: ") for line in lines)
+    assert all(line.startswith("::error title=Janus: ") for line in lines)
 
 
 def test_a_passing_verdict_emits_no_annotations():

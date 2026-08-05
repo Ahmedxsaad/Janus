@@ -16,7 +16,7 @@ and it is answerable programmatically:
    budget has invented a figure nobody measured, and a reader cannot tell that
    from a figure that was.
 
-The grounding set is :func:`modelguard.agent.narrate.grounding_facts`, which is
+The grounding set is :func:`janus.agent.narrate.grounding_facts`, which is
 the exact text the narrator's prompt wraps in its untrusted-evidence block, and
 which the system prompt tells the model is the only thing it may quote figures
 from. Deriving it here instead would measure a copy of the answer rather than
@@ -34,8 +34,8 @@ import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 
-from modelguard.agent.narrate import grounding_facts
-from modelguard.models import Finding
+from janus.agent.narrate import grounding_facts
+from janus.models import Finding
 
 #: A number as it appears in text: optional thousands separators, optional
 #: decimal part. The leading ``(?<![A-Za-z0-9_.])`` is what keeps an identifier
@@ -75,7 +75,7 @@ class FaithfulnessCheck:
 
     finding_type: str
     source: str
-    """``llm`` or ``template``, from :class:`~modelguard.agent.narrate.Narrative`."""
+    """``llm`` or ``template``, from :class:`~janus.agent.narrate.Narrative`."""
 
     provider: str
     """The provider that wrote it, or ``none`` for the template fallback."""
@@ -261,7 +261,7 @@ def check_template_narratives(
     is also the stricter half to fail: template prose is written here, so a
     violation is this project quoting a figure it never measured.
     """
-    from modelguard.agent.narrate import narrate
+    from janus.agent.narrate import narrate
 
     return report(
         check(

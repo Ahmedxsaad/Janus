@@ -1,9 +1,9 @@
-"""The labelled trials ModelGuard-Bench scores the detectors against.
+"""The labelled trials Janus-Bench scores the detectors against.
 
 A trial is one graph state plus the findings that state should produce. Ground
 truth is not a judgement call: it is whatever the injector planted, and every
 trial is built from the same reversible scenarios the demo uses
-(``modelguard.seed.scenarios``), so the benchmark measures the shipped detectors
+(``janus.seed.scenarios``), so the benchmark measures the shipped detectors
 rather than a reimplementation of them (benchmarks/CLAUDE.md rule 1).
 
 Why the freshness sweep is the interesting part
@@ -49,13 +49,13 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
 )
 
-from modelguard.client import DataHubConnection
-from modelguard.config import ScanConfig
-from modelguard.detect.blast_radius import freshness_signal
-from modelguard.detect.governance import sensitive_index
-from modelguard.models import FindingType
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.scenarios import (
+from janus.client import DataHubConnection
+from janus.config import ScanConfig
+from janus.detect.blast_radius import freshness_signal
+from janus.detect.governance import sensitive_index
+from janus.models import FindingType
+from janus.seed import graph_spec as spec
+from janus.seed.scenarios import (
     BACKUP_LABEL_COLUMN,
     LOOKALIKE_COLUMN,
     PROTECTED_TAG_URN,
@@ -270,7 +270,7 @@ def _freshness_trials(sla_hours: float) -> tuple[Trial, ...]:
 #: feature still derives from it, and the only thing that changed is which term
 #: counts as a label. A detector that matched on the name rather than on the
 #: declaration passes every other trial in this file and fails this one.
-UNUSED_LABEL_TERM = "urn:li:glossaryTerm:modelguard.bench_unused_label"
+UNUSED_LABEL_TERM = "urn:li:glossaryTerm:janus.bench_unused_label"
 
 
 def _leakage_trials() -> tuple[Trial, ...]:

@@ -17,8 +17,8 @@ from benchmarks.counterfactuals import (
 )
 from benchmarks.inject import build_trials
 from benchmarks.run_bench import _counterfactual_lines
-from modelguard.config import ScanConfig
-from modelguard.models import Finding, FindingType, RemedyKind
+from janus.config import ScanConfig
+from janus.models import Finding, FindingType, RemedyKind
 from tests.conftest import (
     FakeClient,
     FakeGraph,

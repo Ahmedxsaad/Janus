@@ -4,14 +4,14 @@ import hashlib
 
 import pytest
 
-from modelguard.config import (
+from janus.config import (
     ENV_FRESHNESS_SLA_HOURS,
     ENV_MAX_HOPS,
     SCORING_VERSION,
     ConfigError,
     ScanConfig,
 )
-from modelguard.detect.trust_score import _FALLBACK_CAUSES
+from janus.detect.trust_score import _FALLBACK_CAUSES
 
 
 def test_the_defaults_reach_a_model_three_hops_downstream():
@@ -85,6 +85,6 @@ def _scoring_fingerprint() -> str:
 def test_the_scoring_contract_cannot_change_without_a_version_bump():
     assert (SCORING_VERSION, _scoring_fingerprint()) == EXPECTED_SCORING, (
         "The trust scoring contract changed. Bump SCORING_VERSION in "
-        "modelguard/config.py and update EXPECTED_SCORING here, so the history "
+        "janus/config.py and update EXPECTED_SCORING here, so the history "
         "records the discontinuity instead of showing it as a regression."
     )

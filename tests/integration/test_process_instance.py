@@ -29,11 +29,11 @@ from datahub.metadata.schema_classes import (
     RunResultTypeClass,
 )
 
-from modelguard.agent.pipeline import run_scan
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.process_instance import (
+from janus.agent.pipeline import run_scan
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.process_instance import (
     FLOW_ENV,
     JOB_ID,
     ORCHESTRATOR,

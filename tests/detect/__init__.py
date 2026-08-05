@@ -1,1 +1,1 @@
-"""Tests for modelguard.detect."""
+"""Tests for janus.detect."""

@@ -27,7 +27,7 @@ SETTLE_SECONDS = 5.0
 
 def binary() -> Path:
     """Return the built executable for this platform."""
-    for name in ("modelguard-argos", "modelguard-argos.exe"):
+    for name in ("janus-argos", "janus-argos.exe"):
         candidate = RELEASE / name
         if candidate.is_file():
             return candidate

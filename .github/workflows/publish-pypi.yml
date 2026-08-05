@@ -1,5 +1,5 @@
 # Builds the wheel and sdist and publishes them to PyPI, so `pip install
-# modelguard-datahub` works for anyone pointing the CLI at their own DataHub
+# janus-datahub` works for anyone pointing the CLI at their own DataHub
 # (README's "Try it" says it does, and until this workflow existed it did not).
 #
 # Triggers only on a version tag (v*.*.*), the same deliberate gate
@@ -84,7 +84,7 @@ jobs:
     # a workflow log.
     environment:
       name: pypi
-      url: https://pypi.org/p/modelguard-datahub
+      url: https://pypi.org/p/janus-datahub
     steps:
       - uses: actions/download-artifact@v4
         with:

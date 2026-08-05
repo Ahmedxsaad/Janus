@@ -1,6 +1,6 @@
 # CLAUDE.md - benchmarks
 
-ModelGuard-Bench (docs/plan/03-production-hardening.md section A): detectors
+Janus-Bench (docs/plan/03-production-hardening.md section A): detectors
 are measured, not asserted. Shipped: inject.py (the labelled trial matrix),
 metrics.py (the pure scoring arithmetic), run_bench.py (the live harness and
 the RESULTS.md renderer), baselines.py (the approaches without column-level
@@ -11,13 +11,13 @@ built: Jenga corruption injection, golden/ (D-047, D-050).
 
 Run it with a Quickstart up and the graph seeded:
 
-    modelguard-seed
+    janus-seed
     python -m benchmarks.run_bench --out benchmarks/RESULTS.md
 
 ## Local rules
 
 1. Ground truth is deterministic: synthetic leakage/drift/freshness planted by
-   modelguard.seed.scenarios, fixed lags, fixed order. Same run, same numbers.
+   janus.seed.scenarios, fixed lags, fixed order. Same run, same numbers.
    Trials call the shipped detectors; never reimplement detection here.
 2. Report per detector: precision, recall, F1, false-positive rate, MTTD,
    blast-radius recall, idempotency (duplicate incidents after N reruns = 0).
@@ -43,7 +43,7 @@ Run it with a Quickstart up and the graph seeded:
    trusting a green column, break the detector it grades and confirm the
    column moves (tests/CLAUDE.md rule 6, applied to the benchmark).
 9. A baseline is written to be *fair*, not to lose. Hand it every fact
-   ModelGuard gets (the same label index, the same source-column resolution)
+   Janus gets (the same label index, the same source-column resolution)
    and let it differ in one respect only. Test that it genuinely detects
    before testing that it over-reports: a baseline that finds nothing turns
    the comparison into a fabrication no green suite would catch.
@@ -53,7 +53,7 @@ Run it with a Quickstart up and the graph seeded:
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-08 | Claude (for Ahmed Saad) | Initial version: determinism, metrics, baseline rules |
-| 2026-07-22 | Claude (for Ahmed Saad) | ModelGuard-Bench core lands: inject.py, metrics.py, run_bench.py, generated RESULTS.md. Add rules 6-8 (live graph not fixtures, precondition never the expected answer, mutate before trusting a perfect score). Jenga, baselines, scale test and golden/ remain unbuilt (D-047) |
+| 2026-07-22 | Claude (for Ahmed Saad) | Janus-Bench core lands: inject.py, metrics.py, run_bench.py, generated RESULTS.md. Add rules 6-8 (live graph not fixtures, precondition never the expected answer, mutate before trusting a perfect score). Jenga, baselines, scale test and golden/ remain unbuilt (D-047) |
 | 2026-07-22 | Claude (for Ahmed Saad) | baselines.py lands: table-level lineage and no-lineage approaches scored on the same graph and ground truth, per feature. Add rule 9 (a baseline is written to be fair, not to lose) and revise rule 3 (D-050) |
 | 2026-07-22 | Claude (for Ahmed Saad) | Review pass: the table-level baseline now filters past the hop cap the detector filters (D-020), so it is not charged for false positives this harness caused; a precondition that never lands drops the comparison instead of discarding the whole run (D-051) |
 | 2026-08-02 | Claude (for Ghassen Naouar) | inject.py gains a positive and a negative trial for each governance detector. The deprecation negative writes the aspect with deprecated=false, which is how DataHub records a withdrawn deprecation, so a detector treating the aspect's mere presence as the signal fails exactly there (D-079) |
@@ -62,7 +62,7 @@ Run it with a Quickstart up and the graph seeded:
 | 2026-08-04 | Claude (for Ghassen Naouar) | counterfactuals.py lands: each finding's suggested fixes are applied to the live graph and the detector asked again, with the ones no metadata write can perform named as unverified rather than counted as passes. Rule 8 applied to remediation: a remedy nobody performed is not a measurement (D-110, T-03) |
 | 2026-08-04 | Claude (for Ghassen Naouar) | The scale sweep runs last. Its fifty hard deletes left enough index churn behind them to time out the counterfactual measurement's wait for a refreshed table, so a remedy that had landed was reported as an error. Ordering, not a longer timeout: a longer one only makes every genuine error slower to report (D-110, T-03) |
 | 2026-08-04 | Claude (for Ghassen Naouar) | The degraded mode gets its own family, scored separately from the column-level detectors as rule 2 requires: two boundary trials that differ only in whether the model is linked, plus an applier for its declare-link remedy. run_bench also checks the precision the product quotes about that mode against the table-level baseline it measures, and prints both. Ordering, per the D-110 precedent: those two trials are the only ones that rewrite mlFeatures, the last edge of the blast-radius traversal measured next, so the family sits mid-matrix rather than the walk being taught to wait for its own answer (D-113, T-07) |
-| 2026-08-04 | Claude (for Ahmed Saad) | mutation_report.py lands for T-08: `modelguard/detect/` mutation-tested with mutmut (1484 mutants, 0.77 score), every survivor grouped by function and verdicted (real gap or provably equivalent) rather than left as a bare count, rendered into RESULTS.md between marker comments. A survivor with no verdict raises instead of publishing silently, the same discipline rule 4 already applies to a hand-typed number (D-115) |
+| 2026-08-04 | Claude (for Ahmed Saad) | mutation_report.py lands for T-08: `janus/detect/` mutation-tested with mutmut (1484 mutants, 0.77 score), every survivor grouped by function and verdicted (real gap or provably equivalent) rather than left as a bare count, rendered into RESULTS.md between marker comments. A survivor with no verdict raises instead of publishing silently, the same discipline rule 4 already applies to a hand-typed number (D-115) |
 | 2026-08-04 | Claude (for Ahmed Saad) | inject.py gains two T-09 trials (common ancestor, label lookalike) and generalizes `_leakage_visible`/`_sensitive_visible` to check lineage reachability rather than only a tag or the flagship feature's own column; `_sensitive_visible` checking only tag presence, never reachability, was a pre-existing bug the fix surfaced. The two new trials are ordered lookalike-then-common-ancestor on purpose: nothing in the matrix reverts a trial's plant before the next one runs, and common-ancestor's own write happens to restore the baseline the reverse order would not. mutation_report.py's VERDICTS gains x__cap_reason and an updated x_marked_ancestor entry after T-08 re-ran (D-116, T-09) |
 | 2026-08-04 | Claude (for Ahmed Saad) | faithfulness.py lands for T-10: generated prose checked against the facts its narrator was actually shown, since the prompt carries more than Finding.evidence and grounding on the mapping alone would report a correctly-quoted hop count as a hallucination. Rate reported beside the figure count, because prose quoting no number is faithful by this measure and says nothing. inject.py gains the four T-11 proxy trials, and counterfactuals.py an applier for the one proxy remedy a machine may perform: REVIEW deliberately has none (D-117, D-118) |
 | 2026-08-04 | Claude (for Ahmed Saad) | Three registration gaps the first full run with a seventh detector exposed, each now tested: findings_for raised (correctly, rule 8's spirit: an unregistered detector must not be scored as one that never fires), _DETECTOR_LABELS silently rendered six rows for seven detectors, and measure_faithfulness narrated one finding out of seven families because it read whatever the matrix left behind. Faithfulness now plants each family's own positive trial and runs last, before restore_baseline, since it plants state (D-120) |
@@ -73,3 +73,4 @@ Run it with a Quickstart up and the graph seeded:
 | 2026-08-05 | Claude (for Ahmed Saad) | scale.py gains measure_write_path: the sweep is dry-run and said so, which left the more expensive half unmeasured. Reconciliation is 71% of a write-enabled scan's reads and the whole thing is 7.5x a dry run, so the read-path table alone understates a nightly `--all-models --write` by close to an order of magnitude. It runs last, after both restore_baseline (the seeded leak is what it scans, and the counterfactuals clear it) and the lifecycle read (it writes a fresh incident that would otherwise read there as a finding that never closed). Two wrong placements were measured before that one: before the restore it timed a scan with nothing to write and reported 0 reads for write-back; retargeted at the table with a fresh plant it measured a resource with no incident history and reported 0 for reconciliation. Both are in the docstring, because the shape of the error is the thing worth not repeating |
 | 2026-08-05 | Claude (for Ahmed Saad) | Regenerating RESULTS.md needs examples/real-project ingested, or the run silently drops the whole ingested section (F6 step 3, the detectors scored on a graph this project did not build) and the file still looks complete. Rule 4 says the file must be reproducible from run_bench; the precondition for reproducing *all* of it is that stack being up. Regenerate from a machine that has it, or check the diff for a deleted section before committing |
 | 2026-08-05 | Claude (for Ghassen Naouar) | run_bench supplies the protected-attribute classification the way it has always supplied the sensitive one, and RESULTS.md's header reports both (D-133). T-11 added the second governance detector and not the second line, so the proxy row was scoreable only on a machine that happened to export the variable: rule 1's same-run-same-numbers, broken silently. Found by running the benchmark on a checkout that did not have it |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Package and brand identifiers renamed repo-wide: paths, imports, and prose all match the current name and distribution name (D-136) |

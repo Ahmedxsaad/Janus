@@ -31,21 +31,21 @@ import pytest
 from datahub.ingestion.graph.openapi import RelationshipDirection
 from datahub.metadata.schema_classes import IncidentInfoClass, IncidentStateClass
 
-from modelguard.agent.pipeline import run_scan
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.detect.governance import sensitive_source_findings
-from modelguard.models import FindingType
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.scenarios import (
+from janus.agent.pipeline import run_scan
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.detect.governance import sensitive_source_findings
+from janus.models import FindingType
+from janus.seed import graph_spec as spec
+from janus.seed.scenarios import (
     SENSITIVE_SOURCE_COLUMN,
     SENSITIVE_TAG_URN,
     plant_sensitive_source,
     revert_sensitive_source,
 )
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.incidents import INCIDENT_ON_RELATIONSHIP, resolve_incident
-from modelguard.writeback.properties import RISK_FLAGS, read_properties
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.incidents import INCIDENT_ON_RELATIONSHIP, resolve_incident
+from janus.writeback.properties import RISK_FLAGS, read_properties
 
 pytestmark = pytest.mark.integration
 
@@ -84,7 +84,7 @@ def config() -> ScanConfig:
 
     Set explicitly rather than read from the environment: the check reports
     itself unevaluated when nothing is configured, so a machine with an empty
-    MODELGUARD_SENSITIVE_TAG_URNS would turn this file green without running the
+    JANUS_SENSITIVE_TAG_URNS would turn this file green without running the
     detector once.
     """
     return replace(ScanConfig(), sensitive_tag_urns=(SENSITIVE_TAG_URN,))

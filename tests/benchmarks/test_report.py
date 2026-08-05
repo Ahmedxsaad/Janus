@@ -3,7 +3,7 @@
 DataHub indexes asynchronously, so a trial can fail because the harness never saw
 the planted state, which says nothing about the detector. Counting that as a miss
 would let a slow Elasticsearch quietly depress recall and publish it as a
-ModelGuard number. These pin the alternative: excluded from the tables, disclosed
+Janus number. These pin the alternative: excluded from the tables, disclosed
 in the report, and never silently dropped.
 
 ``render_results`` is pure, so all of this runs offline.
@@ -18,9 +18,9 @@ import pytest
 from benchmarks.inject import Target, Trial
 from benchmarks.run_bench import BlastRadiusCheck, TrialOutcome, WriteBackCheck, render_results
 from benchmarks.scale import ScaleMeasurement
-from modelguard.config import ScanConfig
-from modelguard.lifecycle import TypeLifecycle
-from modelguard.models import FindingType
+from janus.config import ScanConfig
+from janus.lifecycle import TypeLifecycle
+from janus.models import FindingType
 
 CONFIG = ScanConfig(freshness_sla_hours=6.0)
 WHEN = datetime(2026, 7, 22, 12, 0, tzinfo=UTC)
@@ -349,4 +349,4 @@ def test_an_all_zero_lifecycle_table_explains_itself_rather_than_reading_as_clea
     """A graph nothing has written to must not look like a graph with no problems."""
     markdown = _lifecycle_report(lifecycle=(_row(FindingType.TARGET_LEAKAGE),))
 
-    assert "no incident on this graph carries ModelGuard's" in markdown
+    assert "no incident on this graph carries Janus's" in markdown

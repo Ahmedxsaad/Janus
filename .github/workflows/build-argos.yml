@@ -4,7 +4,7 @@
 # Two artefact kinds come out of one crate, because there are two install
 # routes and neither covers everybody:
 #
-# * platform wheels (maturin), so `pip install "modelguard-datahub[pet]"` puts a
+# * platform wheels (maturin), so `pip install "janus-datahub[pet]"` puts a
 #   window on macOS and Windows with no Rust toolchain in sight;
 # * OS bundles (`cargo tauri build`), which is the only route on Linux. That is
 #   policy rather than effort: the binary links the system webkit2gtk, which no

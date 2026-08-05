@@ -8,7 +8,7 @@ The one that matters most here is what happens when nothing is configured. A
 detector that quietly returns "no findings" because it was never told what
 "sensitive" means in this organization is reporting a clean bill of health it
 never measured, which is the single failure mode
-:mod:`modelguard.detect.coverage` exists to prevent. So the configured and
+:mod:`janus.detect.coverage` exists to prevent. So the configured and
 unconfigured cases are asserted separately, and both are asserted against the
 coverage gap the scan reports.
 
@@ -34,15 +34,15 @@ from datahub.metadata.schema_classes import (
     TagAssociationClass,
 )
 
-from modelguard.config import ScanConfig
-from modelguard.detect.coverage import coverage_gaps
-from modelguard.detect.governance import (
+from janus.config import ScanConfig
+from janus.detect.coverage import coverage_gaps
+from janus.detect.governance import (
     deprecated_input_findings,
     model_input_datasets,
     sensitive_source_findings,
 )
-from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
-from modelguard.models import FindingType, Severity
+from janus.detect.leakage import SOURCE_COLUMN_PROPERTY
+from janus.models import FindingType, Severity
 from tests.conftest import (
     CLEAN_COLUMN_URN,
     CLEAN_FEATURE_URN,
@@ -160,7 +160,7 @@ class TestSensitiveSource:
         sensitive = [gap for gap in gaps if gap.check == "sensitive source"]
         assert len(sensitive) == 1
         assert "no classification is configured" in sensitive[0].reason
-        assert "MODELGUARD_SENSITIVE_TERM_URNS" in sensitive[0].remedy
+        assert "JANUS_SENSITIVE_TERM_URNS" in sensitive[0].remedy
 
     def test_nothing_configured_does_not_walk_the_graph_at_all(self):
         """Unconfigured is the default state, so its cost is the one that matters.

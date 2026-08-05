@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from datahub.metadata.schema_classes import MLModelPropertiesClass
 
-from modelguard.config import ScanConfig
-from modelguard.mcl import MclEvent
-from modelguard.reconcile import consider
-from modelguard.writeback.properties import (
+from janus.config import ScanConfig
+from janus.mcl import MclEvent
+from janus.reconcile import consider
+from janus.writeback.properties import (
     EXCLUDED_COLUMNS,
     FEATURE_TABLE,
     LABEL_COLUMN,

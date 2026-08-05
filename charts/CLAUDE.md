@@ -1,6 +1,6 @@
 # CLAUDE.md - charts
 
-One Helm chart, `modelguard-watch`, for the one ModelGuard entry point that is
+One Helm chart, `janus-watch`, for the one Janus entry point that is
 actually meant to run forever. `scan` and `gate` are one-shot; the MCP server
 speaks stdio to whatever launched it, not to a cluster. Only `watch` is a
 standing workload, so it is the only one with a chart.
@@ -9,7 +9,7 @@ standing workload, so it is the only one with a chart.
 
 1. A required value gets no default and a `fail()` guard in the template that
    needs it, not a silent fallback. `helm install`/`helm template` must name
-   the missing value and stop, the same rule modelguard/env.py enforces at the
+   the missing value and stop, the same rule janus/env.py enforces at the
    application layer, applied here at the deployment layer (watch.table/model,
    datahub.gmsUrl, image.repository).
 2. `existingSecret` is the default path documented and recommended; the
@@ -34,5 +34,6 @@ standing workload, so it is the only one with a chart.
 
 | Date | Author | Change |
 |---|---|---|
-| 2026-07-23 | Claude (for Ahmed Saad) | Initial version: modelguard-watch chart (Deployment, Secret, ServiceAccount), existingSecret as the recommended path, required-value guards, no fabricated probes (D-056) |
+| 2026-07-23 | Claude (for Ahmed Saad) | Initial version: janus-watch chart (Deployment, Secret, ServiceAccount), existingSecret as the recommended path, required-value guards, no fabricated probes (D-056) |
 | 2026-08-02 | Claude (for Ghassen Naouar) | replicaCount above 1 is refused and the strategy is Recreate: two watchers on one model lose each other's writes, which is correctness, not cost (D-090, F3). An opt-in CronJob replays `link --all` on a schedule, because DataHub's mlflow source drops the link on every ingest and nothing was putting it back (D-092, F11) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Package and brand identifiers renamed repo-wide: paths, imports, and prose all match the current name and distribution name (D-136) |

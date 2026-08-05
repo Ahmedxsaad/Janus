@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from modelguard.adapters import (
+from janus.adapters import (
     AdapterError,
     excluded_columns,
     missing_columns,

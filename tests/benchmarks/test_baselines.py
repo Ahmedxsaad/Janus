@@ -5,7 +5,7 @@ so the assertions here are mostly about the table-level approach being good: it
 must genuinely catch the leak, from the same facts, before its failure to isolate
 which feature leaks means anything. A baseline that found nothing would make the
 headline number a fabrication, and it would pass a test suite that only ever
-checked ModelGuard came first.
+checked Janus came first.
 """
 
 from __future__ import annotations
@@ -18,9 +18,9 @@ from datahub.metadata.schema_classes import (
 )
 
 from benchmarks.baselines import no_lineage_leakage, table_level_leakage
-from modelguard.client import DataHubConnection
-from modelguard.config import ScanConfig
-from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY, leakage_findings
+from janus.client import DataHubConnection
+from janus.config import ScanConfig
+from janus.detect.leakage import SOURCE_COLUMN_PROPERTY, leakage_findings
 from tests.conftest import (
     CLEAN_COLUMN_URN,
     CLEAN_FEATURE_URN,
@@ -166,9 +166,9 @@ def test_the_no_lineage_baseline_cannot_express_leakage_at_all():
 
 
 def test_the_baseline_honours_the_hop_cap_the_detector_honours():
-    """Fairness: DataHub over-returns past the cap, and ModelGuard filters it (D-020).
+    """Fairness: DataHub over-returns past the cap, and Janus filters it (D-020).
 
-    Without the same guard the baseline would inherit distant tables ModelGuard
+    Without the same guard the baseline would inherit distant tables Janus
     never sees, and any label sitting in one of them would score as a false
     positive caused by this harness rather than by the approach it stands for.
     """

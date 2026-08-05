@@ -1,1 +1,1 @@
-"""Tests for modelguard.agent."""
+"""Tests for janus.agent."""

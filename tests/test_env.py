@@ -4,8 +4,8 @@ import pathlib
 
 import pytest
 
-from modelguard import env as env_module
-from modelguard.env import (
+from janus import env as env_module
+from janus.env import (
     ConfigError,
     optional_float,
     optional_int,
@@ -29,17 +29,17 @@ def _already_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_an_unset_variable_is_none():
-    assert optional_value("MODELGUARD_TEST_ABSENT") is None
+    assert optional_value("JANUS_TEST_ABSENT") is None
 
 
 def test_a_blank_variable_is_none_because_the_example_file_ships_blanks(monkeypatch):
-    monkeypatch.setenv("MODELGUARD_TEST_BLANK", "   ")
-    assert optional_value("MODELGUARD_TEST_BLANK") is None
+    monkeypatch.setenv("JANUS_TEST_BLANK", "   ")
+    assert optional_value("JANUS_TEST_BLANK") is None
 
 
 def test_a_value_is_stripped(monkeypatch):
-    monkeypatch.setenv("MODELGUARD_TEST_PADDED", "  value  ")
-    assert optional_value("MODELGUARD_TEST_PADDED") == "value"
+    monkeypatch.setenv("JANUS_TEST_PADDED", "  value  ")
+    assert optional_value("JANUS_TEST_PADDED") == "value"
 
 
 # --------------------------------------------------------------------------
@@ -48,13 +48,13 @@ def test_a_value_is_stripped(monkeypatch):
 
 
 def test_a_missing_required_value_names_the_variable_and_the_remedy():
-    with pytest.raises(ConfigError, match=r"MODELGUARD_TEST_REQUIRED is not set\. Do the thing\."):
-        required_value("MODELGUARD_TEST_REQUIRED", "Do the thing.")
+    with pytest.raises(ConfigError, match=r"JANUS_TEST_REQUIRED is not set\. Do the thing\."):
+        required_value("JANUS_TEST_REQUIRED", "Do the thing.")
 
 
 def test_a_present_required_value_is_returned(monkeypatch):
-    monkeypatch.setenv("MODELGUARD_TEST_REQUIRED", "here")
-    assert required_value("MODELGUARD_TEST_REQUIRED", "hint") == "here"
+    monkeypatch.setenv("JANUS_TEST_REQUIRED", "here")
+    assert required_value("JANUS_TEST_REQUIRED", "hint") == "here"
 
 
 # --------------------------------------------------------------------------
@@ -63,33 +63,33 @@ def test_a_present_required_value_is_returned(monkeypatch):
 
 
 def test_an_unset_number_falls_back_to_the_documented_default():
-    assert optional_float("MODELGUARD_TEST_FLOAT", 6.0) == 6.0
-    assert optional_int("MODELGUARD_TEST_INT", 3) == 3
+    assert optional_float("JANUS_TEST_FLOAT", 6.0) == 6.0
+    assert optional_int("JANUS_TEST_INT", 3) == 3
 
 
 def test_a_set_number_overrides_the_default(monkeypatch):
-    monkeypatch.setenv("MODELGUARD_TEST_FLOAT", "12.5")
-    monkeypatch.setenv("MODELGUARD_TEST_INT", "5")
-    assert optional_float("MODELGUARD_TEST_FLOAT", 6.0) == 12.5
-    assert optional_int("MODELGUARD_TEST_INT", 3) == 5
+    monkeypatch.setenv("JANUS_TEST_FLOAT", "12.5")
+    monkeypatch.setenv("JANUS_TEST_INT", "5")
+    assert optional_float("JANUS_TEST_FLOAT", 6.0) == 12.5
+    assert optional_int("JANUS_TEST_INT", 3) == 5
 
 
 @pytest.mark.parametrize("value", ["abc", "0", "-1", ""])
 def test_an_unusable_float_fails_rather_than_silently_defaulting(monkeypatch, value: str):
-    monkeypatch.setenv("MODELGUARD_TEST_FLOAT", value)
+    monkeypatch.setenv("JANUS_TEST_FLOAT", value)
     if value == "":
         # Blank is "unset", which is a different thing from "wrong".
-        assert optional_float("MODELGUARD_TEST_FLOAT", 6.0) == 6.0
+        assert optional_float("JANUS_TEST_FLOAT", 6.0) == 6.0
         return
-    with pytest.raises(ConfigError, match="MODELGUARD_TEST_FLOAT"):
-        optional_float("MODELGUARD_TEST_FLOAT", 6.0)
+    with pytest.raises(ConfigError, match="JANUS_TEST_FLOAT"):
+        optional_float("JANUS_TEST_FLOAT", 6.0)
 
 
 @pytest.mark.parametrize("value", ["abc", "2.5", "0", "-1"])
 def test_an_unusable_int_fails_rather_than_silently_defaulting(monkeypatch, value: str):
-    monkeypatch.setenv("MODELGUARD_TEST_INT", value)
-    with pytest.raises(ConfigError, match="MODELGUARD_TEST_INT"):
-        optional_int("MODELGUARD_TEST_INT", 3)
+    monkeypatch.setenv("JANUS_TEST_INT", value)
+    with pytest.raises(ConfigError, match="JANUS_TEST_INT"):
+        optional_int("JANUS_TEST_INT", 3)
 
 
 # --------------------------------------------------------------------------
@@ -128,7 +128,7 @@ def _package_sources() -> list[pathlib.Path]:
 
 
 def test_only_env_py_reads_the_process_environment():
-    """Root CLAUDE.md: configuration enters through modelguard/env.py, nowhere else.
+    """Root CLAUDE.md: configuration enters through janus/env.py, nowhere else.
 
     A module that reads os.environ directly bypasses .env loading, so whether it
     sees a configured value depends on what ran before it. That is how a freshness

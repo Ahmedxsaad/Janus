@@ -52,7 +52,7 @@ Where points are still on the table:
   it. See improvement **B**, which is the single highest-value item here.
 - **No use of DataHub's own agent surfaces.** The criterion names the MCP
   Server, Agent Context Kit, DataHub Skills and Analytics Agent by name.
-  ModelGuard ships its *own* MCP server and a skill, and contributes an
+  Janus ships its *own* MCP server and a skill, and contributes an
   `mcp_ext` tool, which is arguably better. But it never *composes* the official
   `mcp-server-datahub`, so a judge reading the criterion literally cannot tick
   that box. Improvement **F** is the cheap version of ticking it.
@@ -83,7 +83,7 @@ which is most of the value; JSON behind an env flag is the rest (**H**).
 ### 3. Originality - strong, but the original part is buried
 
 Leakage detection, drift detection and freshness monitoring each exist
-elsewhere. What does not exist elsewhere is **the join**: `modelguard link`
+elsewhere. What does not exist elsewhere is **the join**: `janus link`
 writes the model-to-column edge that no DataHub ingestion source produces, and
 every detector is then a walk across a boundary nothing else can cross. The
 benchmark's per-feature table (1.00 / 1.00 vs table-level lineage's 0.25 / 1.00,
@@ -102,7 +102,7 @@ no cheap way past it. Improvement **A** is the answer.
 
 ### 4. Real-world usefulness - strong, with one adoption cliff
 
-`modelguard inventory` reporting "not checked" instead of "healthy" is the most
+`janus inventory` reporting "not checked" instead of "healthy" is the most
 professionally credible thing in the repository, and `examples/real-project/`
 (validated on a real dbt + MLflow + postgres stack rather than assumed) is what
 separates this from a demo. The gate's three exit codes, with "could not reach a
@@ -137,7 +137,7 @@ Two issues:
 - **The README is 392 lines with 22 relative links.** On the PyPI project page
   every one of those 22 resolves against `pypi.org` and 404s, because
   `readme = "README.md"` ships this file verbatim as the long description. That
-  is what the first `pip install modelguard-datahub` visitor sees. **I** fixes it.
+  is what the first `pip install janus-datahub` visitor sees. **I** fixes it.
 
 ### Bonus: open-source contribution - strong
 
@@ -162,7 +162,7 @@ them, which `docs/plan/05-oss-delivery.md` covers.
 Ranked by (judge points moved) / (lines of code). Each carries the smallest
 implementation that works; a bigger one is a decision, not a default.
 
-### A. `modelguard link --infer`: propose the join instead of demanding it
+### A. `janus link --infer`: propose the join instead of demanding it
 
 **Moves:** originality, real-world usefulness. **Size:** ~150 lines plus tests.
 
@@ -217,8 +217,8 @@ The finding it produces is one nothing else in the ecosystem can produce:
 > from `pii.applicants.ssn`, tagged `PII` by `<owner>`. The model serves live
 > traffic. Derivation chain: `ssn -> ssn_hash -> income_band`.
 
-Config, all-or-nothing per root CLAUDE.md rule 6c: `MODELGUARD_SENSITIVE_TERMS`
-and `MODELGUARD_SENSITIVE_TAGS`. Unset means the detector does not run, and
+Config, all-or-nothing per root CLAUDE.md rule 6c: `JANUS_SENSITIVE_TERMS`
+and `JANUS_SENSITIVE_TAGS`. Unset means the detector does not run, and
 `coverage.py` reports it as not evaluated with the reason, exactly like the
 other three.
 
@@ -234,7 +234,7 @@ a tagged column upstream of a feature and a clean control), and it appears in
 
 **Moves:** use of DataHub, real-world usefulness. **Size:** ~80 lines.
 
-`modelguard.trust_score` is a structured property, overwritten every scan. The
+`janus.trust_score` is a structured property, overwritten every scan. The
 value of a trust score is its *direction*: 82 means nothing, 82 after 95 last
 Tuesday means somebody shipped something.
 
@@ -255,7 +255,7 @@ which deduction changed.
 
 **Moves:** submission quality, real-world usefulness. **Size:** ~15 lines.
 
-`modelguard gate` answers in an exit code. In a pull request that means a red X
+`janus gate` answers in an exit code. In a pull request that means a red X
 and a click into the log. GitHub Actions already exposes the answer: if
 `GITHUB_STEP_SUMMARY` is set, anything written to that path renders as markdown
 on the job page. No token, no API call, no permissions block, no dependency.
@@ -298,14 +298,14 @@ longer contains scale.
 or ~40 lines if wired.
 
 Criterion 1 lists the MCP Server, Agent Context Kit, DataHub Skills and
-Analytics Agent explicitly. ModelGuard ships its own MCP server and a skill and
+Analytics Agent explicitly. Janus ships its own MCP server and a skill and
 contributes a tool to `mcp-server-datahub`, which is a stronger position than
 merely consuming them, but nothing in the repository *composes* the official
 surfaces.
 
 The cheap, honest version: a documented worked example in `skill/` showing the
 `datahub-ml-guard` skill driving both servers side by side, the official one for
-open-ended catalog questions and `modelguard-mcp` for the deterministic checks,
+open-ended catalog questions and `janus-mcp` for the deterministic checks,
 with a paragraph on why detection is not exposed as a question an LLM answers.
 That paragraph is itself a differentiator, and it makes the composition
 visible without adding a dependency.
@@ -317,8 +317,8 @@ tick. That would be complexity bought with points.
 
 **Moves:** real-world usefulness. **Size:** ~40 lines, mostly re-export.
 
-`import modelguard` currently gives a version string and a docstring. Once
-`pip install modelguard-datahub` is real, the natural first thing a user tries
+`import janus` currently gives a version string and a docstring. Once
+`pip install janus-datahub` is real, the natural first thing a user tries
 is to call it from the script that trains the model, which is exactly where
 `link` belongs. Shelling out to a CLI from inside a training script is a
 worse interface than a function call, and it is what the README currently tells
@@ -327,7 +327,7 @@ people to do.
 The minimum that is worth having, and nothing beyond it:
 
 ```python
-from modelguard import link_model, scan_model
+from janus import link_model, scan_model
 
 link_model(model="churn_model", features="analytics.customer_features",
            label_column="churned", exclude=["customer_id"])
@@ -337,7 +337,7 @@ report = scan_model(model="churn_model", dry_run=True)
 Two functions wrapping code paths the CLI already calls, with the connection
 handled the same way the CLI handles it. No new abstraction layer, no client
 class, no builder. Public means documented in the README and covered by a test
-that imports from `modelguard` and not from a submodule, so the surface is
+that imports from `janus` and not from a submodule, so the surface is
 pinned and the internals stay free to move.
 
 **Ships when:** a test imports only from the top-level package and runs a full
@@ -351,7 +351,7 @@ link-then-scan against the integration graph.
 phase timings and counts, which is most of the value. What is missing is a
 machine-parseable form for anyone running `watch` under a log pipeline.
 
-`MODELGUARD_LOG_FORMAT=json` selects a `logging.Formatter` subclass that
+`JANUS_LOG_FORMAT=json` selects a `logging.Formatter` subclass that
 `json.dumps` the record and its extras. Stdlib only, no `structlog`. Default
 stays the human-readable line, because the default reader is a human at a
 terminal. Then mark P2-5 done in `04-improvements.md`.
@@ -373,7 +373,7 @@ long description, where all 22 relative links resolve against `pypi.org` and
    will drift from the first. Choose this only if the full README is judged too
    long for a package page, which it arguably is at 392 lines.
 
-**The rename (P1-1).** Renaming `DataHub` to `modelguard` is worth real points
+**The rename (P1-1).** Renaming `DataHub` to `janus` is worth real points
 on the criterion judges see first, and it is no longer free:
 
 - The PyPI Trusted Publisher is registered against `Repository name: DataHub`.
@@ -397,9 +397,9 @@ decision with the reason, because an unlogged open P1 reads as an oversight.
 - [ ] README renders on PyPI with working links (this item)
 - [ ] Repo rename decided, and the Trusted Publisher matches whatever is decided
 - [ ] `pip install` of the built wheel into a **throwaway** venv, then
-      `modelguard --help` and `modelguard inventory` against a live GMS
+      `janus --help` and `janus inventory` against a live GMS
       (`docs/deploy/pypi-release.md` warns why the dev venv would lie)
-- [ ] `__version__` in `modelguard/__init__.py` matches `pyproject.toml`
+- [ ] `__version__` in `janus/__init__.py` matches `pyproject.toml`
       (both `0.1.0` today; nothing enforces they stay equal - a two-line test
       would, and is worth writing while touching this)
 

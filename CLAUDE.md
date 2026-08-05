@@ -1,12 +1,12 @@
-# CLAUDE.md - ModelGuard (root guide)
+# CLAUDE.md - Janus (root guide)
 
-ModelGuard is a data-to-model reliability agent built on DataHub for the
+Janus is a data-to-model reliability agent built on DataHub for the
 "Build with DataHub: The Agent Hackathon" (deadline: Aug 10, 2026, 5:00pm ET).
 It reads column-level and ML lineage to catch silent data-to-model failures and
 writes incidents, trust scores, reports, and guarding assertions back into the graph.
 
 Source of truth for what we build:
-- docs/plan/01-strategy-modelguard.md (why), docs/plan/architecture.md (how),
+- docs/plan/01-strategy-janus.md (why), docs/plan/architecture.md (how),
   docs/plan/02-implementation-plan.md (build steps), docs/plan/03-production-hardening.md
   (benchmark, scaling, security), docs/plan/resources.md (literature).
 - Read the CLAUDE.md inside a directory before working there. Local rules live locally.
@@ -15,15 +15,15 @@ Source of truth for what we build:
 
 | Path | What it is |
 |---|---|
-| modelguard/ | The Python package: seed/, detect/, writeback/, agent/, adapters/, argos/, client, CLI |
-| argos/ | The desktop window: a Tauri v2 binary and its text sprite art, driven by the event stream modelguard/argos/ writes to its stdin |
+| janus/ | The Python package: seed/, detect/, writeback/, agent/, adapters/, argos/, client, CLI |
+| argos/ | The desktop window: a Tauri v2 binary and its text sprite art, driven by the event stream janus/argos/ writes to its stdin |
 | skill/ | OSS contribution: the datahub-ml-guard skill |
 | mcp_ext/ | OSS contribution (stretch): MCP raise_incident mutation tool |
 | examples/ | Sample generated artifacts for judges, and real-project/, the live stack the product is validated and benchmarked against |
-| benchmarks/ | ModelGuard-Bench: injection, metrics, baselines, RESULTS.md |
+| benchmarks/ | Janus-Bench: injection, metrics, baselines, RESULTS.md |
 | tests/ | pytest unit and integration tests |
 | docs/ | hackathon-specs/ (official rules), plan/, decision-log.md |
-| charts/ | Helm chart for `modelguard watch`, the one long-running entry point |
+| charts/ | Helm chart for `janus watch`, the one long-running entry point |
 | deploy/ | Cloud-init and systemd for the Azure judge-facing demo VM |
 | assets/ | The README's animation, generated from the sprite art by `assets/make_demo.py` |
 | site/ | The documentation and landing page for the shipped product, with Argos reading the same sprite art the window does |
@@ -62,7 +62,7 @@ Source of truth for what we build:
    finding type. run_id is deliberately NOT in any key: it changes every run, so
    including it would make each scan raise a fresh copy of the same finding. It
    is stamped into the body as provenance instead (D-013).
-6. Configuration enters the process in exactly one module: modelguard/env.py.
+6. Configuration enters the process in exactly one module: janus/env.py.
    It is the only place that calls load_dotenv and the only place that touches
    os.environ. Two tests enforce this; do not weaken them.
    a. Anything that identifies a system, an account, or a vendor gets NO default
@@ -72,7 +72,7 @@ Source of truth for what we build:
       to the wrong vendor billed to whatever key is in the ambient environment.
       Missing means missing, and it fails loudly, naming the variable.
    b. Algorithm parameters (thresholds, hop caps, score weights) are not
-      identity. They may keep a documented default in modelguard/config.py.
+      identity. They may keep a documented default in janus/config.py.
    c. A group of related settings is all-or-nothing: set every one or none.
       A half-configured feature fails loudly, it never downgrades in silence.
    d. Secrets never appear in a log line, an exception message, a repr, or a CLI
@@ -85,7 +85,7 @@ Source of truth for what we build:
    (pip show <pkg>, then introspect). Plan snippets marked [confirm] are
    unverified; never trust a doc snippet over the installed signature.
 8. The agent is provider-agnostic. Never import a vendor's SDK outside
-   modelguard/llm.py, and never name a vendor's model anywhere else.
+   janus/llm.py, and never name a vendor's model anywhere else.
 
 ## Formatting rules (strict, apply everywhere)
 
@@ -129,10 +129,11 @@ Source of truth for what we build:
 | 2026-07-08 | Claude (for Ahmed Saad) | Git rules: forbid AI attribution (co-author trailers, generated-with lines) in commits and PRs |
 | 2026-07-08 | Claude (for Ahmed Saad) | Note that the no-attribution rule is enforced via .claude/settings.json |
 | 2026-07-10 | Claude (for Ghassen Naouar) | Code rule 6 rewritten: env.py is the sole config entry point, no fallbacks for identity values, all-or-nothing groups, secret hygiene, .env/.env.example parity. Add rule 8: provider-agnostic LLM |
-| 2026-07-23 | Claude (for Ahmed Saad) | Add charts/ to the repository map: the modelguard-watch Helm chart (D-056) |
-| 2026-08-01 | Claude (for Ghassen Naouar) | examples/ now also holds real-project/, the dbt + MLflow + postgres stack ModelGuard was validated against as an ordinary user would (D-074) |
+| 2026-07-23 | Claude (for Ahmed Saad) | Add charts/ to the repository map: the janus-watch Helm chart (D-056) |
+| 2026-08-01 | Claude (for Ghassen Naouar) | examples/ now also holds real-project/, the dbt + MLflow + postgres stack Janus was validated against as an ordinary user would (D-074) |
 | 2026-08-03 | Claude (for Ghassen Naouar) | assets/ joins the repository map: the README's animation, generated from the same sprite file the window and the icon read (D-103) |
 | 2026-08-03 | Claude (for Ghassen Naouar) | site/ joins the repository map: the static documentation page for the shipped product (D-104) |
-| 2026-08-03 | Claude (for Ghassen Naouar) | argos/ joins the repository map: the Tauri v2 desktop window (Argos) and its sprite art, driven by the JSON event stream modelguard/argos/ produces (D-098) |
-| 2026-08-04 | Claude (for Ghassen Naouar) | modelguard/adapters/ joins the repository map: read-only, offline readers that import the model-to-column join out of a Feast repo or a dbt semantic model, behind `link --from` (D-112, T-05/T-06) |
+| 2026-08-03 | Claude (for Ghassen Naouar) | argos/ joins the repository map: the Tauri v2 desktop window (Argos) and its sprite art, driven by the JSON event stream janus/argos/ produces (D-098) |
+| 2026-08-04 | Claude (for Ghassen Naouar) | janus/adapters/ joins the repository map: read-only, offline readers that import the model-to-column join out of a Feast repo or a dbt semantic model, behind `link --from` (D-112, T-05/T-06) |
 | 2026-08-04 | Claude (for Ghassen Naouar) | examples/real-project/ is a benchmark target as well as a validation stack: the detectors are scored on the graph its own ingestion builds, in its own RESULTS.md section (D-121, T-14) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Package and brand identifiers renamed repo-wide: paths, imports, and prose all match the current name and distribution name (D-136) |

@@ -25,19 +25,19 @@ from typing import TypeVar
 
 import pytest
 
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.detect.leakage import leakage_findings
-from modelguard.models import LeakageFinding, RemedyKind
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.scenarios import (
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.detect.leakage import leakage_findings
+from janus.models import LeakageFinding, RemedyKind
+from janus.seed import graph_spec as spec
+from janus.seed.scenarios import (
     BACKUP_LABEL_COLUMN,
     plant_leakage,
     plant_second_leak_path,
     revert_leakage,
     revert_second_leak_path,
 )
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
 
 pytestmark = pytest.mark.integration
 

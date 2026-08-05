@@ -1,1 +1,1 @@
-"""ModelGuard test suite."""
+"""Janus test suite."""

@@ -1,6 +1,6 @@
 """The Phase 1 gate: the core loop, end to end, against a live DataHub.
 
-docs/plan/02-implementation-plan.md section 4.3 states it in prose: ``modelguard
+docs/plan/02-implementation-plan.md section 4.3 states it in prose: ``janus
 scan --table loans_raw`` produces an incident, a tag, a guarding assertion, and a
 report, all visible in the UI, with the same result on every run.
 
@@ -36,18 +36,18 @@ from datahub.metadata.schema_classes import (
     IncidentStateClass,
 )
 
-from modelguard.agent.narrate import NarrativeSource
-from modelguard.agent.pipeline import FindingWrites, ScanReport, run_scan
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.detect.blast_radius import blast_radius
-from modelguard.models import Severity
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.scenarios import plant_stale_source, revert_stale_source
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.incidents import INCIDENT_ON_RELATIONSHIP, resolve_incident
-from modelguard.writeback.labels import read_tags
-from modelguard.writeback.properties import RISK_FLAGS, RUN_ID, read_properties
+from janus.agent.narrate import NarrativeSource
+from janus.agent.pipeline import FindingWrites, ScanReport, run_scan
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.detect.blast_radius import blast_radius
+from janus.models import Severity
+from janus.seed import graph_spec as spec
+from janus.seed.scenarios import plant_stale_source, revert_stale_source
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.incidents import INCIDENT_ON_RELATIONSHIP, resolve_incident
+from janus.writeback.labels import read_tags
+from janus.writeback.properties import RISK_FLAGS, RUN_ID, read_properties
 
 pytestmark = pytest.mark.integration
 

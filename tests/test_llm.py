@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 from pydantic import SecretStr
 
-from modelguard import env as env_module
-from modelguard.env import ConfigError
-from modelguard.llm import (
+from janus import env as env_module
+from janus.env import ConfigError
+from janus.llm import (
     _PROVIDERS,
     ENV_LLM_API_KEY,
     ENV_LLM_MODEL,
@@ -52,9 +52,9 @@ def test_no_llm_variables_means_run_without_an_llm():
 def test_all_three_variables_build_a_config(monkeypatch):
     _configure(
         monkeypatch,
-        MODELGUARD_LLM_PROVIDER="openai",
-        MODELGUARD_LLM_MODEL="gpt-5",
-        MODELGUARD_LLM_API_KEY=SECRET,
+        JANUS_LLM_PROVIDER="openai",
+        JANUS_LLM_MODEL="gpt-5",
+        JANUS_LLM_API_KEY=SECRET,
     )
     config = llm_config_from_env()
 
@@ -74,7 +74,7 @@ def test_setting_only_one_variable_fails_loudly(monkeypatch, provided: str):
 
 
 def test_the_partial_config_error_names_the_missing_variables_not_their_values(monkeypatch):
-    _configure(monkeypatch, MODELGUARD_LLM_API_KEY=SECRET)
+    _configure(monkeypatch, JANUS_LLM_API_KEY=SECRET)
 
     with pytest.raises(ConfigError) as caught:
         llm_config_from_env()
@@ -93,9 +93,9 @@ def test_the_partial_config_error_names_the_missing_variables_not_their_values(m
 def test_an_unknown_provider_is_refused_and_the_supported_ones_are_named(monkeypatch):
     _configure(
         monkeypatch,
-        MODELGUARD_LLM_PROVIDER="acme",
-        MODELGUARD_LLM_MODEL="m",
-        MODELGUARD_LLM_API_KEY=SECRET,
+        JANUS_LLM_PROVIDER="acme",
+        JANUS_LLM_MODEL="m",
+        JANUS_LLM_API_KEY=SECRET,
     )
     with pytest.raises(ConfigError, match="not a supported LLM provider"):
         llm_config_from_env()
@@ -148,10 +148,10 @@ def test_every_provider_builds_its_own_chat_model(provider: str, model: str, exp
 
 
 def test_a_missing_provider_package_names_the_extra_to_install(monkeypatch):
-    import modelguard.llm as llm_module
+    import janus.llm as llm_module
 
     monkeypatch.setitem(
-        llm_module._PROVIDERS, "openai", ("modelguard_no_such_module", "Chat", "langchain-openai")
+        llm_module._PROVIDERS, "openai", ("janus_no_such_module", "Chat", "langchain-openai")
     )
     with pytest.raises(LLMUnavailableError, match="langchain-openai"):
         build_chat_model(LLMConfig(provider="openai", model="gpt-5", api_key=SecretStr(SECRET)))

@@ -21,11 +21,11 @@ from typing import TypeVar
 
 import pytest
 
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.detect.coverage import coverage_gaps
-from modelguard.detect.leakage import leakage_findings
-from modelguard.seed.scenarios import (
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.detect.coverage import coverage_gaps
+from janus.detect.leakage import leakage_findings
+from janus.seed.scenarios import (
     plant_common_ancestor_label,
     plant_label_lookalike,
     plant_second_leak_path,
@@ -33,7 +33,7 @@ from modelguard.seed.scenarios import (
     revert_label_lookalike,
     revert_second_leak_path,
 )
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
 
 pytestmark = pytest.mark.integration
 
@@ -174,4 +174,4 @@ def test_a_leak_beyond_the_hop_cap_is_reported_as_a_gap_naming_the_hop_cap(
     described = [gap.describe() for gap in gaps]
     line = next((line for line in described if "target leakage" in line), None)
     assert line is not None, f"expected a target-leakage gap, got: {described}"
-    assert "MODELGUARD_LEAKAGE_MAX_HOPS" in line
+    assert "JANUS_LEAKAGE_MAX_HOPS" in line

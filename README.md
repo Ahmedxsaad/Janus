@@ -1,11 +1,11 @@
-# ModelGuard
+# Janus
 
 <p align="center">
   <img src="assets/argos.gif" width="200" height="200"
-       alt="Argos, the ModelGuard watchdog: patrolling, walking his beat, sniffing out a lineage traversal, barking with a red collar at a finding, writing it back, wagging when it clears, then asleep." />
+       alt="Argos, the Janus watchdog: patrolling, walking his beat, sniffing out a lineage traversal, barking with a red collar at a finding, writing it back, wagging when it clears, then asleep." />
 </p>
 
-The missing CI for your ML supply chain. ModelGuard is an agent that sits on
+The missing CI for your ML supply chain. Janus is an agent that sits on
 the warehouse-to-ML boundary that DataHub uniquely spans: it reads end-to-end
 column-level lineage and ML metadata to catch silent data-to-model failures
 (target leakage, upstream blast radius, training/serving schema drift), and
@@ -26,17 +26,17 @@ landed, as has the human-approval agent (`scan --review`) and a polling `watch`.
 
 ## Live demo
 
-**<https://modelguard.ahmedxsaad.me>**
+**<https://janus.ahmedxsaad.me>**
 
 A real DataHub instance with the ML supply chain seeded, a failure planted, and
-`modelguard watch` running against it continuously, so what you are looking at
-is a graph ModelGuard is actively maintaining rather than a screenshot. Sign-in
+`janus watch` running against it continuously, so what you are looking at
+is a graph Janus is actively maintaining rather than a screenshot. Sign-in
 credentials are in the Devpost submission's testing instructions (they are
 deliberately not in this repository, since anything committed here stays in the
 git history forever).
 
 Once signed in, search `credit_risk_v3` for the model side (its
-`model-at-risk` tag, `modelguard.trust_score` and `trust_band` properties, and
+`model-at-risk` tag, `janus.trust_score` and `trust_band` properties, and
 the linked Model Impact Report), or `loans_raw` for the data side (the open
 incident and the guarding freshness assertion). Nothing needs to be installed
 to see any of it.
@@ -49,7 +49,7 @@ local Quickstart, and it is the path the rest of this README documents.
 DataHub holds two graphs that no other catalog holds together: column-level
 lineage across the warehouse, and ML metadata for the models. Nothing joins
 them, so a model is not connected to a single column and a data failure cannot
-be traced to the model it breaks. **ModelGuard writes that join** (`modelguard
+be traced to the model it breaks. **Janus writes that join** (`janus
 link`) and then reads across it, which is what makes every detector below
 possible.
 
@@ -60,7 +60,7 @@ its features leaks, which is what somebody has to go and fix.
 
 | Approach | Precision | Recall | Still alerting after the fix |
 |---|---|---|---|
-| ModelGuard (column-level lineage) | 1.00 | 1.00 | 0 features |
+| Janus (column-level lineage) | 1.00 | 1.00 | 0 features |
 | Table-level lineage | 0.25 | 1.00 | 2 features |
 | Table quality checks, no lineage | - | 0.00 | 0 features |
 
@@ -70,7 +70,7 @@ labelled table. And having never seen the column edge, it cannot see the column 
 being removed either, so it keeps alerting on a graph somebody has already fixed. That
 last column is what gets a reliability tool switched off.
 
-These are implementations of an *approach*, handed ModelGuard's own label index so
+These are implementations of an *approach*, handed Janus's own label index so
 nothing is won by starting better informed; no Great Expectations or Evidently process
 was run. [RESULTS.md](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md) says so, and states what is still not
 measured, alongside a scale table for a whole-catalog sweep.
@@ -91,7 +91,7 @@ The plan and the reasoning behind the product live here:
 
 | Doc | What it answers |
 |---|---|
-| [docs/plan/01-strategy-modelguard.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/01-strategy-modelguard.md) | Why this project, what it solves |
+| [docs/plan/01-strategy-janus.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/01-strategy-janus.md) | Why this project, what it solves |
 | [docs/plan/architecture.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/architecture.md) | How it works: layers, flows, diagrams |
 | [docs/plan/02-implementation-plan.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/02-implementation-plan.md) | The build: phases, APIs, schedule |
 | [docs/plan/03-production-hardening.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/03-production-hardening.md) | Benchmark, scaling, security model |
@@ -104,12 +104,12 @@ The plan and the reasoning behind the product live here:
 ## Repository layout
 
 ```
-modelguard/    Python package: seed/, detect/, writeback/, agent/, argos/
+janus/    Python package: seed/, detect/, writeback/, agent/, argos/
 argos/         Argos, the desktop window: a Tauri binary and its text sprite art
 skill/         OSS contribution: the datahub-ml-guard skill
 mcp_ext/       OSS contribution (stretch): MCP incident mutation tool
 examples/      Sample generated artifacts for judges
-benchmarks/    ModelGuard-Bench: injection, metrics, measured RESULTS.md
+benchmarks/    Janus-Bench: injection, metrics, measured RESULTS.md
 tests/         pytest unit and integration tests
 docs/          Plan, decision log, hackathon specs
 assets/        The animation at the top of this file, generated from the sprite art
@@ -121,7 +121,7 @@ site/          The documentation and landing page for the shipped product
 - Linux, Python 3.11 exactly, Docker (about 2 CPUs / 8 GB free for the Quickstart)
 - No credentials are required for a local Quickstart: it ships with metadata
   service authentication disabled. See .env.example for when you need a token.
-- No LLM key is required either, and no particular vendor. ModelGuard uses a
+- No LLM key is required either, and no particular vendor. Janus uses a
   model only to word the incident description and the report's assessment;
   without one, deterministic template prose is written instead. Detection never
   depends on the LLM. Pick your provider in .env (anthropic, openai, or google)
@@ -134,18 +134,18 @@ pip install -e ".[dev]"           # add ".[anthropic]", ".[openai]" or ".[google
 cp .env.example .env              # DATAHUB_GMS_URL=http://localhost:8080
 datahub docker quickstart         # UI at http://localhost:9002 (datahub/datahub)
 
-modelguard-seed                   # build the ML supply chain the datapacks lack
-modelguard-scenario --lag-hours 30   # a source table silently stops refreshing
-modelguard scan --table loans_raw    # detect, explain, write back
+janus-seed                   # build the ML supply chain the datapacks lack
+janus-scenario --lag-hours 30   # a source table silently stops refreshing
+janus scan --table loans_raw    # detect, explain, write back
 ```
 
-Not developing on ModelGuard itself, just want the CLI against your own DataHub?
+Not developing on Janus itself, just want the CLI against your own DataHub?
 Until the first PyPI release is cut it is `pip install -e .` from a clone; from
-the release on, `pip install modelguard-datahub` (add `[agent]` for
-`scan --review`, `[mcp]` for `modelguard-mcp`). The distribution is named
-`-datahub`, since the exact name `modelguard` was already taken on PyPI by an
-unrelated package; the commands you run are still `modelguard`,
-`modelguard gate`, `modelguard-mcp`.
+the release on, `pip install janus-datahub` (add `[agent]` for
+`scan --review`, `[mcp]` for `janus-mcp`). The distribution is named
+`-datahub`, since the exact name `janus` was already taken on PyPI by an
+unrelated package; the commands you run are still `janus`,
+`janus gate`, `janus-mcp`.
 
 The scan names the live model at risk, then writes the incident, the
 `model-at-risk` tag, the risk properties, the guarding assertion, and the impact
@@ -166,21 +166,21 @@ it returns. Give it a moment, or rerun the scan.
 Then recover and rescan:
 
 ```bash
-modelguard scan --table loans_raw --dry-run   # detect and explain, write nothing
-modelguard-scenario --revert                  # the table refreshes
-modelguard scan --table loans_raw             # no finding, no writes
+janus scan --table loans_raw --dry-run   # detect and explain, write nothing
+janus-scenario --revert                  # the table refreshes
+janus scan --table loans_raw             # no finding, no writes
 ```
 
 ## Use it on your own project
 
 The Quickstart above builds a demo graph where every link a detector needs is
 already in place. Your DataHub is not that graph, so start by asking what
-ModelGuard can already see:
+Janus can already see:
 
 ```bash
-modelguard inventory        # every model, and what can and cannot be checked
-modelguard coverage         # the same sweep as one catalog figure, with a trend
-modelguard finops           # tables that exist only to feed models nothing uses
+janus inventory        # every model, and what can and cannot be checked
+janus coverage         # the same sweep as one catalog figure, with a trend
+janus finops           # tables that exist only to feed models nothing uses
 ```
 
 `inventory` answers per model; `coverage` folds the same sweep into the number a
@@ -188,12 +188,12 @@ platform lead reports upward ("34% of models have a checkable leakage path"),
 names the single next declaration that would raise it most, and with `--write`
 records the point so the next sweep has a direction to compare against. It
 measures how much has been declared, not how healthy the models are: a catalog at
-8% is one where ModelGuard mostly cannot tell you either way.
+8% is one where Janus mostly cannot tell you either way.
 
 `finops` is the one command here whose reader is a budget holder rather than an
 engineer, and the only one that suggests deleting something: it lists the tables
 whose every downstream model has no deployment in service and has gone untouched
-past `MODELGUARD_UNUSED_MODEL_DAYS`. One live consumer and a table is not listed,
+past `JANUS_UNUSED_MODEL_DAYS`. One live consumer and a table is not listed,
 because that is not a saving. A model whose catalog entry carries no date at all
 is reported separately as undated and never as unused, since in a report like
 this an absence is not evidence. It writes nothing and raises no incident:
@@ -207,11 +207,11 @@ connected to a single column, and a detector that walks from a feature to its
 source column has nowhere to start. Verified on a real stack, not assumed: see
 [examples/real-project/](https://github.com/Ahmedxsaad/DataHub/tree/main/examples/real-project).
 
-`modelguard link` is that join. Before typing it out, ask ModelGuard to work it
+`janus link` is that join. Before typing it out, ask Janus to work it
 out for you:
 
 ```bash
-modelguard link --model churn_model --infer
+janus link --model churn_model --infer
 ```
 
 It works the training table out from whatever the graph does hold, trying four
@@ -227,11 +227,11 @@ or a guess:
 ```
 Inferred from the graph:
   feature table: the only input recorded on churn_model's training run(s), from dataProcessInstanceInput
-  label column: churned matches a known label name (MODELGUARD_LABEL_COLUMN_NAMES). This one is a guess: check it
+  label column: churned matches a known label name (JANUS_LABEL_COLUMN_NAMES). This one is a guess: check it
   excluded columns: customer_id, from the schema's own key declarations (primaryKeys, isPartOfKey, isPartitioningKey) and the label itself
 
 Proposed:
-modelguard link \
+janus link \
   --model churn_model \
   --features analytics.customer_features \
   --label-column churned \
@@ -260,7 +260,7 @@ Inferred from the graph:
   feature table: NOT FOUND. churn_model's training run records no inputs and no dataset
     parameter, which is the usual state after an mlflow ingest, and nothing in the catalog
     declares a dataset upstream of it. Pass --features <table>, or log the training table as
-    an MLflow run parameter (modelguard_features=...) and re-ingest so this can be read
+    an MLflow run parameter (janus_features=...) and re-ingest so this can be read
     rather than guessed
 
 Nearest tables, for you to choose:
@@ -272,7 +272,7 @@ One line in the training script makes the next ingest self-describing, and it is
 the same line that keeps the link alive (see below):
 
 ```python
-mlflow.log_param("modelguard_features", "analytics.customer_features")
+mlflow.log_param("janus_features", "analytics.customer_features")
 ```
 
 ### If your stack already declares the mapping, do not type it twice
@@ -282,13 +282,13 @@ read from, in a file your training pipeline reads and your team keeps correct.
 `link` imports it instead of asking:
 
 ```bash
-modelguard link --model churn_model --from feast --repo ./feature_repo
-modelguard link --model churn_model --from dbt   --repo ./churn_analytics
+janus link --model churn_model --from feast --repo ./feature_repo
+janus link --model churn_model --from dbt   --repo ./churn_analytics
 ```
 
 The readers are offline and read-only: they parse the declaration on disk and
 never connect to Feast, to dbt, or to a warehouse. Feast needs the package
-(`pip install "modelguard-datahub[feast]"`); dbt needs nothing at all, because a
+(`pip install "janus-datahub[feast]"`); dbt needs nothing at all, because a
 manifest is JSON, so this works against a `manifest.json` somebody sent you.
 
 The output is the same proposal `--infer` prints, with the declaration each line
@@ -320,7 +320,7 @@ Prefer to type it, or the graph is too quiet to infer from? It is one call from
 the script that trains the model:
 
 ```bash
-modelguard link \
+janus link \
   --model churn_model \
   --features analytics.customer_features \
   --label-table analytics.customer_labels \
@@ -331,7 +331,7 @@ modelguard link \
 That declares the model's features (one per column, each carrying the exact
 source column it came from), marks the label column with the glossary term the
 leakage detector reads, and captures the input schema as the baseline drift is
-measured against. Then `modelguard scan --model churn_model` works the way the
+measured against. Then `janus scan --model churn_model` works the way the
 demo does, on your data.
 
 Run `link` again after each ingestion of the model. DataHub's mlflow source
@@ -342,8 +342,8 @@ all, and one command covers every model at once:
 
 ```bash
 datahub ingest -c mlflow.yml     # your existing pipeline, unchanged
-modelguard link --all            # put back what it dropped, for every linked model
-modelguard scan --all-models     # audit the whole catalog
+janus link --all            # put back what it dropped, for every linked model
+janus scan --all-models     # audit the whole catalog
 ```
 
 A model nobody has linked is skipped rather than guessed at, so `--all` is safe
@@ -357,12 +357,12 @@ check, the missing metadata, and how to supply it:
 | Check | Needs | Who normally writes it |
 |---|---|---|
 | Freshness + blast radius | the `operation` aspect on the table | dbt, Airflow, Spark, or the SDK's `report_operation` |
-| Target leakage | features with source columns, plus a column carrying the label term | `modelguard link` |
-| Schema drift | a training-time schema snapshot on the training run | `modelguard link` |
-| Sensitive source | features with source columns, plus `MODELGUARD_SENSITIVE_TAG_URNS` or `..._TERM_URNS` | your classifier, or a human in the UI |
+| Target leakage | features with source columns, plus a column carrying the label term | `janus link` |
+| Schema drift | a training-time schema snapshot on the training run | `janus link` |
+| Sensitive source | features with source columns, plus `JANUS_SENSITIVE_TAG_URNS` or `..._TERM_URNS` | your classifier, or a human in the UI |
 | Deprecated input | the model's training run, and the `deprecation` aspect | the table's own owners |
 
-Already have a glossary term for labels? Point `MODELGUARD_LABEL_TERM_URN` at it
+Already have a glossary term for labels? Point `JANUS_LABEL_TERM_URN` at it
 in `.env` and the detector honors yours instead of creating one.
 
 ### Before you link anything: the table-level answer
@@ -379,7 +379,7 @@ finding, and it says out loud what it cannot see:
 > the stale values is not knowable without a column-level link. Asked which
 > feature carries it, table-level reasoning scores a measured precision of 0.25
 > (benchmarks/RESULTS.md, table-level baseline), which is why this finding names
-> the table and not a feature. Run `modelguard link` to get the column-level
+> the table and not a feature. Run `janus link` to get the column-level
 > answer instead.
 
 That 0.25 is measured, not asserted: it is the table-level baseline scored in
@@ -402,13 +402,13 @@ auditable proof:
 
 > `credit_risk_v3` feature `applicant_income` derives, through
 > `applicant_income <- income`, from `loans_raw.income`, classified
-> `modelguard.sensitive`.
+> `janus.sensitive`.
 
 Point it at your own taxonomy, comma-separated, either surface or both:
 
 ```bash
-MODELGUARD_SENSITIVE_TAG_URNS=urn:li:tag:PII,urn:li:tag:Confidential
-MODELGUARD_SENSITIVE_TERM_URNS=urn:li:glossaryTerm:Classification.Restricted
+JANUS_SENSITIVE_TAG_URNS=urn:li:tag:PII,urn:li:tag:Confidential
+JANUS_SENSITIVE_TERM_URNS=urn:li:glossaryTerm:Classification.Restricted
 ```
 
 There is deliberately no default. A guessed classification URN either matches
@@ -426,21 +426,21 @@ defect.
 Both are reversible scenarios, so you can watch them fire and clear:
 
 ```bash
-modelguard-scenario --scenario sensitive-source
-modelguard scan --model credit_risk_v3
-modelguard-scenario --scenario sensitive-source --revert
+janus-scenario --scenario sensitive-source
+janus scan --model credit_risk_v3
+janus-scenario --scenario sensitive-source --revert
 ```
 
 ## Block a bad model before it merges
 
 Everything above is after the fact: it audits a graph that already holds the mistake.
-`modelguard gate` is the preventive half, for a pull request. It runs the same
+`janus gate` is the preventive half, for a pull request. It runs the same
 detectors, judges them against a policy, and answers in an exit code, so a leaking or
 untrustworthy model fails the build rather than shipping.
 
 ```bash
-modelguard gate --model credit_risk_v3 --block-at-or-above high   # exit 1 if it leaks
-modelguard gate --model credit_risk_v3 --min-trust 80             # exit 1 if trust < 80
+janus gate --model credit_risk_v3 --block-at-or-above high   # exit 1 if it leaks
+janus gate --model credit_risk_v3 --min-trust 80             # exit 1 if trust < 80
 ```
 
 Prefer `--block-at-or-above`. A severity is a thing a detector decided; the trust
@@ -473,7 +473,7 @@ reviewer sees without opening anything. That needs no input and no token, becaus
 GitHub already gives every step a `GITHUB_STEP_SUMMARY` file to append markdown
 to; outside Actions the variable is unset and nothing is written.
 
-Routing findings somewhere ModelGuard does not know about? Both `scan` and `gate`
+Routing findings somewhere Janus does not know about? Both `scan` and `gate`
 take `--format json` and put the whole report (evidence, models at risk, trust
 deductions, each finding's counterfactual, the gate's violations) on stdout as
 one parseable document, with
@@ -481,7 +481,7 @@ progress lines moved to stderr so the stream stays clean.
 
 ## Call it from your training script
 
-The command line is the main interface, but there is one place ModelGuard belongs
+The command line is the main interface, but there is one place Janus belongs
 inside your code: the script that trains the model. That is the only moment when
 the feature table, the label column, and the training-time schema are all known,
 and shelling out to a CLI from inside it is a worse interface than a function
@@ -490,14 +490,14 @@ call.
 ```python
 import mlflow
 
-from modelguard import link_model, scan_model
+from janus import link_model, scan_model
 
 FEATURE_TABLE = "analytics.customer_features"
 
 # Logged as a run parameter as well as declared: the parameter survives into
 # DataHub through the ordinary mlflow ingest, which is what lets `link --infer`
 # read the table next time instead of guessing at it.
-mlflow.log_param("modelguard_features", FEATURE_TABLE)
+mlflow.log_param("janus_features", FEATURE_TABLE)
 
 link_model(
     model="churn_model",
@@ -515,15 +515,15 @@ This is the durable place for the link, and the reason is worth stating plainly:
 an ingest drops it (see above), so a link declared once decays on a schedule you
 do not control. Declared here, it is re-declared by the same run that produces
 the model, so the next training run repairs it whether or not anybody noticed.
-For the models that are not retrained nightly, schedule `modelguard link --all`
-after your ingest: the [`modelguard-watch` chart](charts/modelguard-watch)
+For the models that are not retrained nightly, schedule `janus link --all`
+after your ingest: the [`janus-watch` chart](charts/janus-watch)
 ships that as a CronJob (`link.enabled=true`). And when neither has happened,
-a scan says so specifically ("carries a recorded modelguard link but declares
+a scan says so specifically ("carries a recorded janus link but declares
 no features") rather than reporting a model it cannot see as healthy.
 
 Two functions and their result types, and deliberately no more: those names are
 the supported surface a script may pin to. They are thin wrappers over exactly
-the functions `modelguard link` and `modelguard scan` call, so a finding found
+the functions `janus link` and `janus scan` call, so a finding found
 here is found identically at the command line. Both read `.env` the same way the
 CLI does; pass `conn=` to reuse one connection across many models. Everything
 else in the package is importable and documented, but its shape is free to
@@ -533,20 +533,20 @@ change, so import a submodule knowingly when you need to go deeper.
 
 ```bash
 pip install -e ".[mcp]"
-modelguard-mcp   # serves check_leakage, check_freshness, check_gate over stdio
+janus-mcp   # serves check_leakage, check_freshness, check_gate over stdio
 ```
 
-Point an MCP client (Claude Desktop or similar) at the installed `modelguard-mcp`
+Point an MCP client (Claude Desktop or similar) at the installed `janus-mcp`
 command and ask "is credit_risk_v3 leaking?" in plain language. All three tools are
 read-only, enforced at registration (`readOnlyHint: true`) and by calling every scan
 in dry-run with no way to turn that off: the model on the other end of an MCP client
-is not ModelGuard's own narrator, it is outside this project's control entirely, so
+is not Janus's own narrator, it is outside this project's control entirely, so
 it gets to ask what is wrong and nothing more.
 
 It is meant to run *beside* DataHub's own
 [`mcp-server-datahub`](https://github.com/acryldata/mcp-server-datahub), not instead
 of it. That server answers what the catalog contains: search, lineage, schemas,
-ownership, the open-ended questions where a model's job is to explore. ModelGuard
+ownership, the open-ended questions where a model's job is to explore. Janus
 answers the three that have to be reproducible, with the column chain as evidence
 and no LLM anywhere in the decision. Configuring both, and the argument for keeping
 detection deterministic rather than asking a capable model to eyeball a lineage
@@ -556,10 +556,10 @@ graph, is in
 ## Watch it from the corner of your eye
 
 ```bash
-pip install "modelguard-datahub[pet]"     # macOS and Windows; Linux: the .deb or
+pip install "janus-datahub[pet]"     # macOS and Windows; Linux: the .deb or
                                           # .AppImage on the GitHub release
-modelguard watch --table loans_raw --pet  # ModelGuard's own findings
-modelguard companion                      # everything wrong with the assets you own
+janus watch --table loans_raw --pet  # Janus's own findings
+janus companion                      # everything wrong with the assets you own
 ```
 
 Argos is a 32x32 pixel watchdog that sits on your desktop and shows what the graph
@@ -573,7 +573,7 @@ Double-click a finding and it walks the blast radius across the screen, one hop 
 graph hop, with the column name floating over each jump. That is the column-level
 traversal the benchmark above measures, rendered as motion instead of a paragraph.
 
-`modelguard companion` is the half that is not about ModelGuard at all: it runs no
+`janus companion` is the half that is not about Janus at all: it runs no
 detector, and sweeps the assets one owner owns for open incidents, failing assertion
 runs and deprecations. DataHub has no desktop presence today, and that is the gap it
 fills. Design and protocol:
@@ -586,13 +586,13 @@ terminal instead, which is also what runs over SSH.
 
 ```bash
 datahub docker quickstart              # once: builds DataHub's own stack
-docker compose run --rm modelguard-seed
-docker compose run --rm modelguard scan --table loans_raw
-docker compose run --rm modelguard gate --model credit_risk_v3 --block-at-or-above high
-docker compose up modelguard-mcp       # long-running, stdio
+docker compose run --rm janus-seed
+docker compose run --rm janus scan --table loans_raw
+docker compose run --rm janus gate --model credit_risk_v3 --block-at-or-above high
+docker compose up janus-mcp       # long-running, stdio
 ```
 
-[`docker-compose.yml`](https://github.com/Ahmedxsaad/DataHub/blob/main/docker-compose.yml) adds ModelGuard to the Docker network
+[`docker-compose.yml`](https://github.com/Ahmedxsaad/DataHub/blob/main/docker-compose.yml) adds Janus to the Docker network
 `datahub docker quickstart` already creates, rather than reimplementing DataHub's own
 multi-container stack (GMS, MySQL, Kafka, OpenSearch, frontend) inside this repo:
 composing what is already shipped, not rebuilding it. `docker compose up` with no
@@ -600,14 +600,14 @@ service named starts nothing: every service needs a `--table`/`--model` naming a
 actual target, so `run --rm <service> ...` or `up <service>` (named explicitly) are
 the only ways anything starts.
 
-The project is named `modelguard` explicitly in that file, not left to compose's
+The project is named `janus` explicitly in that file, not left to compose's
 directory-name default: DataHub's own Quickstart compose defaults to the same
 project name (`datahub`), and sharing it would make an ordinary `docker compose
 down --remove-orphans` here treat the entire Quickstart as orphaned containers of
 this project and stop it. [`Dockerfile`](https://github.com/Ahmedxsaad/DataHub/blob/main/Dockerfile) builds a non-root image (pinned
 to the exact patch version this project develops against, `python:3.11.14-slim`)
 with all four console scripts installed; `docker build --build-arg
-MODELGUARD_EXTRAS=agent,mcp,anthropic` (or `openai`/`google`) bakes an LLM provider
+JANUS_EXTRAS=agent,mcp,anthropic` (or `openai`/`google`) bakes an LLM provider
 in instead of installing it at runtime.
 
 ## Run watch on a cluster
@@ -617,15 +617,15 @@ it. `watch` is the only entry point meant to run forever, so it is the only one
 with a Helm chart:
 
 ```bash
-helm install my-watch charts/modelguard-watch \
-  --set image.repository=ghcr.io/ahmedxsaad/datahub/modelguard \
+helm install my-watch charts/janus-watch \
+  --set image.repository=ghcr.io/ahmedxsaad/datahub/janus \
   --set datahub.gmsUrl=http://datahub-gms.datahub.svc.cluster.local:8080 \
   --set watch.table=loans_raw
 ```
 
 `.github/workflows/publish-image.yml` builds and pushes that image to GHCR on
 every version tag, so the chart has somewhere real to pull from rather than a
-placeholder. See [`charts/modelguard-watch/README.md`](https://github.com/Ahmedxsaad/DataHub/blob/main/charts/modelguard-watch/README.md)
+placeholder. See [`charts/janus-watch/README.md`](https://github.com/Ahmedxsaad/DataHub/blob/main/charts/janus-watch/README.md)
 for secret handling (`existingSecret` is the path meant for real use) and what
 the chart deliberately leaves out (autoscaling, probes that would check nothing
 real, an Ingress nothing needs).
@@ -633,13 +633,13 @@ real, an Ingress nothing needs).
 Every completed scan already logs what an SLO is built from: findings raised,
 writes made, and how long detection itself took, kept separate from the poll
 interval and from DataHub's own indexing because `watch` controls neither
-(`MODELGUARD_LOG_FORMAT=json` ships those same lines to a log pipeline). Set
-`MODELGUARD_OTEL_ENDPOINT` and the three numbers also go to an OTLP collector as
+(`JANUS_LOG_FORMAT=json` ships those same lines to a log pipeline). Set
+`JANUS_OTEL_ENDPOINT` and the three numbers also go to an OTLP collector as
 metrics:
 
 ```bash
-pip install "modelguard-datahub[otel]"
-MODELGUARD_OTEL_ENDPOINT=http://localhost:4318/v1/metrics modelguard watch --table loans_raw
+pip install "janus-datahub[otel]"
+JANUS_OTEL_ENDPOINT=http://localhost:4318/v1/metrics janus watch --table loans_raw
 ```
 
 Three instruments, no traces, and nothing imported when the variable is unset. A
@@ -651,7 +651,7 @@ project shipping a second, worse copy of it.
 
 `watch --events` consumes DataHub's own `MetadataChangeLog` instead of polling.
 It does one thing polling structurally cannot: it re-applies, **catalog-wide**,
-any `modelguard link` an ingestion run drops.
+any `janus link` an ingestion run drops.
 
 That failure is the adoption cliff, and it is silent. DataHub's mlflow source
 upserts the whole `mlModelProperties` aspect on every ingest, which drops the
@@ -661,8 +661,8 @@ model that was fully checked yesterday. Nothing errors. `link --all` fixes it an
 requires somebody to remember.
 
 ```bash
-pip install "modelguard-datahub[kafka]"
-modelguard watch --events --model credit_risk_v3
+pip install "janus-datahub[kafka]"
+janus watch --events --model credit_risk_v3
 ```
 
 Verified the way the plan asks: a model ingested twice through DataHub's own
@@ -681,11 +681,11 @@ To verify the whole loop against a live DataHub: `pytest -m integration`.
 
 ## Is it any good?
 
-Measured, not asserted. [ModelGuard-Bench](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md) scores the detectors
+Measured, not asserted. [Janus-Bench](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md) scores the detectors
 against a live DataHub (never against fixtures, which would only measure the fixtures):
 
 ```bash
-modelguard-seed
+janus-seed
 python -m benchmarks.run_bench          # writes benchmarks/RESULTS.md
 ```
 
@@ -709,7 +709,7 @@ still not measured, are in [RESULTS.md](https://github.com/Ahmedxsaad/DataHub/bl
 ## Security and privacy
 
 **No row-level data ever leaves DataHub, and none of it reaches the LLM.**
-ModelGuard reads the metadata graph and nothing else: aspects DataHub already
+Janus reads the metadata graph and nothing else: aspects DataHub already
 holds, among them the `operation` aspect for freshness, `schemaMetadata` for
 drift, glossary terms for labels, and lineage for the paths between them. It
 never connects to the warehouse and never issues a query against a table, so
@@ -736,7 +736,7 @@ The rest of the security model, in the order it matters:
   path that sends a GraphQL string the caller supplied.
 - **Writes are idempotent and reversible in place.** Every write is keyed on
   `(resource_urn, incident_type, title)` with read-before-write, stamped with a
-  `modelguard.run_id` for provenance. The benchmark reads the graph back after a
+  `janus.run_id` for provenance. The benchmark reads the graph back after a
   rerun and measures the duplicates created: 0.
 - **Writes are gated on a human.** `scan --review` pauses after detection and
   writes only what you approve. `gate` reads and does not write unless you pass
@@ -746,13 +746,13 @@ The rest of the security model, in the order it matters:
   project's control, so it gets to ask what is wrong, never to fix it. `watch`
   auto-approves because it is unattended by definition.
 - **The token stays a secret.** It enters the process in one module
-  (`modelguard/env.py`), lives only in `.env` (git-ignored), and is never
+  (`janus/env.py`), lives only in `.env` (git-ignored), and is never
   logged, echoed, or put in an exception message. Errors name the *variable*,
   never its value. Text that came back from somebody else's SDK is scrubbed of
   it before it reaches a console or a CI log, and Typer's locals-in-traceback
   rendering is pinned off because those frames hold the token.
 - **Least privilege, honestly.** DataHub OSS personal access tokens are not
-  scoped per operation, so ModelGuard cannot claim a narrowed token. What it can
+  scoped per operation, so Janus cannot claim a narrowed token. What it can
   say is what it touches: incidents, tags, glossary terms, structured
   properties, documents, assertion aspects, and the dataFlow, dataJob and
   dataProcessInstance entities it records its own runs as. Give it a token you
@@ -774,13 +774,13 @@ Full reading list with what each one changed here:
 ## Show a governance function where this fits
 
 ```bash
-modelguard crosswalk        # markdown on stdout, connects to nothing
+janus crosswalk        # markdown on stdout, connects to nothing
 ```
 
 One row per detector, mapping it to the NIST AI RMF subcategory its output is
 evidence for, with the subcategory text quoted from the AI RMF 1.0 Playbook
 rather than paraphrased. The table is generated from the detector registry, so a
-check cannot be added to ModelGuard without appearing in it.
+check cannot be added to Janus without appearing in it.
 
 It is a mapping and not a conformity claim, and it says so in its own first
 paragraph. Which subcategory an artifact is evidence *for* is a fact about the
@@ -790,9 +790,9 @@ process, and nothing that reads a metadata graph is in a position to make it.
 ## Generate the paperwork instead of maintaining it
 
 ```bash
-modelguard model-card    --model credit_risk_v3   # prints; --write publishes it to DataHub
-modelguard evidence-pack --model credit_risk_v3   # EU AI Act Article 10
-modelguard feature-card  --model credit_risk_v3   # one Data Card per feature
+janus model-card    --model credit_risk_v3   # prints; --write publishes it to DataHub
+janus evidence-pack --model credit_risk_v3   # EU AI Act Article 10
+janus feature-card  --model credit_risk_v3   # one Data Card per feature
 ```
 
 Three documents, all read entirely out of the catalog. A model card in the sense
@@ -814,7 +814,7 @@ The evidence pack's first heading is **This is not a compliance certification**,
 and its second is **What this pack could NOT establish**: deliberately the first
 section rather than a closing caveat, because a gap at the end of a long
 document is a gap nobody reads. It states, for instance, that freshness at
-training time is unknowable from this graph (ModelGuard measures freshness
+training time is unknowable from this graph (Janus measures freshness
 *now*, which is a different claim and not a substitute), and that whether anyone
 examined the data for bias is an activity no catalog records. A generated
 document that implied conformity would be worse than no document at all.
@@ -837,7 +837,7 @@ asking for documentation never raises an incident as a side effect.
 
 ## OSS contributions
 
-Built alongside ModelGuard and offered back to the DataHub ecosystem:
+Built alongside Janus and offered back to the DataHub ecosystem:
 
 | Contribution | What it is |
 |---|---|

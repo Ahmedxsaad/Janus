@@ -13,11 +13,11 @@ import json
 
 import pytest
 
-from modelguard.agent.pipeline import FindingWrites, ScanReport, TrustWrite
-from modelguard.detect.coverage import Unevaluated
-from modelguard.gate import GatePolicy, evaluate
-from modelguard.models import Finding, FindingType, Severity
-from modelguard.render import (
+from janus.agent.pipeline import FindingWrites, ScanReport, TrustWrite
+from janus.detect.coverage import Unevaluated
+from janus.gate import GatePolicy, evaluate
+from janus.models import Finding, FindingType, Severity
+from janus.render import (
     AI_RMF_SUBCATEGORIES,
     CROSSWALK,
     CROSSWALK_DISCLAIMER,
@@ -34,7 +34,7 @@ from tests.conftest import make_leakage_finding as _leakage_finding
 
 
 def _narrative(finding):  # noqa: ANN202 - a stand-in, never asserted on
-    from modelguard.agent.narrate import narrate
+    from janus.agent.narrate import narrate
 
     return narrate(finding, None)
 
@@ -72,7 +72,7 @@ def _gap() -> Unevaluated:
         check="target leakage",
         target_urn=MODEL_URN,
         reason="the model declares no features",
-        remedy="run modelguard link",
+        remedy="run janus link",
     )
 
 
@@ -101,7 +101,7 @@ class TestJson:
 
         assert parsed["clean"] is True
         assert parsed["not_evaluated"][0]["check"] == "target leakage"
-        assert parsed["not_evaluated"][0]["remedy"] == "run modelguard link"
+        assert parsed["not_evaluated"][0]["remedy"] == "run janus link"
 
     def test_a_plain_scan_omits_the_gate_key_rather_than_nulling_it(self):
         """A present-but-null gate reads as "the policy passed" to a naive check."""
@@ -139,7 +139,7 @@ class TestJobSummary:
         report = _report(_leakage_finding())
         verdict = evaluate(report, GatePolicy(block_at_or_above=Severity.HIGH))
 
-        assert job_summary_markdown(report, verdict).startswith("### ModelGuard: BLOCKED")
+        assert job_summary_markdown(report, verdict).startswith("### Janus: BLOCKED")
 
     def test_a_passing_gate_still_names_the_checks_that_did_not_run(self):
         """A green summary is exactly where a skipped check is most expensive."""
@@ -169,11 +169,11 @@ class TestJobSummary:
         target.write_text("### an earlier step\n", encoding="utf-8")
         monkeypatch.setenv(ENV_STEP_SUMMARY, str(target))
 
-        written = write_job_summary("### ModelGuard: no finding\n")
+        written = write_job_summary("### Janus: no finding\n")
 
         assert written == target
         assert target.read_text(encoding="utf-8") == (
-            "### an earlier step\n### ModelGuard: no finding\n"
+            "### an earlier step\n### Janus: no finding\n"
         )
 
 

@@ -18,9 +18,9 @@ from __future__ import annotations
 import pytest
 from datahub.metadata.schema_classes import UpstreamLineageClass
 
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.scenarios import (
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.seed import graph_spec as spec
+from janus.seed.scenarios import (
     plant_leakage,
     plant_schema_drift,
     plant_stale_source,
@@ -28,7 +28,7 @@ from modelguard.seed.scenarios import (
     revert_schema_drift,
     revert_stale_source,
 )
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
 
 pytestmark = pytest.mark.integration
 

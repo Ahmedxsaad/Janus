@@ -1,8 +1,8 @@
-# ModelGuard: Most Valuable Feedback
+# Janus: Most Valuable Feedback
 
 Concrete, reproducible findings from building a data-to-model reliability agent on
 DataHub OSS. Each is a real bug or a real documentation gap hit while writing
-ModelGuard, with the version, the symptom, a minimal repro, and the workaround we
+Janus, with the version, the symptom, a minimal repro, and the workaround we
 shipped. They are ordered roughly by impact.
 
 Versions: `acryl-datahub` 1.6.0.13 (CLI + Python SDK), DataHub GMS 1.5.0.6 (local
@@ -189,7 +189,7 @@ Verified against a real MLflow tracking server (2026-08-01, D-074), twice, on tw
 model versions.
 
 **Workaround:** keep anything that has to survive ingestion in an aspect the
-source does not write. ModelGuard records what it was told in
+source does not write. Janus records what it was told in
 `structuredProperties` on the model, so the link can be replayed with one command
 after each ingest. The fix upstream is a patch-style emit (`ChangeType.PATCH`, or
 read-merge-emit) for the fields the source does not own, which is what

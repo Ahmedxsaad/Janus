@@ -1,4 +1,4 @@
-"""ModelGuard's own scan, as the process run the graph holds it in (T-04).
+"""Janus's own scan, as the process run the graph holds it in (T-04).
 
 Driven through ``run_scan`` rather than by calling the emitter directly. What the
 task promises is not that the module can build a ``dataProcessInstance``, it is
@@ -28,9 +28,9 @@ from datahub.metadata.schema_classes import (
     RunResultTypeClass,
 )
 
-from modelguard.agent.pipeline import run_scan
-from modelguard.config import ScanConfig
-from modelguard.writeback.process_instance import (
+from janus.agent.pipeline import run_scan
+from janus.config import ScanConfig
+from janus.writeback.process_instance import (
     FLOW_ENV,
     JOB_ID,
     ORCHESTRATOR,
@@ -333,7 +333,7 @@ def test_the_flow_and_job_never_send_an_empty_tag_or_owner_list():
 
     The SDK's ``generate_mcp`` yields both whether or not anything was set, so
     emitting them verbatim would strip a tag or an owner somebody put on
-    ModelGuard's own flow, on every poll of ``modelguard watch``.
+    Janus's own flow, on every poll of ``janus watch``.
     """
     graph, client = _graph(30.0), _client()
     graph.graphql_response = {"raiseIncident": INCIDENT_URN}

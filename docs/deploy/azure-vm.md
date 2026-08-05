@@ -1,6 +1,6 @@
 # Hosting a judge-facing demo on an Azure VM
 
-One VM running the full stack (DataHub Quickstart + `modelguard watch`,
+One VM running the full stack (DataHub Quickstart + `janus watch`,
 continuously) so a judge can open the DataHub UI during the judging period
 (Aug 17-31, 2026) and see live incidents, tags, trust scores, and impact
 reports, without anyone needing to be online to demonstrate it. This satisfies
@@ -12,7 +12,7 @@ Judging Period ends" (`docs/hackathon-specs/03-submission-requirements.md`).
 provisioning, seeding, the watch service finding real incidents, the NSG and
 `ufw` layers, the frontend password change and an actual login, a real GMS
 search query returning real data, and a custom domain over HTTPS
-(`https://modelguard.ahmedxsaad.me`) all confirmed working end to end, each
+(`https://janus.ahmedxsaad.me`) all confirmed working end to end, each
 checked directly over SSH rather than assumed from the UI loading. Two real
 bugs were found and fixed this way that no amount of syntax-checking would
 have caught:
@@ -20,7 +20,7 @@ have caught:
 - D-063: `write_files` racing `azureuser`'s own creation, cascading into a
   failed `git clone`.
 - D-065: this VM's 8GB RAM is shared across the whole DataHub stack plus
-  `modelguard-watch`, and OpenSearch OOM-crashed under that pressure with no
+  `janus-watch`, and OpenSearch OOM-crashed under that pressure with no
   restart policy, so it stayed dead for 6 hours while GMS and the frontend
   kept answering health checks, silently breaking search/browse the whole
   time. `cloud-init.yaml` now sets `restart: unless-stopped` on every
@@ -34,7 +34,7 @@ deleted and recreated via the Portal wizard from the current, fixed
 public IP (the static IP's zone didn't match this deployment, so DNS was
 repointed rather than reattaching it). Cold-init finished in 557 seconds with
 zero errors: Docker installed, the repo cloned, the full Quickstart stack
-booted, seeding and the scenario ran, and `modelguard-watch.service` raised a
+booted, seeding and the scenario ran, and `janus-watch.service` raised a
 real incident within seconds of boot. All 7 `datahub-*` containers, including
 OpenSearch, came up healthy with `restart: unless-stopped` already applied,
 confirming D-065's fix actually takes effect on a cold boot and not just when
@@ -135,7 +135,7 @@ workload regardless of price: Azure can evict a Spot VM at any moment it
 wants the capacity back, and a judge-facing demo that has to stay reachable
 through the judging window cannot tolerate an unannounced outage, so this
 guide never uses it (D-061). `B2as_v2` is burstable, meaning GMS, OpenSearch,
-and Kafka (each their own JVM) plus MySQL plus `modelguard watch` are
+and Kafka (each their own JVM) plus MySQL plus `janus watch` are
 competing for banked CPU credit as well as 8 GiB of RAM minus OS overhead;
 this has not been run on real hardware to confirm it holds up under load. If
 the VM OOMs, throttles, or thrashes, the fix is `az vm resize` to a larger
@@ -181,9 +181,9 @@ Prerequisites: the [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/insta
 installed and `az login` already run.
 
 ```bash
-RG=modelguard-demo
+RG=janus-demo
 LOCATION=francecentral
-VM=modelguard-demo-vm
+VM=janus-demo-vm
 
 az group create --name "$RG" --location "$LOCATION"
 
@@ -191,7 +191,7 @@ az group create --name "$RG" --location "$LOCATION"
 # the default only ever opens the SSH port and this VM also needs 9002 open
 # to the world while 8080 must never be. Built explicitly so both rules are
 # visible in one place rather than guessed at.
-az network nsg create --resource-group "$RG" --name modelguard-demo-nsg
+az network nsg create --resource-group "$RG" --name janus-demo-nsg
 
 # Scoped to the machine provisioning it, not to the internet: SSH access is
 # for setup and troubleshooting, not something a judge needs. Update the
@@ -199,14 +199,14 @@ az network nsg create --resource-group "$RG" --name modelguard-demo-nsg
 # (az network nsg rule update ... --source-address-prefixes <new-ip>/32).
 MY_IP=$(curl -s https://ifconfig.me)
 az network nsg rule create \
-  --resource-group "$RG" --nsg-name modelguard-demo-nsg \
+  --resource-group "$RG" --nsg-name janus-demo-nsg \
   --name AllowSSHFromMe --priority 100 \
   --source-address-prefixes "${MY_IP}/32" --destination-port-ranges 22 \
   --access Allow --protocol Tcp
 
 # The DataHub UI, open to the world: this is the one thing a judge visits.
 az network nsg rule create \
-  --resource-group "$RG" --nsg-name modelguard-demo-nsg \
+  --resource-group "$RG" --nsg-name janus-demo-nsg \
   --name AllowDataHubUI --priority 110 \
   --source-address-prefixes "*" --destination-port-ranges 9002 \
   --access Allow --protocol Tcp
@@ -221,7 +221,7 @@ az vm create \
   --os-disk-size-gb 64 \
   --admin-username azureuser \
   --generate-ssh-keys \
-  --nsg modelguard-demo-nsg \
+  --nsg janus-demo-nsg \
   --public-ip-sku Standard \
   --custom-data deploy/azure/cloud-init.yaml
 ```
@@ -246,7 +246,7 @@ untouched.
 
 `az vm create` returns once the VM exists, not once cloud-init has finished
 provisioning it: first boot pulls container images, extracts GMS's WAR, and
-runs a full `modelguard-seed` against a graph that has to be reachable first.
+runs a full `janus-seed` against a graph that has to be reachable first.
 Expect several minutes before the DataHub UI answers.
 
 ```bash
@@ -263,7 +263,7 @@ ssh azureuser@<public-ip>
 # any failure.
 sudo tail -100 /var/log/cloud-init-output.log
 
-systemctl status modelguard-watch.service
+systemctl status janus-watch.service
 curl -s http://localhost:8080/config   # GMS answering locally
 
 # Swap must be present: this VM runs tight on 8GB, and with no swap the JVM
@@ -286,7 +286,7 @@ locally.
 
 ## Add a custom domain and HTTPS (optional)
 
-Verified live: `https://modelguard.ahmedxsaad.me`, real Let's Encrypt
+Verified live: `https://janus.ahmedxsaad.me`, real Let's Encrypt
 certificate, no port in the URL. Not part of `cloud-init.yaml` since it needs
 a domain name that does not exist at provisioning time; done manually, once,
 after the bare-IP demo already works.
@@ -300,13 +300,13 @@ after the bare-IP demo already works.
 
    ```bash
    az network nsg rule create \
-     --resource-group "$RG" --nsg-name modelguard-demo-nsg \
+     --resource-group "$RG" --nsg-name janus-demo-nsg \
      --name AllowHTTP --priority 120 \
      --source-address-prefixes "*" --destination-port-ranges 80 \
      --access Allow --protocol Tcp
 
    az network nsg rule create \
-     --resource-group "$RG" --nsg-name modelguard-demo-nsg \
+     --resource-group "$RG" --nsg-name janus-demo-nsg \
      --name AllowHTTPS --priority 130 \
      --source-address-prefixes "*" --destination-port-ranges 443 \
      --access Allow --protocol Tcp
@@ -369,7 +369,7 @@ Shortly before Aug 17, 10:00am ET:
 az vm start --resource-group "$RG" --name "$VM"
 ```
 
-`modelguard-watch.service` is `enabled` (not just `started`), so it comes
+`janus-watch.service` is `enabled` (not just `started`), so it comes
 back on its own once the VM boots; no need to SSH in and restart anything.
 Give it a few minutes for DataHub's own containers to come up first (`docker
 compose ps` over SSH, or just watch port 9002 start answering), same as after
@@ -390,13 +390,13 @@ az group delete --resource-group "$RG" --yes --no-wait
 
 - [`deploy/azure/cloud-init.yaml`](../../deploy/azure/cloud-init.yaml) - first-boot
   provisioning: Docker, this repo, DataHub Quickstart, the seeded demo graph,
-  `modelguard-watch.service`.
-- [`deploy/azure/modelguard-watch.service`](../../deploy/azure/modelguard-watch.service) -
+  `janus-watch.service`.
+- [`deploy/azure/janus-watch.service`](../../deploy/azure/janus-watch.service) -
   the systemd unit cloud-init installs. Watches both `loans_raw` (freshness)
   and `credit_risk_v3` (leakage) continuously; `Restart=always` with a 15s
   backoff rather than any ordering dependency on DataHub's own startup, since
-  `modelguard watch` already fails fast and loudly when GMS is not yet
-  reachable (the same exit-code discipline `modelguard gate` relies on,
+  `janus watch` already fails fast and loudly when GMS is not yet
+  reachable (the same exit-code discipline `janus gate` relies on,
   reused here rather than re-invented).
 - [`deploy/azure/Caddyfile.template`](../../deploy/azure/Caddyfile.template) -
   the reverse-proxy config for [Add a custom domain and

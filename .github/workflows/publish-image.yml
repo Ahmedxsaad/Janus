@@ -1,4 +1,4 @@
-# Builds and pushes the Dockerfile image to GHCR, so charts/modelguard-watch
+# Builds and pushes the Dockerfile image to GHCR, so charts/janus-watch
 # (and anyone else) has a real, versioned image to pull rather than a chart
 # pointing at nothing.
 #
@@ -38,12 +38,12 @@ jobs:
         id: image
         # GHCR requires a lowercase path; github.repository preserves the
         # repo's actual case (Ahmedxsaad/DataHub), so it is lowercased here
-        # rather than assumed. /modelguard is appended so the package sits
+        # rather than assumed. /janus is appended so the package sits
         # under this repo's own GHCR namespace as a named sub-image, not as
         # the repo-level package (which docker-compose.yml and charts'
         # values.yaml both reference explicitly, so this must match them).
         run: |
-          echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/modelguard" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/janus" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -51,7 +51,7 @@ jobs:
           context: .
           push: true
           build-args: |
-            MODELGUARD_EXTRAS=agent,mcp
+            JANUS_EXTRAS=agent,mcp
           tags: |
             ${{ steps.image.outputs.name }}:${{ github.ref_name }}
             ${{ steps.image.outputs.name }}:latest

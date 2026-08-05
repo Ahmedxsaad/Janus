@@ -1,11 +1,11 @@
 # The Argos window as a Python wheel.
 #
 # maturin builds the Rust binary here into a platform wheel that installs
-# `modelguard-argos` onto PATH, which is how `pip install
-# "modelguard-datahub[pet]"` puts a desktop window on somebody's machine
+# `janus-argos` onto PATH, which is how `pip install
+# "janus-datahub[pet]"` puts a desktop window on somebody's machine
 # without them ever meeting a Rust toolchain.
 #
-# This is a *separate distribution* from modelguard-datahub on purpose. That one
+# This is a *separate distribution* from janus-datahub on purpose. That one
 # is a pure wheel, one file for every platform; this one is a different file per
 # platform and cannot be. Keeping them apart is what lets the Python package
 # stay pure and the window ship as a binary.
@@ -19,11 +19,11 @@ requires = ["maturin>=1.7,<2"]
 build-backend = "maturin"
 
 [project]
-name = "modelguard-argos"
-description = "Argos, the DataHub watchdog: the desktop window for modelguard-datahub"
+name = "janus-argos"
+description = "Argos, the DataHub watchdog: the desktop window for janus-datahub"
 readme = "../docs/plan/08-watchdog-mascot.md"
 license = "Apache-2.0"
-authors = [{ name = "ModelGuard Contributors" }]
+authors = [{ name = "Janus Contributors" }]
 keywords = ["datahub", "desktop", "mascot", "observability"]
 requires-python = ">=3.11"
 # The version lives in Cargo.toml, which is what actually builds. Two places to
@@ -42,6 +42,6 @@ Homepage = "https://github.com/Ahmedxsaad/DataHub"
 
 [tool.maturin]
 # A plain binary, no Python extension module: the wheel's only job is to put an
-# executable on PATH for modelguard/argos/window.py to spawn.
+# executable on PATH for janus/argos/window.py to spawn.
 bindings = "bin"
 strip = true

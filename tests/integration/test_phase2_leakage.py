@@ -1,6 +1,6 @@
 """The Phase 2 gate: the leakage loop, end to end, against a live DataHub.
 
-docs/plan/02-implementation-plan.md section 5.1 states it: ``modelguard scan
+docs/plan/02-implementation-plan.md section 5.1 states it: ``janus scan
 --model credit_risk_v3`` traces the model's features back through column-level
 lineage, finds the one derived from the label, and writes back a FIELD incident
 on the leaking column, a leakage-risk term on the feature, and a tag plus risk
@@ -29,17 +29,17 @@ from datahub.metadata.schema_classes import (
     IncidentStateClass,
 )
 
-from modelguard.agent.pipeline import run_scan
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.detect.leakage import leakage_findings
-from modelguard.models import FindingType, Severity
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.incidents import INCIDENT_ON_RELATIONSHIP, resolve_incident
-from modelguard.writeback.labels import read_tags
-from modelguard.writeback.properties import RISK_FLAGS, read_properties
-from modelguard.writeback.terms import read_terms
+from janus.agent.pipeline import run_scan
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.detect.leakage import leakage_findings
+from janus.models import FindingType, Severity
+from janus.seed import graph_spec as spec
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.incidents import INCIDENT_ON_RELATIONSHIP, resolve_incident
+from janus.writeback.labels import read_tags
+from janus.writeback.properties import RISK_FLAGS, read_properties
+from janus.writeback.terms import read_terms
 
 pytestmark = pytest.mark.integration
 
@@ -246,7 +246,7 @@ def test_a_model_with_no_declared_label_scans_clean(
     declared label. With no column declared, there is no target to leak, so the
     scan must be silent. This is the false-positive control on the real graph.
     """
-    no_label = ScanConfig(label_term_urn="urn:li:glossaryTerm:modelguard.nonexistent-label")
+    no_label = ScanConfig(label_term_urn="urn:li:glossaryTerm:janus.nonexistent-label")
 
     report = run_scan(conn, no_label, model_urn=seeded.model, llm=None, dry_run=True)
 

@@ -20,9 +20,9 @@ from datahub.metadata.schema_classes import (
 )
 from rich.console import Console
 
-from modelguard.argos.producer import ArgosProducer
-from modelguard.argos.protocol import Command
-from modelguard.cli import (
+from janus.argos.producer import ArgosProducer
+from janus.argos.protocol import Command
+from janus.cli import (
     WATCH_FAILURE_ESCALATION_THRESHOLD,
     TableResolutionError,
     WatchState,
@@ -34,10 +34,10 @@ from modelguard.cli import (
     resolve_table,
     safe_error,
 )
-from modelguard.client import ENV_GMS_TOKEN, DataHubConnection
-from modelguard.config import ScanConfig
-from modelguard.writeback.link import LinkError
-from modelguard.writeback.link_infer import LinkProposal
+from janus.client import ENV_GMS_TOKEN, DataHubConnection
+from janus.config import ScanConfig
+from janus.writeback.link import LinkError
+from janus.writeback.link_infer import LinkProposal
 from tests.conftest import (
     DEPLOYMENT_URN,
     LEAK_FEATURE_URN,
@@ -101,7 +101,7 @@ def test_a_suffix_that_is_not_on_a_dot_boundary_is_not_a_match():
 
 def test_an_unknown_table_on_a_local_quickstart_points_at_the_seeder():
     local = replace(_conn([]), gms_url="http://localhost:8080")
-    with pytest.raises(TableResolutionError, match="modelguard-seed"):
+    with pytest.raises(TableResolutionError, match="janus-seed"):
         resolve_table(local, "nonexistent")
 
 
@@ -109,7 +109,7 @@ def test_an_unknown_table_on_a_remote_instance_never_suggests_seeding():
     """Seeding somebody's real catalog would write demo datasets into it."""
     with pytest.raises(TableResolutionError, match="no dataset named") as raised:
         resolve_table(_conn([]), "nonexistent")
-    assert "modelguard-seed" not in str(raised.value)
+    assert "janus-seed" not in str(raised.value)
 
 
 def test_an_ambiguous_name_is_refused_rather_than_guessed():
@@ -290,7 +290,7 @@ def test_recovery_resolves_incident_and_clears_model_risk_state():
     properties = graph.get_aspect(MODEL_URN, StructuredPropertiesClass)
     assert properties is not None
     assert all(
-        a.propertyUrn != "urn:li:structuredProperty:modelguard.risk_flags"
+        a.propertyUrn != "urn:li:structuredProperty:janus.risk_flags"
         for a in properties.properties
     )
 
@@ -301,7 +301,7 @@ def test_the_cli_never_renders_locals_into_a_traceback():
     The frames that open a connection hold the raw token, and the SDK's own
     DatahubClientConfig prints it in its repr, so a pretty traceback carrying
     locals would put a credential on the terminal and into any CI log. Typer's
-    default is already False; this asserts ModelGuard's own choice, so an upstream
+    default is already False; this asserts Janus's own choice, so an upstream
     change of default cannot quietly turn it back on.
     """
     assert app.pretty_exceptions_show_locals is False
@@ -310,7 +310,7 @@ def test_the_cli_never_renders_locals_into_a_traceback():
 def test_an_exception_printed_to_the_console_carries_no_token(monkeypatch, capsys):
     """``gate`` prints an SDK failure straight into a CI log the whole team reads.
 
-    ModelGuard's own errors name a variable and never its value, but an exception
+    Janus's own errors name a variable and never its value, but an exception
     surfacing from someone else's SDK may quote a request or a header we handed
     the token to (root CLAUDE.md rule 6d).
     """
@@ -580,7 +580,7 @@ class TestLinkFromADeclaration:
         command = self._read(self._conn()).command()
 
         assert command == (
-            "modelguard link \\\n"
+            "janus link \\\n"
             "  --model credit_risk_v3 \\\n"
             "  --features warehouse.analytics.customer_features \\\n"
             "  --label-table warehouse.analytics.customer_labels \\\n"

@@ -26,9 +26,9 @@ from datahub.metadata.schema_classes import (
     MLModelPropertiesClass,
 )
 
-from modelguard.config import ScanConfig
-from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY, leakage_findings
-from modelguard.models import FindingType, Severity
+from janus.config import ScanConfig
+from janus.detect.leakage import SOURCE_COLUMN_PROPERTY, leakage_findings
+from janus.models import FindingType, Severity
 from tests.conftest import (
     CLEAN_COLUMN_URN,
     CLEAN_FEATURE_URN,
@@ -77,7 +77,7 @@ def _leaking_graph(*, label_on_field: bool = True) -> tuple[FakeGraph, FakeClien
     """The seeded graph: prior_default_flag derives from the label, income does not.
 
     Args:
-        label_on_field: Declare the label on the schemaField (what ModelGuard
+        label_on_field: Declare the label on the schemaField (what Janus
             writes). When False, it is declared through editableSchemaMetadata
             instead (what the DataHub UI writes). The detector must honor both.
     """
@@ -161,7 +161,7 @@ def test_the_finding_quotes_the_column_path_it_walked():
 
 
 def test_a_label_declared_through_the_ui_counts_the_same():
-    """A human tagging the column in DataHub must work with no ModelGuard config."""
+    """A human tagging the column in DataHub must work with no Janus config."""
     graph, client = _leaking_graph(label_on_field=False)
 
     findings = leakage_findings(make_connection(graph, client), MODEL_URN, CONFIG)
@@ -381,7 +381,7 @@ def test_the_column_path_is_truncated_at_the_matched_label():
 def test_a_malformed_source_column_property_skips_that_feature_and_scans_the_rest():
     """A property anything can write must not be able to abort the whole scan.
 
-    ``modelguard.source_column`` is free text on the feature. A value that is not
+    ``janus.source_column`` is free text on the feature. A value that is not
     a schemaField URN says nothing about the feature, so it is treated like an
     absent one: the feature is skipped and the model's other features are still
     audited. Before the guard, parsing it raised straight out of the detector and

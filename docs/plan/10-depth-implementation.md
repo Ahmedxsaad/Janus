@@ -1,4 +1,4 @@
-# ModelGuard - Depth Axes, Implementation Plan
+# Janus - Depth Axes, Implementation Plan
 
 > The build order for `09-depth-axes.md`. That doc says *what* and *why*; this one
 > says *in what order*, *touching which files*, and *done when*. Nothing here repeats
@@ -31,8 +31,8 @@ times.
       over constants the test itself constructed is not a test.
 - [ ] Anything that writes to the graph also has a marked integration test
       (rule 2) and an idempotency assertion: run twice, exactly one write (rule 3).
-- [ ] New thresholds, caps and weights live in `modelguard/config.py`, never
-      hardcoded (modelguard/CLAUDE.md rule 3).
+- [ ] New thresholds, caps and weights live in `janus/config.py`, never
+      hardcoded (janus/CLAUDE.md rule 3).
 - [ ] New configuration that identifies a system, account or vendor gets **no
       default and no fallback** (root rule 6a). Algorithm parameters may keep a
       documented default (rule 6b). Related settings are all-or-nothing (rule 6c).
@@ -66,7 +66,7 @@ depends on them, so they are first only because they are free.
 - [x] Each deduction names the finding that caused it. The freshness deduction names
       the *worst*-lagging table's finding, because that is the one that set it.
 - [x] Add `SCORING_VERSION` to `config.py`, stamped into every `trust_history` entry
-      and the structured property (F7 step 1). A new `modelguard.scoring_version`
+      and the structured property (F7 step 1). A new `janus.scoring_version`
       property; the history format gains a sixth field and still parses the five-field
       entries an older release wrote, as unknown rather than dropping them.
 - [x] CI check: a change to weights, band boundaries, or the contributing finding set
@@ -80,9 +80,9 @@ depends on them, so they are first only because they are free.
       ordering, not a calibrated model (F7 step 4). `config.SCORE_PROVENANCE`, printed
       by every surface that shows the number.
 
-Files: `modelguard/detect/trust_score.py`, `modelguard/models.py`,
-`modelguard/config.py`, `modelguard/render.py`, `modelguard/writeback/documents.py`,
-`modelguard/writeback/trust_history.py`, `modelguard/gate.py`.
+Files: `janus/detect/trust_score.py`, `janus/models.py`,
+`janus/config.py`, `janus/render.py`, `janus/writeback/documents.py`,
+`janus/writeback/trust_history.py`, `janus/gate.py`.
 
 Done when: a scored model's report leads with what is wrong and the history shows a
 version change as a labelled discontinuity rather than a mystery drop.
@@ -95,12 +95,12 @@ version change as a labelled discontinuity rather than a mystery drop.
 - [x] Generated from the detector registry, not typed by hand, so a new detector
       cannot silently be absent from it. Keyed by `FindingType`.
 - [x] Rendered into the docs site and available as a CLI output
-      (`modelguard crosswalk`, which connects to nothing).
+      (`janus crosswalk`, which connects to nothing).
 - [x] Not in the original checklist and it is the load-bearing part: the artifact
       states in its own first paragraph that it is a mapping and **not a conformity
       claim**, on both surfaces, asserted by a test on each.
 
-Files: `modelguard/render.py`, `modelguard/cli.py`, `site/`, `docs/plan/resources.md`.
+Files: `janus/render.py`, `janus/cli.py`, `site/`, `docs/plan/resources.md`.
 
 Done when: adding a detector without a crosswalk row fails a test.
 
@@ -111,7 +111,7 @@ Done when: adding a detector without a crosswalk row fails a test.
 ### T-03 Counterfactual remediation (09 section 4.1) [done, D-110]
 
 The single highest-value item. Smaller than it looks: `marked_ancestor`
-(`modelguard/detect/column_marks.py:179`) already collects every chain to a marked
+(`janus/detect/column_marks.py:179`) already collects every chain to a marked
 ancestor and discards all but the shortest.
 
 - [x] Widen `WalkResult` to carry **all** chains, not only the winner. The shortest
@@ -164,10 +164,10 @@ ancestor and discards all but the shortest.
       deletes left enough index churn behind them to time out the counterfactual
       measurement's wait, so scale now runs last.
 
-Files: `modelguard/detect/column_marks.py`, `modelguard/detect/*.py`,
-`modelguard/models.py`, `modelguard/writeback/incidents.py`,
-`modelguard/writeback/documents.py`, `benchmarks/inject.py`, `benchmarks/run_bench.py`,
-`modelguard/seed/scenarios.py`.
+Files: `janus/detect/column_marks.py`, `janus/detect/*.py`,
+`janus/models.py`, `janus/writeback/incidents.py`,
+`janus/writeback/documents.py`, `benchmarks/inject.py`, `benchmarks/run_bench.py`,
+`janus/seed/scenarios.py`.
 
 Done when: every finding in a scan report carries a counterfactual, and the benchmark
 proves each one clears the finding it belongs to.
@@ -187,7 +187,7 @@ Independent of everything else. Land it whenever a slot opens.
       the properties and the relationships; its `emit_process_start/end` drivers are
       not used, because they emit through `emitter.emit` and would also emit a
       nameless template flow and job.
-- [x] A `dataFlow` for the ModelGuard agent and a `dataJob` for the scan. Their
+- [x] A `dataFlow` for the Janus agent and a `dataJob` for the scan. Their
       `generate_mcp` always yields an empty `globalTags` and `ownership`, which are
       whole-list upserts, so both are filtered out rather than emitted.
 - [x] One `dataProcessInstance` per scan, keyed by the existing `run_id` (D-013).
@@ -210,8 +210,8 @@ Independent of everything else. Land it whenever a slot opens.
       for the entity and its versioned aspects; the run events are timeseries, so a
       deterministic `messageId` is what makes a replay converge rather than stack.
 
-Files: new `modelguard/writeback/process_instance.py`, `modelguard/agent/pipeline.py`,
-`modelguard/agent/graph.py`. ~~`modelguard/models.py`~~: the run is a write-back
+Files: new `janus/writeback/process_instance.py`, `janus/agent/pipeline.py`,
+`janus/agent/graph.py`. ~~`janus/models.py`~~: the run is a write-back
 concern and never reaches a finding, so no model changed.
 
 Done when: after a scan the process instance is readable from the graph, its inputs
@@ -229,7 +229,7 @@ a stranger's catalog. This phase is worth more than any new check.
 
 ### T-05 The adapter framework and the Feast adapter (09 section 1.1) [done, D-112]
 
-- [x] New package `modelguard/adapters/`, with its own `CLAUDE.md` stating the local
+- [x] New package `janus/adapters/`, with its own `CLAUDE.md` stating the local
       rule: adapters are read-only, offline, and parse a declaration; they never
       connect to a vendor service.
 - [x] One function per adapter returning exactly what `link` already takes:
@@ -246,7 +246,7 @@ a stranger's catalog. This phase is worth more than any new check.
       Add to the `dev` extra too, so a clean clone does not silently skip its tests.
       Floored at `>=0.65`, the version verified, because the label view the adapter
       reads is recent.
-- [x] `modelguard link --from feast --repo ./feature_repo` proposes the way `--infer`
+- [x] `janus link --from feast --repo ./feature_repo` proposes the way `--infer`
       does: prints each line with which declaration it came from, writes nothing
       until the human answers. `--select` names the feature service when a repo
       declares several; `--from` refuses to run with `--infer` or `--all`.
@@ -301,10 +301,10 @@ seven lines of it, in `tests/test_cli.py`.
       of the blast-radius traversal measured next, so they moved into the middle of
       the matrix rather than the walk being taught to wait for its own answer.
 
-Files: `modelguard/detect/degraded.py`, `modelguard/models.py`, `modelguard/config.py`,
-`modelguard/cli.py`, `modelguard/agent/pipeline.py`, `modelguard/agent/narrate.py`,
-`modelguard/writeback/documents.py`, `modelguard/detect/trust_score.py`,
-`modelguard/render.py`, `modelguard/seed/scenarios.py`, `benchmarks/inject.py`,
+Files: `janus/detect/degraded.py`, `janus/models.py`, `janus/config.py`,
+`janus/cli.py`, `janus/agent/pipeline.py`, `janus/agent/narrate.py`,
+`janus/writeback/documents.py`, `janus/detect/trust_score.py`,
+`janus/render.py`, `janus/seed/scenarios.py`, `benchmarks/inject.py`,
 `benchmarks/counterfactuals.py`, `benchmarks/run_bench.py`. ~~`detect/coverage.py`~~:
 a check that ran at table level is still a column-level check that did not run, so
 its report is unchanged and the mode's own finding carries the disclosure.
@@ -320,10 +320,10 @@ missing, so let the tool write the list rather than guessing it.
 
 - [x] Pick `mutmut` (3.7.0) or `cosmic-ray` (8.4.6), both `[verified]` on PyPI,
       neither installed. Add to the `dev` extra. Chose mutmut.
-- [x] Scope to `modelguard/detect/` only. The claim is about detection; mutating the
-      whole package measures the wrong thing. `source_paths = ["modelguard"]` keeps
+- [x] Scope to `janus/detect/` only. The claim is about detection; mutating the
+      whole package measures the wrong thing. `source_paths = ["janus"]` keeps
       the rest of the package present and importable; `only_mutate =
-      ["modelguard/detect/*"]` is what actually restricts the mutations.
+      ["janus/detect/*"]` is what actually restricts the mutations.
 - [x] Test command: the offline suite plus the benchmark trials. Needed no extra
       config: `tests/benchmarks/` was already unmarked (not `integration`), so the
       plain default (`pytest`, inheriting `addopts = "-m 'not integration'"` from
@@ -425,7 +425,7 @@ Reuses T-09's common-ancestor scenario, read for the opposite purpose.
       k hops, and X does not descend from A. `column_marks.related_columns` is the
       new primitive: the unmarked sibling of `marked_ancestor`, answering what a
       column touches rather than what it descends from, in either direction.
-- [x] `MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS` and `..._TERM_URNS`. **No default**,
+- [x] `JANUS_PROTECTED_ATTRIBUTE_TAG_URNS` and `..._TERM_URNS`. **No default**,
       exactly as P5 has none (root rule 6a, and 09's argument: a guessed
       classification URN is the worst kind to be wrong about). All-or-nothing group
       (rule 6c). Both keys added to `.env` and `.env.example` in the same order
@@ -454,8 +454,8 @@ Reuses T-09's common-ancestor scenario, read for the opposite purpose.
       silent, and cutting the shared ancestry clears it with the classified column
       and its tag left in place.
 
-Files: `modelguard/detect/governance.py`, `modelguard/detect/column_marks.py`,
-`modelguard/models.py`, `modelguard/config.py`, `.env`, `.env.example`.
+Files: `janus/detect/governance.py`, `janus/detect/column_marks.py`,
+`janus/models.py`, `janus/config.py`, `.env`, `.env.example`.
 
 ### T-12 Generated model cards (09 section 5.3) [done, D-119]
 
@@ -466,7 +466,7 @@ Files: `modelguard/detect/governance.py`, `modelguard/detect/column_marks.py`,
 - [x] Written back as a document, reusing `writeback/documents.py` and its
       idempotency keying. Keyed on the model alone: there is one card per model and it
       is meant to be current, unlike an impact report, which is per finding.
-- [x] `modelguard model-card --model X`, printing by default and publishing with
+- [x] `janus model-card --model X`, printing by default and publishing with
       `--write`. Read-only either way: generating documentation must not raise
       incidents as a side effect.
 
@@ -476,7 +476,7 @@ Files: `modelguard/detect/governance.py`, `modelguard/detect/column_marks.py`,
       classification exposures, ~~freshness at training time~~, schema at training
       time, deprecated inputs, ownership. **Freshness at training time is not
       assembled and cannot be**, corrected in place per docs/CLAUDE.md rule 1:
-      ModelGuard measures freshness *now*, and DataHub records no snapshot of it as of
+      Janus measures freshness *now*, and DataHub records no snapshot of it as of
       the training run. Substituting current freshness would answer a different
       question than Article 10 asks, so the pack names it as unestablished instead.
 - [x] **The first paragraph states that this is evidence assembled from measured
@@ -493,7 +493,7 @@ Files: `modelguard/detect/governance.py`, `modelguard/detect/column_marks.py`,
 - [x] Cite Article 10 and Article 12 by number, so a reader can check the mapping.
       Subsections cite the specific paragraphs (10(2)(b), 10(3), 10(2)(f), 10(5)), and
       the mapping is labelled this project's reading rather than fact.
-- [x] `modelguard evidence-pack --model X`, same surface as the card.
+- [x] `janus evidence-pack --model X`, same surface as the card.
 
 ---
 
@@ -548,7 +548,7 @@ None of these are on the critical path. Each is independently landable.
       caller collected, which is what keeps `detect/` from importing
       `agent/pipeline` and inverting the layering.
 - [x] Trend it the way `writeback/trust_history.py` trends scores. Same storage
-      decision, same cap, same pipe-separated line, carried on ModelGuard's own
+      decision, same cap, same pipe-separated line, carried on Janus's own
       `dataFlow`: a catalog figure belongs to no model or dataset, and minting a
       synthetic entity would put a made-up asset in somebody's catalog. That a
       `dataFlow` accepts a structured property was verified live before the
@@ -565,7 +565,7 @@ None of these are on the critical path. Each is independently landable.
       cannot open a silent sixth row.
 
 ### T-16 Incident lifecycle and MTTR (09 section 6.2) - S [done, D-127]
-- [x] MTTR per finding type, read from ModelGuard's own writes. Nothing new is
+- [x] MTTR per finding type, read from Janus's own writes. Nothing new is
       recorded to make it possible: `incidentInfo.created` and the resolution
       stamp were already there.
 - [x] Reported in `RESULTS.md` and in `inventory`.
@@ -590,7 +590,7 @@ None of these are on the critical path. Each is independently landable.
 - [x] `[otel]` extra, off by default. Keep it small; do not oversell it. Three
       instruments, no traces, and the instrumentation package that *does* provide
       spans is named in the docs rather than reimplemented.
-- [x] `MODELGUARD_OTEL_ENDPOINT` is an address, so no default and no fallback.
+- [x] `JANUS_OTEL_ENDPOINT` is an address, so no default and no fallback.
       Headers are optional rather than an all-or-nothing group (a collector in
       the same cluster needs none) and are carried as `SecretStr`.
 
@@ -626,12 +626,12 @@ None of these are on the critical path. Each is independently landable.
 ### T-20 Continuous reconciliation (09 section 1.2) - M [done, D-132]
 - [x] ~~**Blocked on** the `MetadataChangeLog` consumer~~ that
       03-production-hardening.md section C.1 names as `watch`'s event-driven
-      upgrade. It is built: `modelguard/mcl.py`, reached through
+      upgrade. It is built: `janus/mcl.py`, reached through
       `watch --events` behind a `[kafka]` extra. Not `datahub-actions`, which
       would deliver the same records through a plugin system with its own YAML,
       a second configuration surface beside `env.py` (root rule 6).
 - [x] Watch `mlModelProperties` upserts, re-apply the stored link arguments.
-      `modelguard/reconcile.py`, and it replays **only** what a human already
+      `janus/reconcile.py`, and it replays **only** what a human already
       confirmed: an inferred join is indistinguishable from a confirmed one in
       the graph and would make every detector downstream confident about the
       wrong columns.
@@ -645,7 +645,7 @@ None of these are on the critical path. Each is independently landable.
       now waits for the assignment and buffers what arrives meanwhile. And
       DataHub's mlflow source names an `mlModel` per model *version*, not per
       model, which is the entity a replay has to target.
-- [x] Polling stays the default and needs no broker, so `modelguard/CLAUDE.md`
+- [x] Polling stays the default and needs no broker, so `janus/CLAUDE.md`
       rule 2's "polling by design" becomes "polling by default".
 
 ### ~~T-21 sklearn and feature-store adapters (09 section 1.1) - M each~~ [dropped, D-131]
@@ -671,12 +671,12 @@ order of how fatal each is:
   round trip to nowhere.
 
 And reading any of it needs a **fitted estimator in memory**, which means
-unpickling a file. `modelguard/adapters/CLAUDE.md`'s local rule is that an adapter
+unpickling a file. `janus/adapters/CLAUDE.md`'s local rule is that an adapter
 parses a declaration, offline, and never executes a vendor artifact. Arbitrary
 code execution to recover a mapping the caller already has is not a trade worth
 making.
 
-The need this was meant to serve is already met by `modelguard.api.link_model`,
+The need this was meant to serve is already met by `janus.api.link_model`,
 called from the training script, which is the one moment the feature table, the
 label column and the training-time schema are all known (README, "Call it from
 your training script").

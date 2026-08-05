@@ -8,7 +8,7 @@ looked done, and the artifact most likely to matter to a governance reader was
 reachable only by reading `--help`.
 
 This is the same joint `test_site.py` covers for the crosswalk table, applied to
-the command list: a command cannot be added to ModelGuard without being written
+the command list: a command cannot be added to Janus without being written
 down where a user would look for it.
 """
 
@@ -16,13 +16,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from modelguard.cli import app
+from janus.cli import app
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def _command_names() -> list[str]:
-    """Every subcommand `modelguard` exposes, as a user would type it."""
+    """Every subcommand `janus` exposes, as a user would type it."""
     names = [
         command.name or command.callback.__name__
         for command in app.registered_commands
@@ -41,7 +41,7 @@ def _missing_from(document: Path) -> list[str]:
     with it instead of these two tests (D-125).
     """
     text = document.read_text()
-    return [name for name in _command_names() if f"modelguard {name}" not in text]
+    return [name for name in _command_names() if f"janus {name}" not in text]
 
 
 def test_the_readme_shows_every_command() -> None:

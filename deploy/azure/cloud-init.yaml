@@ -1,7 +1,7 @@
 #cloud-config
 # First-boot provisioning for the judge-facing demo VM. Installs Docker,
 # clones this repo, boots DataHub's own Quickstart, seeds and plants the demo
-# scenario, and installs modelguard-watch.service so the graph keeps
+# scenario, and installs janus-watch.service so the graph keeps
 # reflecting live findings without anyone needing to SSH in again.
 #
 # What this deliberately does NOT do: expose GMS (port 8080) to the internet.
@@ -50,7 +50,7 @@ runcmd:
   - [ufw, --force, enable]
 
   # A 4GB swap file, because this image ships with none and the whole DataHub
-  # stack plus modelguard-watch runs tight on 8GB. Observed for real: OpenSearch
+  # stack plus janus-watch runs tight on 8GB. Observed for real: OpenSearch
   # died 13 times with "unable to create native thread", which is *not* a thread
   # or PID limit (1150 threads against a 62881 host max, 9432 allowed in its own
   # cgroup, both checked on the live VM). It is the JVM failing to allocate a new
@@ -88,12 +88,12 @@ runcmd:
   - /opt/datahub-cli/bin/pip install --quiet "acryl-datahub==1.6.0.13"
   - ln -sf /opt/datahub-cli/bin/datahub /usr/local/bin/datahub
 
-  - mkdir -p /opt/modelguard
-  - chown azureuser:azureuser /opt/modelguard
+  - mkdir -p /opt/janus
+  - chown azureuser:azureuser /opt/janus
   - >-
     sudo -u azureuser git clone --depth 1
     https://__GITHUB_CLONE_TOKEN__@github.com/Ahmedxsaad/DataHub.git
-    /opt/modelguard/DataHub
+    /opt/janus/DataHub
 
   # The .env write used to live in write_files, which cloud-init runs in an
   # early stage, before Azure has necessarily finished creating azureuser: an
@@ -103,7 +103,7 @@ runcmd:
   # Permission Denied since azureuser cannot write into a root-owned
   # directory. Written here instead, right after the clone, once both
   # azureuser and the cloned repo already exist, so neither race is
-  # possible, and before modelguard-seed below needs it. No
+  # possible, and before janus-seed below needs it. No
   # DATAHUB_GMS_TOKEN: the Quickstart this VM boots has metadata-service
   # authentication disabled (see the header comment), so writes go through
   # unauthenticated, exactly as they do in every other environment this
@@ -111,8 +111,8 @@ runcmd:
   # ever asked for.
   - >-
     sudo -u azureuser bash -c
-    "echo DATAHUB_GMS_URL=http://localhost:8080 > /opt/modelguard/DataHub/.env"
-  - chmod 600 /opt/modelguard/DataHub/.env
+    "echo DATAHUB_GMS_URL=http://localhost:8080 > /opt/janus/DataHub/.env"
+  - chmod 600 /opt/janus/DataHub/.env
 
   # Boots the full DataHub stack (GMS, MySQL, Kafka, OpenSearch, frontend) on
   # datahub_network, the same network docker-compose.yml in this repo attaches
@@ -144,11 +144,11 @@ runcmd:
     timeout 300 bash -c
     'until curl -sf http://localhost:8080/config >/dev/null; do sleep 5; done'
 
-  - cd /opt/modelguard/DataHub && sudo -u azureuser docker compose run --rm modelguard-seed
+  - cd /opt/janus/DataHub && sudo -u azureuser docker compose run --rm janus-seed
   - >-
-    cd /opt/modelguard/DataHub && sudo -u azureuser
-    docker compose run --rm modelguard-scenario --lag-hours 30
+    cd /opt/janus/DataHub && sudo -u azureuser
+    docker compose run --rm janus-scenario --lag-hours 30
 
-  - cp /opt/modelguard/DataHub/deploy/azure/modelguard-watch.service /etc/systemd/system/
+  - cp /opt/janus/DataHub/deploy/azure/janus-watch.service /etc/systemd/system/
   - systemctl daemon-reload
-  - systemctl enable --now modelguard-watch.service
+  - systemctl enable --now janus-watch.service

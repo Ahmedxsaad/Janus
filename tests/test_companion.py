@@ -11,9 +11,9 @@ from datahub.metadata.schema_classes import (
     DeprecationClass,
 )
 
-from modelguard import companion
-from modelguard.config import ScanConfig
-from modelguard.env import ConfigError
+from janus import companion
+from janus.config import ScanConfig
+from janus.env import ConfigError
 
 from .conftest import FakeGraph, active_incident, make_connection
 

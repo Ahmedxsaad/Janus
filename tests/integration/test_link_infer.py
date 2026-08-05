@@ -21,11 +21,11 @@ from typing import TypeVar
 
 import pytest
 
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.config import ScanConfig
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.link_infer import infer_link
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.config import ScanConfig
+from janus.seed import graph_spec as spec
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.link_infer import infer_link
 
 pytestmark = pytest.mark.integration
 

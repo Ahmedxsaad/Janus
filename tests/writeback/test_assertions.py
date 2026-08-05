@@ -17,8 +17,8 @@ from datahub.metadata.schema_classes import (
     FreshnessAssertionTypeClass,
 )
 
-from modelguard.models import FreshnessSignal
-from modelguard.writeback.assertions import (
+from janus.models import FreshnessSignal
+from janus.writeback.assertions import (
     EVALUATED_FROM,
     build_assertion,
     record_assertion_result,

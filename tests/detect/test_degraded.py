@@ -33,11 +33,11 @@ from datahub.metadata.schema_classes import (
 )
 from datahub.metadata.urns import SchemaFieldUrn
 
-from modelguard.config import TABLE_LEVEL_PRECISION, ScanConfig
-from modelguard.detect.degraded import table_level_findings
-from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
-from modelguard.detect.trust_score import trust_inputs_from_findings, trust_score
-from modelguard.models import FindingType, Severity, TableRisk
+from janus.config import TABLE_LEVEL_PRECISION, ScanConfig
+from janus.detect.degraded import table_level_findings
+from janus.detect.leakage import SOURCE_COLUMN_PROPERTY
+from janus.detect.trust_score import trust_inputs_from_findings, trust_score
+from janus.models import FindingType, Severity, TableRisk
 from tests.conftest import (
     CLEAN_FEATURE_URN,
     DEPLOYMENT_URN,
@@ -51,7 +51,7 @@ from tests.conftest import (
     schema_metadata,
 )
 
-SENSITIVE_TAG = "urn:li:tag:modelguard.sensitive"
+SENSITIVE_TAG = "urn:li:tag:janus.sensitive"
 SENSITIVE_TERM = "urn:li:glossaryTerm:Sensitive"
 CONFIG = ScanConfig()
 CLASSIFIED_CONFIG = ScanConfig(sensitive_tag_urns=(SENSITIVE_TAG,))
@@ -279,7 +279,7 @@ class TestHowItIsRanked:
     def test_declaring_the_link_is_the_first_remedy_offered(self):
         finding = _findings(_graph(deprecated=True))[0]
 
-        assert "modelguard link" in finding.counterfactual.remedies[0].summary
+        assert "janus link" in finding.counterfactual.remedies[0].summary
 
     def test_it_contributes_nothing_at_all_to_the_trust_score(self):
         """A maybe must not move a number people compare release over release.

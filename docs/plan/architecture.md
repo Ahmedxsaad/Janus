@@ -1,6 +1,6 @@
-# ModelGuard - Architecture
+# Janus - Architecture
 
-> How ModelGuard actually works, in detail: the system context, the internal layers, each component's job,
+> How Janus actually works, in detail: the system context, the internal layers, each component's job,
 > the runtime flows, and the read/write data plane over DataHub's graph. Companion to
 > `02-implementation-plan.md` (build steps) and `03-production-hardening.md` (scaling/security/benchmark).
 >
@@ -14,7 +14,7 @@
 
 ## 1. One-paragraph model
 
-ModelGuard is a **read → reason → write-back loop** that sits on the boundary between the **warehouse graph**
+Janus is a **read → reason → write-back loop** that sits on the boundary between the **warehouse graph**
 and the **ML graph** - the one place DataHub uniquely holds both. A **trigger** (an event or a scheduled scan)
 starts a run. A **deterministic detection layer** queries DataHub's column-level + ML lineage to find silent
 data→model failures. An **orchestration layer** (LangGraph) sequences the work and pauses for human approval.
@@ -34,7 +34,7 @@ idempotently. Everything is observable and least-privilege.
 - **Idempotent by construction.** Writes are keyed by `(resourceUrn, finding_type, run_id)`; reruns converge.
 - **Human-in-the-loop for agency.** A LangGraph `interrupt()` gates every mutation (auto-approve only for the
   recorded demo). Defends OWASP LLM06 (excessive agency).
-- **Metadata-only, never raw rows.** ModelGuard reads DataHub's metadata/profile aspects, never PHI/PII rows -
+- **Metadata-only, never raw rows.** Janus reads DataHub's metadata/profile aspects, never PHI/PII rows -
   a hard privacy boundary for the finance/healthcare framing.
 - **Two triggers, one core.** `scan` (batch) and `watch` (event-driven) share the exact same detect→write core.
 - **Compose, don't rebuild.** Reuse DataHub's lineage, ML entities, incidents, structured properties, and the
@@ -46,7 +46,7 @@ idempotently. Everything is observable and least-privilege.
 
 ```plantuml
 @startuml
-title ModelGuard - System Context (Component view)
+title Janus - System Context (Component view)
 skinparam shadowing false
 skinparam roundcorner 8
 skinparam componentStyle rectangle
@@ -55,7 +55,7 @@ left to right direction
 
 actor "Data / ML Engineer" as Eng
 
-component "ModelGuard\nData-to-Model Reliability Agent" as MG
+component "Janus\nData-to-Model Reliability Agent" as MG
 node "DataHub\nContext Platform" as DH
 cloud "LLM Service\n(bring-your-own)" as LLM
 node "Notifications / Git\n(optional)" as Ext
@@ -76,7 +76,7 @@ Eng --> DH : review results in the catalog UI
 
 ```plantuml
 @startuml
-title ModelGuard - Layered Architecture (Component view)
+title Janus - Layered Architecture (Component view)
 skinparam shadowing false
 skinparam roundcorner 8
 skinparam componentStyle rectangle
@@ -135,7 +135,7 @@ X ..> L5
   consumer group, at-least-once). Filters to interesting aspects: `schemaMetadata`, assertion results,
   `datasetProfile`, `operation`. Emits a `Trigger{entity_urn, change_type}` onto the core. Falls back to
   **polling** (query recently-changed entities) when Kafka isn't wired.
-- **Scheduler/CLI (`scan`)** - `modelguard scan [--model URN | --all]` enumerates models and runs the full
+- **Scheduler/CLI (`scan`)** - `janus scan [--model URN | --all]` enumerates models and runs the full
   detector suite; ideal for CI and the demo's "before" state.
 - **Scenario injector** - deterministically plants a failure (stale column, leakage feature, schema rename)
   for the demo and the benchmark; shared with `benchmarks/inject.py`.
@@ -176,7 +176,7 @@ Detectors are **pure functions** of the graph → unit-testable, deterministic, 
 ### ⑤ Write-back layer (`writeback/`) - idempotent, parameterized
 - **`incidents.py`** - `raiseIncident` / `updateIncidentStatus` via `graph.execute_graphql` (OSS-native).
 - **`properties.py`** - define (`datahub properties upsert`) + assign (`upsertStructuredProperties`) the
-  `modelguard.trust_score` / `modelguard.risk_flags` / `modelguard.run_id` properties.
+  `janus.trust_score` / `janus.risk_flags` / `janus.run_id` properties.
 - **`labels.py`** - `add_tags` / `add_terms` / `add_owners` (SDK for scripts; MCP tools for the agent path).
 - **`documents.py`** - `save_document` attaches the impact report to the model.
 - **`assertions.py`** - emits guarding assertions as **open-assertions YAML** (+ optional **ODCS contract**),
@@ -196,7 +196,7 @@ Detectors are **pure functions** of the graph → unit-testable, deterministic, 
 
 ```plantuml
 @startuml
-title ModelGuard - Reactive Detection Loop (Sequence)
+title Janus - Reactive Detection Loop (Sequence)
 skinparam shadowing false
 skinparam defaultFontName "Helvetica"
 skinparam sequenceMessageAlign center
@@ -228,17 +228,17 @@ OP -> DH : verify in catalog UI
 @enduml
 ```
 
-**Preventive scan (P1 leakage / P3 drift)** is the same spine without the Kafka trigger: `modelguard scan
+**Preventive scan (P1 leakage / P3 drift)** is the same spine without the Kafka trigger: `janus scan
 --all` → for each model run `leakage` + `schema_drift` + `trust_score` → reason → approve → write-back. This is
 the "audit before promotion" story and the benchmark entry point.
 
 ---
 
-## 7. Data plane - what ModelGuard reads and writes
+## 7. Data plane - what Janus reads and writes
 
 ```plantuml
 @startuml
-title ModelGuard - Metadata Graph & Write-back (Domain view)
+title Janus - Metadata Graph & Write-back (Domain view)
 skinparam shadowing false
 skinparam roundcorner 6
 skinparam defaultFontName "Helvetica"
@@ -271,7 +271,7 @@ ST ..> AS
 
 legend right
   Solid  = existing metadata graph (read)
-  Dashed = attached by ModelGuard (write-back)
+  Dashed = attached by Janus (write-back)
 endlegend
 @enduml
 ```
@@ -309,7 +309,7 @@ endlegend
   `run_id`.
 - **Scaling** (§C): bounded traversal + memoization + batched reads; at-least-once + idempotent = effectively
   once; backpressure/rate-limit/circuit-breaker on GMS; stateless workers partitioned by domain.
-- **Observability** (§C.3) & **benchmark** (§A): OTel + Prometheus; ModelGuard-Bench measures detector
+- **Observability** (§C.3) & **benchmark** (§A): OTel + Prometheus; Janus-Bench measures detector
   precision/recall/MTTD and beats the no-lineage baselines.
 
 ---
@@ -318,7 +318,7 @@ endlegend
 
 ```plantuml
 @startuml
-title ModelGuard - Deployment
+title Janus - Deployment
 skinparam shadowing false
 skinparam roundcorner 8
 skinparam defaultFontName "Helvetica"
@@ -329,7 +329,7 @@ node "Host  (laptop / CI runner)" as Host {
     database "Metadata store" as STORE
     queue "Change-event log" as LOG
   }
-  node "ModelGuard" as MG {
+  node "Janus" as MG {
     artifact "Agent runtime" as AGT
     database "Run state" as RST
   }
@@ -346,7 +346,7 @@ GMS --> LOG
 ```
 
 - **Demo/judge deployment:** one `quickstart.sh` boots DataHub, loads a datapack, seeds the ML graph, and runs
-  `modelguard scan`. Zero external infra except the LLM API key.
+  `janus scan`. Zero external infra except the LLM API key.
 - **"Production" posture:** the same image scales out as stateless workers against a shared DataHub + Postgres
   run-state; `watch` mode polls on an interval today (shipped). Reading the MCL Kafka
   topic via a consumer group is the documented upgrade path, not yet built.

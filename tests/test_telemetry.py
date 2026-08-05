@@ -13,9 +13,9 @@ import logging
 import pytest
 from pydantic import SecretStr
 
-from modelguard.env import ConfigError
-from modelguard.logs import LOG_FIELDS
-from modelguard.telemetry import (
+from janus.env import ConfigError
+from janus.logs import LOG_FIELDS
+from janus.telemetry import (
     ENV_OTEL_ENDPOINT,
     ENV_OTEL_HEADERS,
     ScanMetricsHandler,
@@ -141,9 +141,9 @@ def test_a_completed_scan_records_its_own_numbers():
     meter = RecordingMeter()
     ScanMetricsHandler(meter).emit(scan_record())
 
-    assert meter.instruments["modelguard.scan.completed"].calls == [(1, {"dry_run": "false"})]
-    assert meter.instruments["modelguard.scan.findings"].calls == [(2, {"dry_run": "false"})]
-    assert meter.instruments["modelguard.scan.detect.duration"].calls == [
+    assert meter.instruments["janus.scan.completed"].calls == [(1, {"dry_run": "false"})]
+    assert meter.instruments["janus.scan.findings"].calls == [(2, {"dry_run": "false"})]
+    assert meter.instruments["janus.scan.detect.duration"].calls == [
         (350, {"dry_run": "false"})
     ]
 
@@ -153,7 +153,7 @@ def test_a_dry_run_is_labelled_rather_than_dropped():
     meter = RecordingMeter()
     ScanMetricsHandler(meter).emit(scan_record(dry_run="true"))
 
-    assert meter.instruments["modelguard.scan.completed"].calls == [(1, {"dry_run": "true"})]
+    assert meter.instruments["janus.scan.completed"].calls == [(1, {"dry_run": "true"})]
 
 
 def test_a_log_record_that_is_not_a_completed_scan_is_ignored():
@@ -170,7 +170,7 @@ def test_a_log_record_that_is_not_a_completed_scan_is_ignored():
     setattr(phase, LOG_FIELDS, {"argos_phase": "sniffing", "urn": "urn:li:dataset:x"})
     handler.emit(phase)
 
-    assert meter.instruments["modelguard.scan.completed"].calls == []
+    assert meter.instruments["janus.scan.completed"].calls == []
 
 
 def test_a_broken_metric_call_cannot_take_the_scan_down(monkeypatch):
@@ -187,7 +187,7 @@ def test_a_broken_metric_call_cannot_take_the_scan_down(monkeypatch):
     def explode(*_: object, **__: object) -> None:
         raise RuntimeError("collector is on fire")
 
-    monkeypatch.setattr(meter.instruments["modelguard.scan.completed"], "add", explode)
+    monkeypatch.setattr(meter.instruments["janus.scan.completed"], "add", explode)
     handler.emit(scan_record())
 
     assert len(handled) == 1

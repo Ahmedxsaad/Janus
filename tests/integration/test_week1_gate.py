@@ -1,7 +1,7 @@
 """The Week 1 kill-criterion, as an executable gate.
 
 docs/plan/02-implementation-plan.md section 3 states the gate in prose: by the end
-of Week 1 ModelGuard must be able to (a) programmatically read column-level ML
+of Week 1 Janus must be able to (a) programmatically read column-level ML
 lineage and (b) write one incident plus one structured property back. If it
 cannot, the project pivots to MigrationCopilot.
 
@@ -36,16 +36,16 @@ from datahub.metadata.schema_classes import (
     UpstreamLineageClass,
 )
 
-from modelguard.client import DataHubConnection, DataHubConnectionError, connect
-from modelguard.seed import graph_spec as spec
-from modelguard.seed.seed_ml_graph import SeedResult, seed_ml_graph
-from modelguard.writeback.incidents import (
+from janus.client import DataHubConnection, DataHubConnectionError, connect
+from janus.seed import graph_spec as spec
+from janus.seed.seed_ml_graph import SeedResult, seed_ml_graph
+from janus.writeback.incidents import (
     INCIDENT_ON_RELATIONSHIP,
     IncidentWrite,
     find_active_incident,
     raise_incident,
 )
-from modelguard.writeback.properties import (
+from janus.writeback.properties import (
     RISK_FLAGS,
     RUN_ID,
     TRUST_SCORE,

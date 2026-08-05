@@ -1,1 +1,1 @@
-"""Tests for the declaration readers under modelguard/adapters/."""
+"""Tests for the declaration readers under janus/adapters/."""

@@ -15,15 +15,15 @@ reads across it.
 
 | Ask | What the skill runs | What it answers |
 | --- | --- | --- |
-| "Which models does this table put at risk?" | `modelguard scan --table <t>` | Every model downstream of a stale table, and which of them are live |
-| "Check this model for target leakage" | `modelguard scan --model <m>` | Which feature leaks, and the exact column chain that proves it |
-| "Did this model's input schema drift?" | `modelguard scan --model <m>` | Columns added, dropped or retyped since the model was trained |
-| "Guard this table" | `modelguard scan --table <t> --review` | Writes an incident, a freshness assertion and an impact report back to DataHub, after you approve each one |
-| "What can you even check here?" | `modelguard inventory` | Per model: what is checkable and what metadata is missing |
+| "Which models does this table put at risk?" | `janus scan --table <t>` | Every model downstream of a stale table, and which of them are live |
+| "Check this model for target leakage" | `janus scan --model <m>` | Which feature leaks, and the exact column chain that proves it |
+| "Did this model's input schema drift?" | `janus scan --model <m>` | Columns added, dropped or retyped since the model was trained |
+| "Guard this table" | `janus scan --table <t> --review` | Writes an incident, a freshness assertion and an impact report back to DataHub, after you approve each one |
+| "What can you even check here?" | `janus inventory` | Per model: what is checkable and what metadata is missing |
 
 ## Why the detection is not a prompt
 
-Detection is deterministic Python in the `modelguard` package. This skill is the
+Detection is deterministic Python in the `janus` package. This skill is the
 operator's guide to it: it never asks a language model whether a finding exists.
 A leakage verdict is a graph traversal with the column chain as its evidence, so
 it is the same answer twice and it survives someone asking "how do you know".
@@ -38,7 +38,7 @@ and the benchmark is the only reason to believe a recall number.
 - A DataHub instance (OSS Quickstart is enough; nothing here needs Cloud)
 - `DATAHUB_GMS_URL`, and `DATAHUB_GMS_TOKEN` if the instance has metadata
   service authentication enabled
-- The `modelguard` CLI on PATH
+- The `janus` CLI on PATH
 
 No LLM key is required, and no particular vendor: without one, deterministic
 template prose is written instead and detection is byte-identical either way.

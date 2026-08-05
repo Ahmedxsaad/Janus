@@ -15,7 +15,7 @@ __pycache__/
 .github/
 
 # Personal and machine-specific. Configuration reaches a container through
-# --env-file or -e at run time, never baked into the image (modelguard/CLAUDE.md,
+# --env-file or -e at run time, never baked into the image (janus/CLAUDE.md,
 # no defaults for identity values).
 .env
 .claude/

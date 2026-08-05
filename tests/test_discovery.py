@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from datahub.configuration.common import GraphError
 
-from modelguard.discovery import search_model_urns
+from janus.discovery import search_model_urns
 
 from .conftest import FakeClient, FakeGraph, make_connection
 

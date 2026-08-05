@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from modelguard.render import AI_RMF_SUBCATEGORIES, CROSSWALK
+from janus.render import AI_RMF_SUBCATEGORIES, CROSSWALK
 
 from .test_argos import _frames
 

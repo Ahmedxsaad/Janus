@@ -8,9 +8,9 @@ P2 = do during Weeks 1-2, P3 = nice to have.
 Status as of 2026-07-22 (D-010, updated after a docs audit found P2-3/P2-4 had
 landed unlogged):
 - Adopted and done: P1-2 (pyproject), P1-3 (Python pin, landed as 3.11 not 3.12),
-  P1-4 (ruff, mypy, pre-commit), P2-3 (modelguard/models.py is the shared
-  pydantic contract every layer reads/writes), P2-4 (modelguard/config.py plus
-  the modelguard/env.py single-entry-point rule).
+  P1-4 (ruff, mypy, pre-commit), P2-3 (janus/models.py is the shared
+  pydantic contract every layer reads/writes), P2-4 (janus/config.py plus
+  the janus/env.py single-entry-point rule).
 - Adopted in spirit: P2-2, as a marked integration test rather than a separate
   script (D-009).
 - Adopted and done, later: P2-1 (GitHub Actions CI on every push and pull
@@ -20,13 +20,13 @@ landed unlogged):
 - Still open: P1-1, P3-1 through P3-4.
 - Adopted and done, later: P2-5 (structured logging with run_id, 2026-08-01).
   run_id already threaded through every write and dedup key (D-013,
-  modelguard/CLAUDE.md rule 4); modelguard/logs.py adds the JSON logger behind
-  `MODELGUARD_LOG_FORMAT=json`, and `_log_scan` now assembles its facts once and
+  janus/CLAUDE.md rule 4); janus/logs.py adds the JSON logger behind
+  `JANUS_LOG_FORMAT=json`, and `_log_scan` now assembles its facts once and
   renders them twice (logfmt in the message, structured fields on the record) so
   the human line and the indexed fields cannot drift.
 
-## P1-1. Rename the repository from DataHub to modelguard
-The repo is named DataHub but the project is ModelGuard. Judges land on the
+## P1-1. Rename the repository from DataHub to janus
+The repo is named DataHub but the project is Janus. Judges land on the
 repo page first; a repo named after the sponsor's product is confusing and
 weakens Submission Quality. The About section must also show the Apache 2.0
 license and a one-line pitch. Rename early, before links spread.
@@ -34,7 +34,7 @@ Effort: minutes.
 
 ## P1-2. pyproject.toml instead of requirements.txt
 One file for packaging, pinned dependencies, and tool config (pytest, ruff,
-mypy), plus a console entry point so `modelguard scan` works after
+mypy), plus a console entry point so `janus scan` works after
 `pip install -e .` instead of `python -m`. The plan's requirements.txt was
 kept for now to match the plan; migrating before any code lands is free,
 migrating later is churn.
