@@ -69,13 +69,9 @@ class TestVerifyCoverage:
     def test_a_survivor_matching_a_verdicts_prefix_is_assigned_to_it(self):
         verdicts = (Verdict("janus.detect.leakage.x_a", "gap", "because"),)
 
-        by_verdict = _verify_coverage(
-            ["janus.detect.leakage.x_a__mutmut_1"], verdicts=verdicts
-        )
+        by_verdict = _verify_coverage(["janus.detect.leakage.x_a__mutmut_1"], verdicts=verdicts)
 
-        assert by_verdict["janus.detect.leakage.x_a"] == [
-            "janus.detect.leakage.x_a__mutmut_1"
-        ]
+        assert by_verdict["janus.detect.leakage.x_a"] == ["janus.detect.leakage.x_a__mutmut_1"]
 
     def test_a_survivor_with_no_matching_verdict_stops_the_render(self):
         with pytest.raises(SystemExit, match=r"janus\.detect\.leakage\.x_unlisted"):

@@ -99,9 +99,7 @@ class TestScanModel:
             janus.scan_model()
 
     def test_a_model_name_is_resolved_and_scanned(self):
-        report = janus.scan_model(
-            model="credit_risk_v3", dry_run=True, conn=_conn(), config=CONFIG
-        )
+        report = janus.scan_model(model="credit_risk_v3", dry_run=True, conn=_conn(), config=CONFIG)
 
         assert report.model_urn == MODEL_URN
         assert report.dry_run is True
@@ -120,9 +118,7 @@ class TestScanModel:
 
     def test_the_checks_that_could_not_run_are_reported_not_hidden(self):
         """The API returns the same honest report the CLI prints, gaps included."""
-        report = janus.scan_model(
-            model="credit_risk_v3", dry_run=True, conn=_conn(), config=CONFIG
-        )
+        report = janus.scan_model(model="credit_risk_v3", dry_run=True, conn=_conn(), config=CONFIG)
 
         assert report.clean
         assert report.not_evaluated

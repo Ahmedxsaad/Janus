@@ -290,8 +290,7 @@ def test_recovery_resolves_incident_and_clears_model_risk_state():
     properties = graph.get_aspect(MODEL_URN, StructuredPropertiesClass)
     assert properties is not None
     assert all(
-        a.propertyUrn != "urn:li:structuredProperty:janus.risk_flags"
-        for a in properties.properties
+        a.propertyUrn != "urn:li:structuredProperty:janus.risk_flags" for a in properties.properties
     )
 
 

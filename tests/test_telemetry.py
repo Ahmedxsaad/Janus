@@ -143,9 +143,7 @@ def test_a_completed_scan_records_its_own_numbers():
 
     assert meter.instruments["janus.scan.completed"].calls == [(1, {"dry_run": "false"})]
     assert meter.instruments["janus.scan.findings"].calls == [(2, {"dry_run": "false"})]
-    assert meter.instruments["janus.scan.detect.duration"].calls == [
-        (350, {"dry_run": "false"})
-    ]
+    assert meter.instruments["janus.scan.detect.duration"].calls == [(350, {"dry_run": "false"})]
 
 
 def test_a_dry_run_is_labelled_rather_than_dropped():
