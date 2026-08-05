@@ -21,6 +21,8 @@ from datahub.metadata.schema_classes import (
     DeploymentStatusClass,
     DeprecationClass,
     GlobalTagsClass,
+    GlossaryTermAssociationClass,
+    GlossaryTermsClass,
     MLFeaturePropertiesClass,
     MLModelDeploymentPropertiesClass,
     MLModelPropertiesClass,
@@ -50,6 +52,7 @@ from tests.conftest import (
 )
 
 SENSITIVE_TAG = "urn:li:tag:modelguard.sensitive"
+SENSITIVE_TERM = "urn:li:glossaryTerm:Sensitive"
 CONFIG = ScanConfig()
 CLASSIFIED_CONFIG = ScanConfig(sensitive_tag_urns=(SENSITIVE_TAG,))
 
@@ -162,6 +165,29 @@ class TestWhenItSpeaks:
 
     def test_a_classified_column_in_the_training_table_is_reported_by_name(self):
         findings = _findings(_graph(classified="ssn"), CLASSIFIED_CONFIG)
+
+        assert [f.risk for f in findings] == [TableRisk.CLASSIFIED]
+        assert findings[0].evidence["classified_columns"] == "ssn"
+
+    def test_a_term_classification_is_honored_as_well_as_a_tag(self):
+        """Catalogs classify through either surface; many use only one.
+
+        A term-only config, checked against a column carrying no tag at all:
+        the tag this fixture also happens to write is not what this test is
+        proving, so the assertion has to reach past it and depend on the term.
+        """
+        graph = _graph(classified="ssn")
+        column_urn = str(SchemaFieldUrn(FEATURE_TABLE_URN, "ssn"))
+        graph.set_aspect(
+            column_urn,
+            GlossaryTermsClass(
+                terms=[GlossaryTermAssociationClass(urn=SENSITIVE_TERM)], auditStamp=None
+            ),
+        )
+        graph.set_aspect(column_urn, GlobalTagsClass(tags=[]))
+        term_only_config = ScanConfig(sensitive_term_urns=(SENSITIVE_TERM,))
+
+        findings = _findings(graph, term_only_config)
 
         assert [f.risk for f in findings] == [TableRisk.CLASSIFIED]
         assert findings[0].evidence["classified_columns"] == "ssn"
