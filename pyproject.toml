@@ -136,6 +136,19 @@ pet = [
 feast = [
     "feast>=0.65,<1",
 ]
+# `modelguard watch` exporting its own scan numbers over OTLP
+# (modelguard/telemetry.py). Deliberately three instruments and no traces: a
+# team that wants spans across the DataHub SDK's HTTP calls installs
+# opentelemetry-instrumentation-requests and gets them, rather than this project
+# shipping a second, worse copy of somebody else's product (09 section 3.3).
+#
+# The HTTP exporter rather than the gRPC one: it carries no grpcio wheel, and a
+# collector accepts OTLP over either. Both packages are pinned together because
+# the SDK and its exporters are released as one version and are not mixed.
+otel = [
+    "opentelemetry-sdk==1.44.0",
+    "opentelemetry-exporter-otlp-proto-http==1.44.0",
+]
 dev = [
     # The strict mypy hook scans every package module, including the optional
     # approval agent and MCP server. Keep the dev environment complete so a
@@ -145,6 +158,8 @@ dev = [
     "mcp==1.28.1",
     "mutmut==3.7.0",
     "mypy==2.2.0",
+    "opentelemetry-exporter-otlp-proto-http==1.44.0",
+    "opentelemetry-sdk==1.44.0",
     "pre-commit==4.6.0",
     "pytest==9.1.1",
     "ruff==0.15.21",

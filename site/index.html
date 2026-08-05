@@ -626,6 +626,25 @@ modelguard gate --model credit_risk_v3 --min-trust 80             # exit 1 if tr
 <pre><code>modelguard watch --table loans_raw           # poll one table
 modelguard watch --table loans_raw --pet     # and put Argos on the desktop
 </code></pre>
+
+  <h3>Its own numbers, where your other numbers are</h3>
+  <p>
+    Every completed scan already logs what an SLO is built from: findings
+    raised, writes made, and how long detection itself took, separate from the
+    poll interval and from DataHub's own indexing, because <code>watch</code>
+    controls neither. Set <code>MODELGUARD_OTEL_ENDPOINT</code> and the same
+    three numbers go to an OTLP collector as metrics. Unset, and nothing is
+    imported and nothing is exported.
+  </p>
+  <p>
+    Three instruments and no traces, on purpose. A team that wants spans across
+    the DataHub SDK's HTTP calls installs
+    <code>opentelemetry-instrumentation-requests</code> and gets them, which is
+    better than this project shipping a second, worse copy of it.
+  </p>
+<pre><code>pip install "modelguard-datahub[otel]"
+MODELGUARD_OTEL_ENDPOINT=http://localhost:4318/v1/metrics modelguard watch --table loans_raw
+</code></pre>
 </section>
 
 <section id="python">

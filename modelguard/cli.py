@@ -67,6 +67,7 @@ from modelguard.render import (
     report_json,
     write_job_summary,
 )
+from modelguard.telemetry import start_exporter
 from modelguard.writeback.coverage_history import CoverageEntry, append_entry
 from modelguard.writeback.link import (
     LinkError,
@@ -1138,6 +1139,19 @@ def watch(
         raise typer.Exit(code=2) from exc
     console.print(f"[dim]logging: {log_format}[/dim]")
 
+    # Installed here and nowhere else, for the reason the log handler is: this is
+    # the one entry point that runs unattended, and a library that started a
+    # background exporter would be exporting from an application that never asked
+    # for it. Unset means off, and a misconfigured endpoint fails now rather than
+    # after a week of exporting nowhere (T-17).
+    try:
+        metrics = start_exporter()
+    except ConfigError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+    if metrics is not None:
+        console.print("[dim]exporting scan metrics over OTLP[/dim]")
+
     conn, config, llm, table_urn, model_urn = _prepare(
         table=table,
         model=model,
@@ -1213,6 +1227,13 @@ def watch(
     finally:
         if argos is not None:
             argos.close()
+        if metrics is not None:
+            # Flush before shutdown: the reader batches on an interval, so a
+            # watch stopped by Ctrl-C would otherwise drop up to one interval of
+            # measurements, including the failures that most likely prompted
+            # somebody to stop it.
+            metrics.force_flush()
+            metrics.shutdown()
 
 
 @app.command()
