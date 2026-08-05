@@ -72,7 +72,7 @@ def change_log():
 
 
 @pytest.fixture(scope="module")
-def seeded(conn: DataHubConnection, config: ScanConfig) -> SeedResult:
+def seeded(conn: DataHubConnection, config: ScanConfig):
     """Seed the graph, and make sure the model carries a *recorded* link.
 
     The seeder attaches features directly, which leaves no
@@ -90,7 +90,55 @@ def seeded(conn: DataHubConnection, config: ScanConfig) -> SeedResult:
             feature_dataset_urn=result.feature_table_dataset,
             label_column_urn=result.label_column,
         )
-    return result
+    yield result
+    # Re-seed on the way out. `link` declares one feature per column of the
+    # feature table, which is more than the seeder attaches, and the benchmark
+    # scores its trials against this same graph: a module that leaves a wider
+    # feature set behind moves numbers in RESULTS.md that have nothing to do
+    # with it. The seed is idempotent, so this is a restore and not a second
+    # setup (tests/CLAUDE.md rule 2's shared-graph discipline).
+    seed_ml_graph(conn)
+
+
+def drop_features(
+    conn: DataHubConnection, model_urn: str, *, description: str | None = None
+) -> None:
+    """Rewrite the model's properties with no features, keeping everything else.
+
+    An ingest genuinely upserts the whole aspect, and that is the failure under
+    test. What it does *not* do is throw away the training runs and deployments,
+    because its own source supplies them; a test that blind-wrote a bare
+    ``MLModelPropertiesClass`` would strip the seeded model of both and quietly
+    break the freshness, drift, deprecation and degraded-mode trials the
+    benchmark runs against that same graph afterwards.
+
+    Which is precisely writeback/CLAUDE.md rule 9: a whole-list aspect is
+    read-merge-emit, never a blind write. It is written down for the product and
+    it holds for a test that writes to a shared graph just as hard, which is how
+    this function came to exist.
+    """
+    current = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
+    conn.graph.emit_mcp(
+        MetadataChangeProposalWrapper(
+            entityUrn=model_urn,
+            aspect=MLModelPropertiesClass(
+                mlFeatures=[],
+                description=description if description is not None else current.description,
+                trainingJobs=current.trainingJobs,
+                deployments=current.deployments,
+                customProperties=current.customProperties,
+                hyperParams=current.hyperParams,
+                trainingMetrics=current.trainingMetrics,
+                groups=current.groups,
+                version=current.version,
+                externalUrl=current.externalUrl,
+                type=current.type,
+                date=current.date,
+                created=current.created,
+                lastModified=current.lastModified,
+            ),
+        )
+    )
 
 
 def await_event(log: ChangeLog, *, urn: str, aspect_name: str):
@@ -117,12 +165,7 @@ def test_an_aspect_write_arrives_as_an_event_with_a_readable_payload(
     changed.
     """
     description = f"change-log probe {uuid.uuid4().hex[:8]}"
-    conn.graph.emit_mcp(
-        MetadataChangeProposalWrapper(
-            entityUrn=seeded.model,
-            aspect=MLModelPropertiesClass(description=description, mlFeatures=[]),
-        )
-    )
+    drop_features(conn, seeded.model, description=description)
 
     event = await_event(change_log, urn=seeded.model, aspect_name="mlModelProperties")
 
@@ -142,12 +185,7 @@ def test_an_ingest_shaped_write_gets_the_recorded_link_replayed(
     that `link` attached (D-074, F11). What is asserted is that the features come
     back without anybody running `link --all`.
     """
-    conn.graph.emit_mcp(
-        MetadataChangeProposalWrapper(
-            entityUrn=seeded.model,
-            aspect=MLModelPropertiesClass(mlFeatures=[]),
-        )
-    )
+    drop_features(conn, seeded.model)
     event = await_event(change_log, urn=seeded.model, aspect_name="mlModelProperties")
 
     relink = consider(conn, config, event)
