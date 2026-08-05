@@ -15,11 +15,12 @@
  * desktop window reserves: --danger is a live finding and --ok is a check that
  * ran and passed. Nothing else may use them.
  *
- * There are no gradients in the file at all. The floor the companion walks on
+ * There are no gradients in the file at all. The strip the companion stood on
  * used to be one, fading the page out behind him with a translucent wash that
- * followed the reader down the document; it is a drawn course of masonry now,
- * opaque where he stands and ending on a hard edge. The bubble needed opacity,
- * not a fade.
+ * followed the reader down the document. He is parked in the corner now, with a
+ * short drawn ledge under his feet and nothing else: the wash was there to make
+ * an opaque speech bubble readable wherever he stopped, and the answer to that
+ * was to stop putting him where the text is, not to fade the text out.
  *
  * The ornaments are the other thing this file places: an Ionic column, an arch,
  * a temple, a wreath. Janus is the god of doors and beginnings, and the page is
@@ -66,9 +67,10 @@
   --measure: 33rem;
   --max: 76rem;
 
-  /* How tall the companion strip is. Referenced by the page's bottom padding
-     too, so the last paragraph is never parked under the dog. */
-  --floor: 11rem;
+  /* The corner Argos occupies. The page reserves this much room on its right
+     so that nothing is ever laid out underneath him: a speech bubble is opaque,
+     and an opaque box over running text is the one thing it must never be. */
+  --corner: 15rem;
 }
 
 * {
@@ -356,9 +358,7 @@ pre code {
 .page {
   max-width: var(--max);
   margin: 0 auto;
-  /* The bottom pad is the companion strip plus a line: the closing paragraph
-     has to be readable with the dog standing in front of it. */
-  padding: 4.5rem 2rem calc(var(--floor) + 3rem);
+  padding: 4.5rem 2rem 5rem;
   display: grid;
   grid-template-columns: 12rem minmax(0, 1fr) 11rem;
   gap: 3.4rem;
@@ -686,51 +686,31 @@ pre:hover .copy,
 /* --- the companion ------------------------------------------------------- */
 
 /*
- * Argos does not sit in the document any more. He stands on a fixed strip along
- * the bottom of the window and walks to a new place, in a new pose, saying a
- * new line, each time the reader arrives at a new section. One dog for the
- * whole page rather than nine of them talking to an empty room.
+ * Argos sits in the bottom right corner and stays there.
  *
- * pointer-events: none is load-bearing. The strip covers the bottom of every
- * screen, so without it the dog would eat the clicks on whatever is under him.
+ * He used to walk a strip across the full width of the window, which put his
+ * speech bubble wherever he happened to stop, and a bubble is opaque, so it
+ * covered whatever paragraph was behind it. Parking him solves half of that;
+ * the other half is `body`'s reserved right-hand gutter below, without which a
+ * corner is still somewhere the document is laid out.
  *
- * There is no gradient here any more. The strip used to fade the page out
- * behind him with a translucent wash, which followed the reader down the
- * document as a grey smear over their own text. It is a course of masonry
- * instead: a drawn step the character stands on, opaque where he is and ending
- * on a hard edge rather than a fade. Opacity is what a bubble drawn over body
- * text actually needs; the wash was only ever an apology for not drawing a
- * floor.
+ * He is still not a decoration on a timer: the pose and the line both come from
+ * the section being read, so he changes as the reader moves down the page.
+ *
+ * pointer-events: none is load-bearing. He sits over the page, so without it he
+ * would eat the clicks on whatever is under him.
  */
 .companion {
   position: fixed;
-  left: 0;
   right: 0;
   bottom: 0;
-  height: var(--floor);
+  width: var(--corner);
+  height: var(--corner);
   z-index: 40;
   pointer-events: none;
 }
 
-/* The step: masonry along the bottom, and the page ends on its top edge. */
-.companion .floor {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2.6rem;
-  background: var(--paper);
-  border-top: 1px solid var(--rule);
-}
-
-.companion .floor canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  opacity: 0.85;
-}
-
-.companion > canvas {
+.companion canvas {
   position: absolute;
   inset: 0;
   display: block;
@@ -802,13 +782,13 @@ pre:hover .copy,
   display: none;
 }
 
-@media (min-width: 92rem) {
+@media (min-width: 104rem) {
   .colonnade {
     display: block;
     position: fixed;
     top: 0;
     bottom: 0;
-    width: 7rem;
+    width: 6rem;
     z-index: 1;
     pointer-events: none;
     opacity: 0.5;
@@ -820,6 +800,11 @@ pre:hover .copy,
 
   .colonnade.right {
     right: 0;
+    /* Stops above the corner Argos occupies, so he is not standing in front of
+       a column with his ledge cutting across it. The colonnade is a tile
+       repeated from the top and is clipped by the window anyway, so ending it
+       early reads no differently. */
+    bottom: var(--corner);
   }
 
   .colonnade canvas {
@@ -855,7 +840,7 @@ pre:hover .copy,
   height: 100%;
 }
 
-@media (max-width: 74rem) {
+@media (max-width: 62rem) {
   .hero .standing {
     display: none;
   }
@@ -866,7 +851,7 @@ pre:hover .copy,
 footer {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 2.5rem 2rem calc(var(--floor) + 2rem);
+  padding: 2.5rem 2rem 3rem;
   border-top: 1px solid var(--rule);
   color: var(--faint);
   font-size: 0.84rem;
@@ -958,14 +943,26 @@ footer {
   }
 }
 
-/* A phone this narrow has no room for a dog and a bubble beside him without one
-   of the two being unreadable, and the document is the thing that has to work.
-   The script also stops animating when the canvas has no box. */
-@media (max-width: 28rem) {
-  :root {
-    --floor: 0rem;
+/*
+ * The reserved gutter, and the width below which there is no reserving it.
+ *
+ * Above the breakpoint the page is laid out inside `body`'s content box, which
+ * stops short of the corner, so the bubble has somewhere to be that is not on
+ * top of a paragraph. Below it, reserving a sixth of a narrow window would cost
+ * the document more than the companion is worth, so he goes rather than the
+ * text: the script also stops animating once the canvas has no box.
+ */
+@media (min-width: 70rem) {
+  body {
+    padding-right: var(--corner);
   }
 
+  .topbar {
+    padding-right: 2rem;
+  }
+}
+
+@media (max-width: 70rem) {
   .companion {
     display: none;
   }

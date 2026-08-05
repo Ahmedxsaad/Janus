@@ -25,7 +25,7 @@
   </nav>
 </header>
 
-<div class="hero" data-pose="idle" data-x="0.04"
+<div class="hero" data-pose="idle"
      data-say="I AM ARGOS. I WATCH THE COLUMNS BETWEEN YOUR WAREHOUSE AND YOUR MODELS.">
   <span class="eyebrow">Data-to-model reliability for DataHub</span>
   <h1>The missing CI for your ML supply chain</h1>
@@ -139,7 +139,7 @@
 
 <main>
 
-<section id="what" data-relic="arch" data-pose="sniff" data-x="0.30"
+<section id="what" data-relic="arch" data-pose="sniff"
          data-say="EVERY FINDING I REPORT COMES WITH THE COLUMN CHAIN THAT PROVES IT.">
   <h2>What it does</h2>
   <p>
@@ -235,7 +235,7 @@
   </p>
 </section>
 
-<section id="measured" data-relic="laurel" data-pose="search" data-x="0.62"
+<section id="measured" data-relic="laurel" data-pose="search"
          data-say="I DO NOT ASK YOU TO TRUST MY SCORE. I MEASURE WHETHER MY OWN BENCHMARK COULD EVEN CATCH ME BEING WRONG.">
   <h2>Measured, not claimed</h2>
   <p>
@@ -358,7 +358,7 @@
   </p>
 </section>
 
-<section id="install" data-relic="amphora" data-pose="idle" data-x="0.10"
+<section id="install" data-relic="amphora" data-pose="idle"
          data-say="INSTALLED? GOOD. NOW LET US SEE WHAT YOUR GRAPH ALREADY KNOWS.">
   <h2>Install</h2>
   <p>
@@ -391,7 +391,7 @@ cp .env.example .env     # DATAHUB_GMS_URL=http://localhost:8080
 </code></pre>
 </section>
 
-<section id="quickstart" data-relic="arch" data-pose="sniff" data-x="0.45"
+<section id="quickstart" data-relic="arch" data-pose="sniff"
          data-say="PLANT ONE SILENT FAILURE. WATCH ME FIND IT, THEN WATCH ME GO QUIET AGAIN.">
   <h2>Quickstart: watch a failure fire and clear</h2>
   <p>
@@ -422,7 +422,7 @@ janus scan --table loans_raw             # no finding, no writes
   </div>
 </section>
 
-<section id="inventory" data-relic="scroll" data-pose="tilt" data-x="0.72"
+<section id="inventory" data-relic="scroll" data-pose="tilt"
          data-say="MOST MODELS COME BACK NOT CHECKED. I WILL NOT CALL A THING HEALTHY THAT I COULD NOT MEASURE.">
   <h2>inventory: what can already be checked</h2>
   <p>
@@ -526,7 +526,7 @@ janus scan --table loans_raw             # no finding, no writes
 </code></pre>
 </section>
 
-<section id="link" data-relic="aqueduct" data-pose="scribble" data-x="0.18"
+<section id="link" data-relic="aqueduct" data-pose="scribble"
          data-say="LINKED. NOW EVERY FEATURE KNOWS THE EXACT COLUMN IT CAME FROM.">
   <h2>link: join the model to its columns</h2>
   <p>
@@ -645,7 +645,7 @@ janus scan --all-models     # audit the whole catalog
   </p>
 </section>
 
-<section id="scan" data-relic="owl" data-pose="alert" data-collar="r" data-x="0.55"
+<section id="scan" data-relic="owl" data-pose="alert" data-collar="r"
          data-say="FINDING! LOANS_RAW WENT STALE AND CREDIT_RISK_V3 STILL EATS IT. RED COLLAR MEANS LIVE.">
   <h2>scan: detect, explain, write back</h2>
 <pre><code>janus scan --table loans_raw       # start from a table, walk into the models
@@ -700,7 +700,7 @@ janus scan --model churn_model --review    # pause, show, write only what you ap
 </code></pre>
 </section>
 
-<section id="detectors" data-relic="tripod" data-pose="search" data-x="0.80"
+<section id="detectors" data-relic="tripod" data-pose="search"
          data-say="SIX QUESTIONS. EACH ONE SAYS WHAT IT NEEDED WHEN IT COULD NOT ANSWER.">
   <h2>The six checks, and what each one needs</h2>
   <p>
@@ -822,7 +822,7 @@ janus-scenario --scenario sensitive-source --revert
 </code></pre>
 </section>
 
-<section id="counterfactuals" data-relic="key" data-pose="tug" data-x="0.14"
+<section id="counterfactuals" data-relic="key" data-pose="tug"
          data-say="I DO NOT ONLY BARK. I NAME THE SMALLEST CHANGE THAT WOULD SHUT ME UP, AND THE BENCHMARK MAKES IT AND CHECKS.">
   <h2>The fix, not just the fault</h2>
   <p>
@@ -906,7 +906,7 @@ janus-scenario --scenario sensitive-source --revert
   </p>
 </section>
 
-<section id="gate" data-relic="arch" data-pose="sit" data-x="0.50"
+<section id="gate" data-relic="arch" data-pose="sit"
          data-say="A RED BUILD BEATS A RED DASHBOARD. CATCH IT BEFORE IT MERGES.">
   <h2>gate: block a bad model before it merges</h2>
   <p>
@@ -955,7 +955,7 @@ janus gate --model credit_risk_v3 --min-trust 80             # exit 1 if trust &
   </p>
 </section>
 
-<section id="watch" data-relic="owl" data-pose="idle" data-x="0.78"
+<section id="watch" data-relic="owl" data-pose="idle"
          data-say="I KEEP LOOKING. AN INGEST THAT QUIETLY DROPS YOUR LINK IS THE FAILURE NOTHING ELSE REPORTS.">
   <h2>watch: keep looking</h2>
   <p>
@@ -1015,7 +1015,7 @@ janus watch --events --model credit_risk_v3
 </code></pre>
 </section>
 
-<section id="python" data-relic="scroll" data-pose="wag" data-x="0.24"
+<section id="python" data-relic="scroll" data-pose="wag"
          data-say="TWO FUNCTIONS. THAT IS THE WHOLE SUPPORTED SURFACE. PIN TO THEM.">
   <h2>Call it from your training script</h2>
   <p>
@@ -1062,7 +1062,7 @@ if not report.clean:
   </p>
 </section>
 
-<section id="json" data-relic="amphora" data-pose="idle" data-x="0.60"
+<section id="json" data-relic="amphora" data-pose="idle"
          data-say="EVERYTHING I SAY IS ALSO A DOCUMENT YOU CAN PIPE INTO SOMETHING ELSE.">
   <h2>JSON output</h2>
   <p>
@@ -1080,7 +1080,7 @@ janus scan --model credit_risk_v3 --format json | jq '.findings[].counterfactual
 </code></pre>
 </section>
 
-<section id="mcp" data-relic="tripod" data-pose="tilt" data-x="0.86"
+<section id="mcp" data-relic="tripod" data-pose="tilt"
          data-say="ASK ME ANYTHING IN PLAIN LANGUAGE. I STILL WILL NOT WRITE A THING.">
   <h2>Ask it, do not type it</h2>
 <pre><code>pip install "janus-datahub[mcp]"
@@ -1105,7 +1105,7 @@ janus-mcp   # serves check_leakage, check_freshness, check_gate over stdio
   </p>
 </section>
 
-<section id="argos" data-relic="helmet" data-pose="wag" data-x="0.36"
+<section id="argos" data-relic="helmet" data-pose="wag"
          data-say="DOUBLE CLICK A FINDING AND I WALK THE BLAST RADIUS, ONE HOP PER GRAPH HOP.">
   <h2>Argos, the pet on your desktop</h2>
 <pre><code>pip install "janus-datahub[pet]"      # macOS and Windows; Linux: the .deb or
@@ -1148,7 +1148,7 @@ janus companion                       # everything wrong with the assets you own
   </div>
 </section>
 
-<section id="docker" data-relic="amphora" data-pose="idle" data-x="0.66"
+<section id="docker" data-relic="amphora" data-pose="idle"
          data-say="NO PYTHON ON THE MACHINE? RUN ME IN THE NETWORK DATAHUB ALREADY BUILT.">
   <h2>Run it without a Python install</h2>
 <pre><code>datahub docker quickstart              # once: builds DataHub's own stack
@@ -1164,7 +1164,7 @@ docker compose up janus-mcp       # long-running, stdio
   </p>
 </section>
 
-<section id="flags" data-relic="column" data-pose="tilt" data-x="0.40"
+<section id="flags" data-relic="column" data-pose="tilt"
          data-say="EVERY FLAG I TAKE, WRITTEN DOWN. NOTHING OF MINE LIVES ONLY INSIDE HELP.">
   <h2>Every flag, in one table</h2>
   <p>
@@ -1282,7 +1282,7 @@ janus-mcp          # the read-only MCP server, over stdio
 </code></pre>
 </section>
 
-<section id="config" data-relic="column" data-pose="scribble" data-x="0.12"
+<section id="config" data-relic="column" data-pose="scribble"
          data-say="MISSING MEANS MISSING. I WILL NOT GUESS AT A SERVER, A KEY OR A TAXONOMY.">
   <h2>Configuration</h2>
   <p>
@@ -1386,7 +1386,7 @@ JANUS_COMPANION_OWNER=           # whose assets janus companion sweeps
   </p>
 </section>
 
-<section id="security" data-relic="helmet" data-pose="alert" data-x="0.46"
+<section id="security" data-relic="helmet" data-pose="alert"
          data-say="A SUCCESSFUL INJECTION STILL CANNOT INVENT A FINDING. IT ARRIVES AFTER I HAVE ALREADY DECIDED.">
   <h2>Security model</h2>
   <ul>
@@ -1450,7 +1450,7 @@ JANUS_COMPANION_OWNER=           # whose assets janus companion sweeps
   </div>
 </section>
 
-<section id="selfobserve" data-relic="owl" data-pose="sniff" data-x="0.72"
+<section id="selfobserve" data-relic="owl" data-pose="sniff"
          data-say="I WRITE MY OWN RUNS INTO THE GRAPH TOO. AN AGENT YOU CANNOT AUDIT IS ONE MORE PIPELINE NOBODY CATALOGUED.">
   <h2>Janus inside the graph it guards</h2>
   <p>
@@ -1494,7 +1494,7 @@ JANUS_COMPANION_OWNER=           # whose assets janus companion sweeps
   </div>
 </section>
 
-<section id="crosswalk" data-relic="temple" data-pose="sit" data-x="0.30"
+<section id="crosswalk" data-relic="temple" data-pose="sit"
          data-say="THIS IS A MAPPING. IT IS NOT A CLAIM THAT YOU COMPLY WITH ANYTHING.">
   <h2>Where this fits a governance framework</h2>
   <p>
@@ -1534,7 +1534,7 @@ JANUS_COMPANION_OWNER=           # whose assets janus companion sweeps
   </ul>
 </section>
 
-<section id="documents" data-relic="scroll" data-pose="scribble" data-x="0.56"
+<section id="documents" data-relic="scroll" data-pose="scribble"
          data-say="I GENERATE THE PAPERWORK FROM THE GRAPH. A HAND WRITTEN MODEL CARD IS WRONG BY TUESDAY.">
   <h2>Three documents, generated instead of maintained</h2>
 <pre><code>janus model-card    --model credit_risk_v3   # prints; --write publishes it to DataHub
@@ -1594,7 +1594,7 @@ janus feature-card  --model credit_risk_v3   # one Data Card per feature
   </p>
 </section>
 
-<section id="links" data-relic="column" data-pose="sleep" data-x="0.88"
+<section id="links" data-relic="column" data-pose="sleep"
          data-say="NOTHING BROKEN RIGHT NOW. I WILL BARK IF THAT CHANGES.">
   <h2>Everything else</h2>
   <div class="scroller">
@@ -1630,7 +1630,6 @@ janus feature-card  --model credit_risk_v3   # one Data Card per feature
 <!-- The strip Argos walks along. Decorative: everything he says is said again
      in the prose beside him, so a screen reader is told to skip it. -->
 <div class="companion" aria-hidden="true">
-  <div class="floor"><canvas data-piece="stylobate" data-tile="x" data-scale="2"></canvas></div>
   <canvas id="argos-dog"></canvas>
 </div>
 

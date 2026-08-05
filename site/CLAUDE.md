@@ -30,19 +30,24 @@ constraint the whole file layout here answers to (D-139).
 3. **No framework, no bundler, no web font, no CDN.** The bubble text is a
    glyph table drawn as rects, so it is made of the same pixels the dog is.
 4. **A beat is markup, not code.** Argos says what a section carries in
-   `data-say`, in the pose named by `data-pose`, standing at `data-x`. Its
-   ornament is `data-relic`. Adding a beat is adding attributes; the tests check
-   that the pose exists, that every character has a glyph, and that the ornament
-   is one the art defines.
-5. **Red is a live finding here too.** `data-collar="r"` belongs on the beat
+   `data-say`, in the pose named by `data-pose`; its ornament is `data-relic`.
+   Adding a beat is adding attributes; the tests check that the pose exists,
+   that every character has a glyph, and that the ornament is one the art
+   defines. There is no `data-x`: he is parked, and the sections move past him.
+5. **Argos never stands where the document is laid out.** He is fixed in the
+   corner and `body` reserves that corner with a `padding-right`. A speech
+   bubble is opaque, so anywhere else it covers a paragraph; that is what the
+   old walking strip did, and no amount of positioning fixes it while the two
+   share the same space (D-140).
+6. **Red is a live finding here too.** `data-collar="r"` belongs on the beat
    about a finding and nowhere else, for the same reason the window only paints
    it off an event (argos/CLAUDE.md rule 6). The ornaments' oxblood is held to
    the same line: it is the crest on one helmet and nothing else.
-6. **An ornament never shares a column with content.** The rail is its own grid
+7. **An ornament never shares a column with content.** The rail is its own grid
    column. Floated into the text it sits politely beside a paragraph and then
    lands on top of the next wide table, because the prose is capped at a reading
    measure and the tables and code blocks are not.
-7. This page documents the shipped product, so what it claims has to be true of
+8. This page documents the shipped product, so what it claims has to be true of
    the released package. When a command, a flag or an extra changes, this page
    changes in the same commit as the README.
 
@@ -61,5 +66,6 @@ constraint the whole file layout here answers to (D-139).
 | 2026-08-05 | Claude (for Ghassen Naouar) | The watch section gains `--events`, and states the failure it exists for rather than the feature: an ingest silently drops a link, every check then reports not-evaluated on a model that was checked yesterday, and nothing errors (D-132, T-20) |
 | 2026-08-05 | Claude (for Ghassen Naouar) | Package and brand identifiers renamed repo-wide: paths, imports, and prose all match the current name and distribution name (D-136) |
 | 2026-08-05 | Claude (for Ghassen Naouar) | The page is set in autumn (ivory, dark brown, caramel, oxblood) and one Argos walks it: position, pose, collar and line are declared per section as `data-x` / `data-pose` / `data-collar` / `data-say`, replacing the nine stacked canvases. `vercel.json` at the repository root keeps rule 1 workable in the deployment, where a `site/` root would put `../argos/` outside it and the dog would silently never appear (D-137) |
-| 2026-08-05 | Claude (for Ghassen Naouar) | Rule 7's promise extended below the command level: a `#flags` section covers every option of every command, the configuration section covers all 28 `.env` keys rather than 13, and the versioned-model sweep behaviour gets the prose it never had. `tests/test_docs.py` enforces a command, nothing enforces an option, so this one is still kept by remembering (D-138) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Rule 8's promise extended below the command level: a `#flags` section covers every option of every command, the configuration section covers all 28 `.env` keys rather than 13, and the versioned-model sweep behaviour gets the prose it never had. `tests/test_docs.py` enforces a command, nothing enforces an option, so this one is still kept by remembering (D-138) |
 | 2026-08-05 | Claude (for Ghassen Naouar) | The dog was missing in production and broken everywhere: the page fetched `../argos/`, which the `site/`-rooted deployment cannot reach, and `<canvas id="argos">` collided with `<section id="argos">` so querySelector returned the section. Art is now generated into `pixels.js` and rule 1 forbids reaching outside this directory at all. The bottom strip's translucent wash is gone, replaced by a drawn masonry course, and the page is decorated with pixel Roman ornaments placed where no content reaches (D-139) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Argos is parked in the bottom right instead of walking a strip across the window, because a walking dog puts an opaque speech bubble wherever he stops and it covered the documentation behind it. The page reserves that corner so the bubble has somewhere to be that is not on top of a paragraph, and the full-width masonry course shrinks to a short ledge under his feet. He still changes pose and line with the section being read (D-140) |

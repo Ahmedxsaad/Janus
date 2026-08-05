@@ -32,16 +32,19 @@ def _font() -> dict[str, str]:
 
 
 def _pose_frames() -> dict[str, list[str]]:
-    """The frame names each pose cycles through, plus the walk cycle."""
+    """The frame names each pose cycles through.
+
+    There is no walk cycle here any more: the companion is parked in the corner
+    and the sections move past him instead, so the only animation left is the
+    pose he holds while a section is being read (D-140).
+    """
     block = re.search(r"const POSES = \{(.*?)\n  \};", GUIDE, re.S)
     assert block, "the pose table moved"
     poses = {
         name: re.findall(r'"([a-z_]+)"', frames)
         for name, frames in re.findall(r"(\w+): \[(.*?)\],", block.group(1))
     }
-    walk = re.search(r"const WALK = \[(.*?)\];", GUIDE, re.S)
-    assert walk, "the walk cycle moved"
-    poses["walk"] = re.findall(r'"([a-z_]+)"', walk.group(1))
+    assert poses, "the pose table is empty: this test cannot check anything"
     return poses
 
 
