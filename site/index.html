@@ -4,32 +4,35 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Janus - the missing CI for your ML supply chain</title>
-<meta name="description" content="Janus reads DataHub column-level and ML lineage to catch target leakage, stale upstreams and training/serving drift, and writes incidents, trust scores and assertions back into the graph.">
+<meta name="description" content="Janus reads DataHub column-level and ML lineage to catch target leakage, stale upstreams and training/serving drift, and writes incidents, trust scores, counterfactual fixes and assertions back into the graph.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <header class="topbar">
-  <span class="brand">Model<em>Guard</em></span>
+  <span class="brand">Ja<em>nus</em></span>
   <span class="for">for DataHub</span>
   <nav>
     <a href="#what">How it works</a>
     <a href="#measured">Benchmark</a>
     <a href="#quickstart">Quickstart</a>
     <a href="#detectors">Checks</a>
-    <a href="#argos">Argos</a>
+    <a href="#counterfactuals">Fixes</a>
     <a href="https://github.com/Ahmedxsaad/DataHub">GitHub</a>
   </nav>
 </header>
 
-<div class="hero">
+<div class="hero" data-pose="idle" data-x="0.04"
+     data-say="I AM ARGOS. I WATCH THE COLUMNS BETWEEN YOUR WAREHOUSE AND YOUR MODELS.">
   <span class="eyebrow">Data-to-model reliability for DataHub</span>
   <h1>The missing CI for your ML supply chain</h1>
   <p class="tagline">
     A model breaks because a column three joins upstream changed, and nothing
     connects the two. Janus writes that connection into DataHub, then reads
     across it: target leakage, stale upstreams, training-serving drift, and the
-    two governance checks nothing else joins back to a model.
+    three governance checks nothing else joins back to a model. Every finding
+    arrives with the column chain that proves it and the smallest change that
+    would clear it.
   </p>
   <div class="cta">
     <a class="go" href="#quickstart">Run the quickstart</a>
@@ -44,12 +47,12 @@
     <span>precision naming which feature leaks</span>
   </div>
   <div class="figure">
-    <b>Five</b>
+    <b>Six</b>
     <span>checks, each with the column chain as proof</span>
   </div>
   <div class="figure">
-    <b>Zero</b>
-    <span>duplicate writes after a rerun, measured</span>
+    <b>0.76</b>
+    <span>mutation score on the detectors, every survivor listed</span>
   </div>
   <div class="figure">
     <b>Zero</b>
@@ -68,24 +71,30 @@
   stale for <span class="c-warn">30.0h</span> against a 6.0h SLA
   blast radius: 1 dataset, 2 features, 1 model
     <span class="c-dim">-</span> Credit Risk v3 <span class="c-bad">(critical)</span> <span class="c-warn">LIVE</span>, 3 hops
+  <span class="c-key">Any one of these clears this finding:</span>
+    <span class="c-dim">-</span> loans_raw refreshes inside its 6.0h SLA
+    <span class="c-dim">-</span> Credit Risk v3 stops consuming loans_raw
 
 <span class="c-key">Trust scores</span>
-  Credit Risk v3  <span class="c-warn">35/100</span> <span class="c-dim">(at-risk)</span>
-  <span class="c-dim">freshness_lag, missing_owner, upstream_failure</span>
+  Credit Risk v3
+    100  starting
+    -40  upstream_failure: Stale upstream data in ecommerce.public.loans_raw
+    -15  freshness_lag: Stale upstream data in ecommerce.public.loans_raw
+    -10  missing_owner: nobody owns Credit Risk v3
+    ---
+     35  <span class="c-warn">at-risk</span>
 
 <span class="c-key">Wrote back</span>
   <span class="c-w">incident</span>          urn:li:incident:f49230b1
   <span class="c-w">assertion</span>         <span class="c-bad">FAILURE</span>, on the source table
   <span class="c-w">tagged models</span>     1 of 1 at risk
   <span class="c-w">impact report</span>     linked from the model
+  <span class="c-w">process run</span>       urn:li:dataProcessInstance:scan-cb2ef85ba9a8
 
 <span class="c-dim">run id: scan-cb2ef85ba9a8</span>
 </code></pre>
   </div>
 </div>
-
-<canvas class="beat hero-beat" data-pose="idle" data-scale="4" data-text-scale="3"
-        data-say="I AM ARGOS. I WATCH THE COLUMNS BETWEEN YOUR WAREHOUSE AND YOUR MODELS."></canvas>
 
 <div class="page">
 
@@ -100,6 +109,7 @@
   <a href="#link">link</a>
   <a href="#scan">scan</a>
   <a href="#detectors">The six checks</a>
+  <a href="#counterfactuals">The fix, not just the fault</a>
   <a href="#gate">gate</a>
   <a href="#watch">watch</a>
   <div class="group">Interfaces</div>
@@ -111,6 +121,7 @@
   <div class="group">Reference</div>
   <a href="#config">Configuration</a>
   <a href="#security">Security model</a>
+  <a href="#selfobserve">Janus in the graph</a>
   <a href="#crosswalk">NIST AI RMF</a>
   <a href="#documents">Model card, AI Act pack, feature cards</a>
   <a href="#links">Everything else</a>
@@ -118,7 +129,8 @@
 
 <main>
 
-<section id="what">
+<section id="what" data-pose="sniff" data-x="0.30"
+         data-say="EVERY FINDING I REPORT COMES WITH THE COLUMN CHAIN THAT PROVES IT.">
   <h2>What it does</h2>
   <p>
     DataHub holds two graphs that no other catalog holds together: column-level
@@ -142,56 +154,56 @@
          aria-label="Column-level lineage runs from a raw table through a staging column into a feature table. DataHub's ML graph holds the model and its training run. Nothing joins the two until janus link writes the edge from feature to source column.">
       <defs>
         <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-          <path d="M0,0 L10,5 L0,10 z" fill="#16181d"></path>
+          <path d="M0,0 L10,5 L0,10 z" fill="#2b1d13"></path>
         </marker>
         <marker id="ar-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-          <path d="M0,0 L10,5 L0,10 z" fill="#1b4de4"></path>
+          <path d="M0,0 L10,5 L0,10 z" fill="#9a5d21"></path>
         </marker>
       </defs>
 
       <!-- the two worlds -->
-      <rect x="6" y="6" width="392" height="196" rx="12" fill="#f7f7f5" stroke="#e4e4e1"></rect>
-      <text x="22" y="28" fill="#8a9099" font-family="ui-monospace,monospace" font-size="11" letter-spacing="1.4">WAREHOUSE GRAPH</text>
+      <rect x="6" y="6" width="392" height="196" rx="12" fill="#f2ead9" stroke="#e2d5bf"></rect>
+      <text x="22" y="28" fill="#a08b76" font-family="ui-monospace,monospace" font-size="11" letter-spacing="1.4">WAREHOUSE GRAPH</text>
 
-      <rect x="420" y="6" width="294" height="196" rx="12" fill="#f7f7f5" stroke="#e4e4e1"></rect>
-      <text x="436" y="28" fill="#8a9099" font-family="ui-monospace,monospace" font-size="11" letter-spacing="1.4">ML GRAPH</text>
+      <rect x="420" y="6" width="294" height="196" rx="12" fill="#f2ead9" stroke="#e2d5bf"></rect>
+      <text x="436" y="28" fill="#a08b76" font-family="ui-monospace,monospace" font-size="11" letter-spacing="1.4">ML GRAPH</text>
 
       <!-- warehouse chain -->
-      <rect x="26" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
-      <text x="85" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">loans_raw</text>
-      <text x="85" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">raw table</text>
+      <rect x="26" y="52" width="118" height="46" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect>
+      <text x="85" y="72" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="11">loans_raw</text>
+      <text x="85" y="88" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="10">raw table</text>
 
-      <rect x="166" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
-      <text x="225" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">stg_customers</text>
-      <text x="225" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">staging</text>
+      <rect x="166" y="52" width="118" height="46" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect>
+      <text x="225" y="72" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="11">stg_customers</text>
+      <text x="225" y="88" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="10">staging</text>
 
-      <rect x="18" y="130" width="274" height="46" rx="8" fill="#ffffff" stroke="#16181d"></rect>
-      <text x="155" y="150" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="10">customer_features.contract_renewed_flag</text>
-      <text x="155" y="166" text-anchor="middle" fill="#2f5d7c" font-family="ui-monospace,monospace" font-size="10">a column, not a table</text>
+      <rect x="18" y="130" width="274" height="46" rx="8" fill="#faf5ea" stroke="#2b1d13"></rect>
+      <text x="155" y="150" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">customer_features.contract_renewed_flag</text>
+      <text x="155" y="166" text-anchor="middle" fill="#9a5d21" font-family="ui-monospace,monospace" font-size="10">a column, not a table</text>
 
-      <path d="M144,75 L162,75" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
-      <path d="M225,98 L225,118 L160,118 L160,126" fill="none" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
+      <path d="M144,75 L162,75" stroke="#2b1d13" stroke-width="1.5" marker-end="url(#ar)"></path>
+      <path d="M225,98 L225,118 L160,118 L160,126" fill="none" stroke="#2b1d13" stroke-width="1.5" marker-end="url(#ar)"></path>
 
       <!-- ml side -->
-      <rect x="440" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
-      <text x="499" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">training run</text>
-      <text x="499" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">mlflow</text>
+      <rect x="440" y="52" width="118" height="46" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect>
+      <text x="499" y="72" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="11">training run</text>
+      <text x="499" y="88" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="10">mlflow</text>
 
-      <rect x="578" y="52" width="118" height="46" rx="8" fill="#ffffff" stroke="#d8d8d4"></rect>
-      <text x="637" y="72" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">credit_risk_v3</text>
-      <text x="637" y="88" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">live model</text>
+      <rect x="578" y="52" width="118" height="46" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect>
+      <text x="637" y="72" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="11">credit_risk_v3</text>
+      <text x="637" y="88" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="10">live model</text>
 
-      <rect x="508" y="130" width="118" height="46" rx="8" fill="#ffffff" stroke="#16181d"></rect>
-      <text x="567" y="150" text-anchor="middle" fill="#16181d" font-family="ui-monospace,monospace" font-size="11">mlFeature</text>
-      <text x="567" y="166" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">what it trained on</text>
+      <rect x="508" y="130" width="118" height="46" rx="8" fill="#faf5ea" stroke="#2b1d13"></rect>
+      <text x="567" y="150" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="11">mlFeature</text>
+      <text x="567" y="166" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="10">what it trained on</text>
 
-      <path d="M558,75 L574,75" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
-      <path d="M567,126 L567,112 L637,112 L637,102" fill="none" stroke="#16181d" stroke-width="1.5" marker-end="url(#ar)"></path>
+      <path d="M558,75 L574,75" stroke="#2b1d13" stroke-width="1.5" marker-end="url(#ar)"></path>
+      <path d="M567,126 L567,112 L637,112 L637,102" fill="none" stroke="#2b1d13" stroke-width="1.5" marker-end="url(#ar)"></path>
 
       <!-- the edge nothing else writes -->
-      <path d="M296,153 L504,153" stroke="#1b4de4" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ar-warn)"></path>
-      <text x="395" y="144" text-anchor="middle" fill="#1b4de4" font-family="ui-monospace,monospace" font-size="11">janus link</text>
-      <text x="395" y="192" text-anchor="middle" fill="#8a9099" font-family="ui-monospace,monospace" font-size="10">the edge no ingestion source writes</text>
+      <path d="M296,153 L504,153" stroke="#9a5d21" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ar-warn)"></path>
+      <text x="395" y="144" text-anchor="middle" fill="#9a5d21" font-family="ui-monospace,monospace" font-size="11">janus link</text>
+      <text x="395" y="192" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="10">the edge no ingestion source writes</text>
     </svg>
     <div class="legend">
       <span><i></i>Lineage DataHub already holds</span>
@@ -213,10 +225,8 @@
   </p>
 </section>
 
-<canvas class="beat" data-pose="sniff"
-        data-say="EVERY FINDING I REPORT COMES WITH THE COLUMN CHAIN THAT PROVES IT."></canvas>
-
-<section id="measured">
+<section id="measured" data-pose="search" data-x="0.62"
+         data-say="I DO NOT ASK YOU TO TRUST MY SCORE. I MEASURE WHETHER MY OWN BENCHMARK COULD EVEN CATCH ME BEING WRONG.">
   <h2>Measured, not claimed</h2>
   <p>
     The same graph, the same ground truth, three ways of reading it, scored per
@@ -258,13 +268,88 @@
     removed either, so it keeps alerting on a graph somebody has already fixed.
     That last column is what gets a reliability tool switched off.
   </p>
+
+  <h3>Scored on a graph this project did not build</h3>
+  <p>
+    Everything above runs on the graph <code>janus-seed</code> wrote, which is
+    the graph where the links the detectors read already exist. So there is a
+    second run that removes the seeder entirely:
+    <code>examples/real-project/</code> is a postgres warehouse holding a public
+    dataset, a dbt project, a scikit-learn training script and an MLflow
+    registry, ingested by DataHub's <strong>own</strong> postgres, dbt and
+    mlflow sources. The leak is written into the dbt model rather than planted
+    by a seeding call, and the column lineage the walk follows is what DataHub's
+    SQL parser produced from the compiled query.
+  </p>
+  <table>
+    <tr><th>On that ingested graph</th><th>Result</th></tr>
+    <tr><td>Features scored, one decision each</td><td>7</td></tr>
+    <tr><td>Ground truth, read from <code>customer_features.sql</code> on disk</td><td><code>contract_renewed_flag</code></td></tr>
+    <tr><td>Flagged</td><td><code>contract_renewed_flag</code>, and nothing else</td></tr>
+    <tr><td>Precision, recall, false-positive rate</td><td>1.00, 1.00, 0.00</td></tr>
+    <tr><td>Findings before anybody runs <code>link</code></td><td>0, and each check says what it was missing</td></tr>
+  </table>
+  <p>
+    Six of those seven features are clean, so a detector that answered "leak" to
+    everything would score 0.14 here. The derivation it quotes
+    (<code>contract_renewed_flag &lt;- churn</code>) comes out of DataHub's own
+    column-level lineage: no part of that path was written by this project. The
+    section also states what it could <em>not</em> score on that stack, which is
+    freshness, drift and the governance checks, because a real dbt project has
+    no planted lag, schema change or classification in it.
+  </p>
+
+  <h3>Whether the benchmark could catch a broken detector at all</h3>
+  <p>
+    A precision table measures whether the detectors are right about a graph we
+    chose. It says nothing about whether the trials would notice if a detector
+    broke. That is a different question and it has its own answer:
+    <strong>mutation testing</strong>, scoped to <code>janus/detect/</code>,
+    because the claim under test is detection and mutating the rest of the
+    package would measure something else.
+  </p>
+  <table>
+    <tr><th>Mutants generated</th><th>Killed</th><th>Survived</th><th>Score</th></tr>
+    <tr><td>1956</td><td>1490</td><td>466</td><td>0.76</td></tr>
+  </table>
+  <p>
+    <strong>Every survivor is listed with a verdict</strong>, grouped by root
+    cause: a real gap in the trials, or provably equivalent with the reason
+    written out. A survivor with no verdict fails the report rather than being
+    published silently, so the number cannot be improved by looking away. The
+    two recurring classes are named once rather than thirty times: a
+    <code>continue</code> mutated to <code>break</code> inside a loop the
+    fixture only ever gives one item, and a finding's own URN swapped for
+    <code>None</code> where a trial checks that a finding exists without
+    checking what it says.
+  </p>
+
+  <h3>And whether the prose invents figures</h3>
+  <p>
+    Narrative <em>quality</em> stays unscored on purpose: a readability rubric
+    is soft evidence that varies by provider. Narrative <strong>faithfulness</strong>
+    is checkable and is checked. Every figure in generated prose must appear in
+    the facts the narrator was shown, and every URN in it must resolve in the
+    graph. A model that divides a 30-hour lag by a 6-hour SLA and writes "five
+    times" has produced a figure nobody measured, and a reader cannot tell it
+    from one that was.
+  </p>
+  <p>
+    Measured at <strong>1.00</strong> for the template narrator, which is what
+    CI has a credential for. That rate is worth reading only beside the count of
+    figures it actually checked, which RESULTS.md prints next to it: prose
+    quoting no number at all is faithful by this measure and says nothing. A
+    provider row appears only when a key for it was present, and its absence is
+    stated rather than left to look like a pass.
+  </p>
   <p>
     Method, ground truth and what is still not measured:
     <a href="https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md">benchmarks/RESULTS.md</a>.
   </p>
 </section>
 
-<section id="install">
+<section id="install" data-pose="idle" data-x="0.10"
+         data-say="INSTALLED? GOOD. NOW LET US SEE WHAT YOUR GRAPH ALREADY KNOWS.">
   <h2>Install</h2>
   <p>
     Linux, Python 3.11 exactly. Nothing else is required for a local run: the
@@ -276,6 +361,9 @@
 pip install "janus-datahub[agent]" # scan --review, the approval agent
 pip install "janus-datahub[mcp]"   # the janus-mcp server
 pip install "janus-datahub[pet]"   # Argos, the desktop window
+pip install "janus-datahub[feast]" # link --from feast
+pip install "janus-datahub[kafka]" # watch --events
+pip install "janus-datahub[otel]"  # metrics to an OTLP collector
 pip install "janus-datahub[openai]"    # or [anthropic], or [google]
 </code></pre>
   <div class="note">
@@ -293,10 +381,8 @@ cp .env.example .env     # DATAHUB_GMS_URL=http://localhost:8080
 </code></pre>
 </section>
 
-<canvas class="beat" data-pose="search" data-from="right"
-        data-say="INSTALLED? GOOD. NOW LET US SEE WHAT YOUR GRAPH ALREADY KNOWS."></canvas>
-
-<section id="quickstart">
+<section id="quickstart" data-pose="sniff" data-x="0.45"
+         data-say="PLANT ONE SILENT FAILURE. WATCH ME FIND IT, THEN WATCH ME GO QUIET AGAIN.">
   <h2>Quickstart: watch a failure fire and clear</h2>
   <p>
     This builds the ML supply chain the DataHub datapacks lack, plants one
@@ -326,7 +412,8 @@ janus scan --table loans_raw             # no finding, no writes
   </div>
 </section>
 
-<section id="inventory">
+<section id="inventory" data-pose="tilt" data-x="0.72"
+         data-say="MOST MODELS COME BACK NOT CHECKED. I WILL NOT CALL A THING HEALTHY THAT I COULD NOT MEASURE.">
   <h2>inventory: what can already be checked</h2>
   <p>
     Your DataHub is not the demo graph, so start by asking what Janus can
@@ -337,6 +424,41 @@ janus scan --table loans_raw             # no finding, no writes
   </p>
 <pre><code>janus inventory        # every model, and what can and cannot be checked
 </code></pre>
+  <p>
+    It also prints how long findings have been staying open. Mean and median
+    time to resolution, per finding type, read straight out of
+    <code>incidentInfo.created</code> and the resolution stamp GMS wrote on
+    Janus's own incidents. Nothing new is recorded to make that possible, and
+    the median sits beside the mean because one incident left open across a
+    weekend moves a mean by days and describes none of the others.
+  </p>
+
+  <h3>Before anybody links anything: the table-level answer</h3>
+  <p>
+    Until a model is linked, none of the column-level checks can run on it.
+    Rather than only listing what it could not do, a scan says what it
+    <em>can</em> see about the tables that model is recorded as training on:
+    whether one is past its freshness SLA, marked deprecated by its owners, or
+    holds a column your organization classified. It is a distinct finding type,
+    it never outranks a column-level finding, it contributes nothing to the
+    trust score, and it says out loud what it cannot see:
+  </p>
+  <blockquote>
+    Checked at table level only (churn_model declares no features): the table
+    this model trains on is past its freshness SLA. Which of the model's
+    features carry the stale values is not knowable without a column-level link.
+    Asked which feature carries it, table-level reasoning scores a measured
+    precision of 0.25 (benchmarks/RESULTS.md, table-level baseline), which is
+    why this finding names the table and not a feature. Run
+    <code>janus link</code> to get the column-level answer instead.
+  </blockquote>
+  <p>
+    That 0.25 is measured, not asserted: it is the table-level baseline in the
+    benchmark above, and the benchmark checks the figure the tool quotes against
+    the one it measures on every run, so the disclosure cannot drift from the
+    measurement in silence. It is a tool upselling its own accurate story with
+    its own numbers rather than with a claim.
+  </p>
 
   <h3>The same sweep as one number</h3>
   <p>
@@ -350,6 +472,13 @@ janus scan --table loans_raw             # no finding, no writes
   </p>
 <pre><code>janus coverage --write
 </code></pre>
+  <p>
+    The ranking is keyed on the <em>remedy</em> rather than on the check, because
+    one <code>link</code> unblocks three checks at once and a ranking by check
+    would recommend the same action three times. Freshness is deliberately not
+    in the figure: it is asked of a table, and folding one table check and five
+    model checks into a single percentage divides two different denominators.
+  </p>
 
   <h3>And the one report for a budget holder</h3>
   <p>
@@ -366,10 +495,8 @@ janus scan --table loans_raw             # no finding, no writes
 </code></pre>
 </section>
 
-<canvas class="beat" data-pose="tilt"
-        data-say="MOST MODELS COME BACK NOT CHECKED. I WILL NOT CALL A THING HEALTHY THAT I COULD NOT MEASURE."></canvas>
-
-<section id="link">
+<section id="link" data-pose="scribble" data-x="0.18"
+         data-say="LINKED. NOW EVERY FEATURE KNOWS THE EXACT COLUMN IT CAME FROM.">
   <h2>link: join the model to its columns</h2>
   <p>
     <code>janus link</code> declares a model's features (one per column,
@@ -378,7 +505,46 @@ janus scan --table loans_raw             # no finding, no writes
     schema as the baseline drift is measured against.
   </p>
 
-  <h3>Let it work the arguments out first</h3>
+  <h3>If your stack already declares it, do not type it twice</h3>
+  <p>
+    A Feast repo and a dbt semantic model already say which column each feature
+    is read from, in a file your training pipeline reads and your team keeps
+    correct. <code>link</code> imports it instead of asking:
+  </p>
+<pre><code>janus link --model churn_model --from feast --repo ./feature_repo
+janus link --model churn_model --from dbt   --repo ./churn_analytics
+</code></pre>
+  <p>
+    The readers are offline and read-only: they parse the declaration on disk
+    and never connect to Feast, to dbt, or to a warehouse. Feast needs the
+    package (<code>pip install "janus-datahub[feast]"</code>); dbt needs nothing
+    at all, because a manifest is JSON, so this works against a
+    <code>manifest.json</code> somebody sent you on a machine with no dbt.
+  </p>
+<pre><code>Read from the feast declaration:
+  read 'churn_model_v1' from the Feast repo at ./feature_repo
+  feature table: warehouse.analytics.customer_features, the batch source of 'customer_features'
+  features: 3 declared, of which 1 name a warehouse column different from the feature (from the source's field_mapping)
+  label: churned of warehouse.analytics.customer_labels, from label view 'churn_label'
+  not features: customer_id, event_timestamp (entity join keys and event timestamps), so they are excluded from the link
+
+Features 'churn_model_v1' declares:
+  tenure &lt;- tenure_months  (feature view 'customer_features')
+  monthly_charges &lt;- monthly_charges  (feature view 'customer_features')
+  support_calls &lt;- support_calls  (feature view 'customer_features')
+</code></pre>
+  <p>
+    That first line is the case a name match gets wrong: the feature is
+    <code>tenure</code> and the column is <code>tenure_months</code>, and only
+    the declaration knows. Where a declaration is silent it says so rather than
+    guessing (a dbt semantic model names no label, so <code>--label-column</code>
+    stays yours to give), and where it names a column the table does not have,
+    the import stops instead of linking the rest: a half-declared model is one
+    whose unchecked columns nobody would ever hear about. <code>--select</code>
+    picks between several declarations in one repo.
+  </p>
+
+  <h3>Or let it work the arguments out</h3>
 <pre><code>janus link --model churn_model --infer
 </code></pre>
   <p>
@@ -440,12 +606,16 @@ janus scan --all-models     # audit the whole catalog
   </p>
 <pre><code class="language-python">mlflow.log_param("janus_features", "analytics.customer_features")
 </code></pre>
+  <p>
+    Or stop replaying it by hand entirely: <code>watch --events</code> re-applies
+    the link catalog-wide the moment an ingest drops it. That is
+    <a href="#watch">further down the page</a>, because it is the failure mode
+    rather than the feature that is worth reading first.
+  </p>
 </section>
 
-<canvas class="beat" data-pose="scribble" data-from="right"
-        data-say="LINKED. NOW EVERY FEATURE KNOWS THE EXACT COLUMN IT CAME FROM."></canvas>
-
-<section id="scan">
+<section id="scan" data-pose="alert" data-collar="r" data-x="0.55"
+         data-say="FINDING! LOANS_RAW WENT STALE AND CREDIT_RISK_V3 STILL EATS IT. RED COLLAR MEANS LIVE.">
   <h2>scan: detect, explain, write back</h2>
 <pre><code>janus scan --table loans_raw       # start from a table, walk into the models
 janus scan --model churn_model     # start from a model, walk back to the columns
@@ -456,15 +626,51 @@ janus scan --model churn_model --review    # pause, show, write only what you ap
   <p>What a scan writes back, all of it idempotent and keyed so reruns never duplicate:</p>
   <table>
     <tr><th>Write</th><th>Where it lands</th></tr>
-    <tr><td>Incident</td><td>on the offending dataset, with the column chain as evidence</td></tr>
+    <tr><td>Incident</td><td>on the offending dataset, with the column chain as evidence and the changes that would clear it</td></tr>
     <tr><td><code>model-at-risk</code> tag</td><td>on every downstream model in the blast radius</td></tr>
     <tr><td><code>janus.trust_score</code>, <code>trust_band</code></td><td>structured properties on the model</td></tr>
     <tr><td>Guarding assertion</td><td>on the source table, with its measured result</td></tr>
     <tr><td>Model Impact Report</td><td>a document linked from the model</td></tr>
+    <tr><td>Process run</td><td>the scan itself, as a <code>dataProcessInstance</code> (<a href="#selfobserve">below</a>)</td></tr>
   </table>
+
+  <h3>The trust score, led by what is wrong with it</h3>
+  <p>
+    An integer out of 100 invites a reader to compare it against a threshold
+    nobody calibrated. So the number comes last, after the deductions that
+    produced it, each naming the finding that caused it:
+  </p>
+<pre><code>100  starting
+-20  leakage: Target leakage in credit_risk_v3.applicant_income
+-15  freshness_lag: Stale upstream data in ecommerce.public.loans_raw
+-10  missing_owner: nobody owns Credit Risk v3
+---
+ 55  watch
+</code></pre>
+  <p>
+    Printed under it, every time the number is shown: <em>the weights behind
+    this score are a stated preference ordering, not a calibrated model. Compare
+    scores to each other, not to a threshold.</em> Every history entry carries a
+    <code>SCORING_VERSION</code>, so a change to the weights reads as a labelled
+    discontinuity in the trend rather than as a mystery drop, and a test fails if
+    the weights move without the version moving with them.
+  </p>
+
+  <h3>The input contract, as a standard rather than as ours</h3>
+  <p>
+    An incident says what went wrong. A contract says what was expected to be
+    true in the first place. <code>--contract-out</code> renders every table the
+    model trains on as an Open Data Contract Standard file (ODCS v3.1.0, Linux
+    Foundation Bitol): the schema each input should have and how fresh it should
+    be, quoted from the graph's own <code>schemaMetadata</code> rather than
+    invented. Anything that speaks ODCS can enforce it, not only Janus.
+  </p>
+<pre><code>janus scan --model credit_risk_v3 --contract-out ./credit_risk_v3.odcs.yaml
+</code></pre>
 </section>
 
-<section id="detectors">
+<section id="detectors" data-pose="search" data-x="0.80"
+         data-say="SIX QUESTIONS. EACH ONE SAYS WHAT IT NEEDED WHEN IT COULD NOT ANSWER.">
   <h2>The six checks, and what each one needs</h2>
   <p>
     A scan never reports something healthy that it could not measure. It names
@@ -563,26 +769,114 @@ JANUS_SENSITIVE_TERM_URNS=urn:li:glossaryTerm:Classification.Restricted
     descending from the other. That shape is how a proxy usually arises, and it
     is also how two harmless siblings arise, so the finding is raised as a
     question for a human and capped at <code>medium</code> forever: it never
-    escalates on a live model, and its first suggested remedy is to review it,
-    which no machine here will perform for you. Whether a feature actually
-    proxies for a protected attribute is a statistical claim about data this
-    tool has never read a row of. Configured, like the classification above,
-    from your own taxonomy with no default:
+    escalates on a live model, it contributes nothing to the trust score, and
+    its first suggested remedy is to review it, which no machine here will
+    perform for you. Whether a feature actually proxies for a protected
+    attribute is a statistical claim about data this tool has never read a row
+    of. What it can say, structurally, is where to look, and it can say it
+    before the model is trained. Configured, like the classification above, from
+    your own taxonomy with no default:
   </p>
 <pre><code>JANUS_PROTECTED_ATTRIBUTE_TAG_URNS=urn:li:tag:ProtectedAttribute
 JANUS_PROTECTED_ATTRIBUTE_TERM_URNS=urn:li:glossaryTerm:Protected.Ethnicity
 </code></pre>
-  <p>The first two are reversible scenarios, so you can watch them fire and clear:</p>
+  <p>
+    A direct descent is P5's finding and is excluded here rather than reported
+    twice: a proved derivation is not a candidate. The first two checks are
+    reversible scenarios, so you can watch them fire and clear:
+  </p>
 <pre><code>janus-scenario --scenario sensitive-source
 janus scan --model credit_risk_v3
 janus-scenario --scenario sensitive-source --revert
 </code></pre>
 </section>
 
-<canvas class="beat" data-pose="alert" data-collar="r"
-        data-say="FINDING! LOANS_RAW WENT STALE AND CREDIT_RISK_V3 STILL EATS IT. RED COLLAR MEANS LIVE."></canvas>
+<section id="counterfactuals" data-pose="tug" data-x="0.14"
+         data-say="I DO NOT ONLY BARK. I NAME THE SMALLEST CHANGE THAT WOULD SHUT ME UP, AND THE BENCHMARK MAKES IT AND CHECKS.">
+  <h2>The fix, not just the fault</h2>
+  <p>
+    Every finding carries a <strong>counterfactual</strong>: a set of changes,
+    each one sufficient on its own to clear it. Not advice, and not a language
+    model's suggestion. It is derived from the same traversal that found the
+    problem, which already computed every derivation path and previously threw
+    all but the shortest away.
+  </p>
+<pre><code>Target leakage in credit_risk_v3.applicant_income  (severity: critical)
+  feature      applicant_income
+  leak path    applicant_income &lt;- income_band &lt;- default_flag
+  label        loans_labelled.default_flag
+  model        Credit Risk v3 LIVE
 
-<section id="gate">
+  Any one of these clears this finding:
+    - Rebuild applicant_income from data known before the outcome is, so it
+      stops deriving from the label: cut applicant_income &lt;- income_band,
+      applicant_income &lt;- default_flag_backfill.
+    - Drop the feature applicant_income from Credit Risk v3 and retrain, so
+      nothing the model reads carries the answer.
+    - If loans_labelled.default_flag is not this model's label, remove the
+      label declaration from it: the finding rests on that declaration and is
+      wrong without it.
+
+  This finding rests on 2 distinct derivation paths. Cutting one of them
+  leaves it standing: the cut listed above names the first edge of every
+  path, and all of them have to go.
+</code></pre>
+  <p>
+    That last clause is the moat stated inside an incident somebody actually
+    reads. A table-level tool cannot express it, because it never saw the column
+    edge in the first place. Each detector has its own set: a freshness finding
+    clears when the table refreshes inside its SLA or the model stops consuming
+    it, a drift finding when the column returns to its training-time type or the
+    model is retrained, a sensitive-source finding when the derivation is cut or
+    the classification is corrected (worded as a correction and never as a
+    dismissal, naming the owner of the classification), and a deprecated-input
+    finding when the model moves to the successor the deprecation note names. If
+    there is no note, it says to go and ask rather than inventing a table name.
+  </p>
+
+  <h3>Each one was applied, and the detector asked again</h3>
+  <p>
+    A suggested fix nobody performed is not a measurement. So the benchmark
+    performs them: it applies each counterfactual to the live graph and reruns
+    the same detector.
+  </p>
+  <div class="scroller">
+  <table>
+    <tr><th>Detector</th><th>Remedy applied</th><th>Cleared it</th><th>Not mechanically applicable</th></tr>
+    <tr><td>Upstream freshness</td><td><code>refresh-source</code></td><td class="c-ok">yes</td><td>stop-consuming</td></tr>
+    <tr><td>Target leakage</td><td><code>cut-lineage</code></td><td class="c-ok">yes</td><td>drop-feature, correct-mark</td></tr>
+    <tr><td>Input schema drift</td><td><code>restore-schema</code></td><td class="c-ok">yes</td><td>retrain</td></tr>
+    <tr><td>Sensitive source</td><td><code>correct-mark</code></td><td class="c-ok">yes</td><td>cut-lineage, drop-feature</td></tr>
+    <tr><td>Deprecated input</td><td><code>withdraw-deprecation</code></td><td class="c-ok">yes</td><td>migrate-input</td></tr>
+    <tr><td>Table-level risk</td><td><code>declare-link</code></td><td class="c-ok">yes</td><td>migrate-input</td></tr>
+    <tr><td>Proxy candidate</td><td><code>cut-lineage</code></td><td class="c-ok">yes</td><td>review, drop-feature</td></tr>
+  </table>
+  </div>
+  <p>
+    The last column is not a gap being hidden. Retraining a model, migrating
+    onto a successor table and dropping a feature are real fixes that no
+    metadata write can carry out, so they are named as unverified rather than
+    counted as passes.
+  </p>
+  <p>
+    The trial that can actually go wrong is the multi-path one, where a feature
+    reaches a declared label by two derivations and cutting the one the incident
+    quoted is a fix a reasonable person would believe in. That graph is planted
+    and the quoted path cut: the finding <strong>still fires</strong> after one
+    of two is cut, and clears once both are. Without that second control, a
+    detector that could not be silenced at all would score identically on the
+    first one.
+  </p>
+  <p class="caption">
+    This is the counterfactual explanation of the xAI literature (Wachter,
+    Mittelstadt and Russell, 2017) applied to a lineage graph rather than to a
+    feature vector. It is fully deterministic and needs no model, no rows and no
+    LLM: the same walk, asked what would have to be different.
+  </p>
+</section>
+
+<section id="gate" data-pose="sit" data-x="0.50"
+         data-say="A RED BUILD BEATS A RED DASHBOARD. CATCH IT BEFORE IT MERGES.">
   <h2>gate: block a bad model before it merges</h2>
   <p>
     Everything above audits a graph that already holds the mistake.
@@ -606,6 +900,12 @@ janus gate --model credit_risk_v3 --min-trust 80             # exit 1 if trust &
     default, because it runs on every push and one incident per run would fill
     the graph with findings about branches that never merged.
   </p>
+  <p>
+    <code>--min-trust</code> on its own prints a warning, because it is the
+    blunt secondary control: a score is a preference ordering and a threshold
+    over it is not a policy. Pair it with <code>--block-at-or-above</code>,
+    which judges the findings themselves.
+  </p>
   <h3>In a workflow</h3>
 <pre><code class="language-yaml">- uses: Ahmedxsaad/DataHub@main
   with:
@@ -624,10 +924,8 @@ janus gate --model credit_risk_v3 --min-trust 80             # exit 1 if trust &
   </p>
 </section>
 
-<canvas class="beat" data-pose="sit" data-from="right"
-        data-say="A RED BUILD BEATS A RED DASHBOARD. CATCH IT BEFORE IT MERGES."></canvas>
-
-<section id="watch">
+<section id="watch" data-pose="idle" data-x="0.78"
+         data-say="I KEEP LOOKING. AN INGEST THAT QUIETLY DROPS YOUR LINK IS THE FAILURE NOTHING ELSE REPORTS.">
   <h2>watch: keep looking</h2>
   <p>
     <code>watch</code> is the long-running entry point: it polls, scans on
@@ -686,7 +984,8 @@ janus watch --events --model credit_risk_v3
 </code></pre>
 </section>
 
-<section id="python">
+<section id="python" data-pose="wag" data-x="0.24"
+         data-say="TWO FUNCTIONS. THAT IS THE WHOLE SUPPORTED SURFACE. PIN TO THEM.">
   <h2>Call it from your training script</h2>
   <p>
     The command line is the main interface, but there is one place Janus
@@ -732,23 +1031,26 @@ if not report.clean:
   </p>
 </section>
 
-<canvas class="beat" data-pose="wag"
-        data-say="TWO FUNCTIONS. THAT IS THE WHOLE SUPPORTED SURFACE. PIN TO THEM."></canvas>
-
-<section id="json">
+<section id="json" data-pose="idle" data-x="0.60"
+         data-say="EVERYTHING I SAY IS ALSO A DOCUMENT YOU CAN PIPE INTO SOMETHING ELSE.">
   <h2>JSON output</h2>
   <p>
     Routing findings somewhere Janus does not know about? Both
     <code>scan</code> and <code>gate</code> take <code>--format json</code> and
-    put the whole report (evidence, models at risk, trust deductions, the gate's
-    violations) on stdout as one parseable document, with progress lines moved
-    to stderr so the stream stays clean.
+    put the whole report (evidence, models at risk, trust deductions, each
+    finding's counterfactual, the gate's violations) on stdout as one parseable
+    document, with progress lines moved to stderr so the stream stays clean. The
+    counterfactual goes out as data rather than as prose: a stable remedy kind
+    and its targets, so a consumer can act on it without parsing an English
+    sentence.
   </p>
 <pre><code>janus scan --model credit_risk_v3 --format json | jq '.findings[].severity'
+janus scan --model credit_risk_v3 --format json | jq '.findings[].counterfactual.remedies[].kind'
 </code></pre>
 </section>
 
-<section id="mcp">
+<section id="mcp" data-pose="tilt" data-x="0.86"
+         data-say="ASK ME ANYTHING IN PLAIN LANGUAGE. I STILL WILL NOT WRITE A THING.">
   <h2>Ask it, do not type it</h2>
 <pre><code>pip install "janus-datahub[mcp]"
 janus-mcp   # serves check_leakage, check_freshness, check_gate over stdio
@@ -772,10 +1074,8 @@ janus-mcp   # serves check_leakage, check_freshness, check_gate over stdio
   </p>
 </section>
 
-<canvas class="beat" data-pose="tilt" data-from="right"
-        data-say="ASK ME ANYTHING IN PLAIN LANGUAGE. I STILL WILL NOT WRITE A THING."></canvas>
-
-<section id="argos">
+<section id="argos" data-pose="wag" data-x="0.36"
+         data-say="DOUBLE CLICK A FINDING AND I WALK THE BLAST RADIUS, ONE HOP PER GRAPH HOP.">
   <h2>Argos, the pet on your desktop</h2>
 <pre><code>pip install "janus-datahub[pet]"      # macOS and Windows; Linux: the .deb or
                                            # .AppImage on the GitHub release
@@ -809,17 +1109,16 @@ janus companion                       # everything wrong with the assets you own
     <a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/08-watchdog-mascot.md">docs/plan/08-watchdog-mascot.md</a>.
   </p>
   <div class="note">
-    <strong>The dog on this page is the dog in the window.</strong> Every frame
-    here is read from <code>argos/ui/sprites/argos.txt</code>, the same file the
-    Tauri window, the app icon and the README animation read. A hand-made copy
-    of the art would go stale the first time somebody redrew a leg.
+    <strong>The dog walking this page is the dog in the window.</strong> Every
+    frame down there is read from <code>argos/ui/sprites/argos.txt</code>, the
+    same file the Tauri window, the app icon and the README animation read. A
+    hand-made copy of the art would go stale the first time somebody redrew a
+    leg.
   </div>
 </section>
 
-<canvas class="beat" data-pose="tug"
-        data-say="DOUBLE CLICK A FINDING AND I WALK THE BLAST RADIUS, ONE HOP PER GRAPH HOP."></canvas>
-
-<section id="docker">
+<section id="docker" data-pose="idle" data-x="0.66"
+         data-say="NO PYTHON ON THE MACHINE? RUN ME IN THE NETWORK DATAHUB ALREADY BUILT.">
   <h2>Run it without a Python install</h2>
 <pre><code>datahub docker quickstart              # once: builds DataHub's own stack
 docker compose run --rm janus-seed
@@ -834,7 +1133,8 @@ docker compose up janus-mcp       # long-running, stdio
   </p>
 </section>
 
-<section id="config">
+<section id="config" data-pose="scribble" data-x="0.12"
+         data-say="MISSING MEANS MISSING. I WILL NOT GUESS AT A SERVER, A KEY OR A TAXONOMY.">
   <h2>Configuration</h2>
   <p>
     Configuration enters the process in exactly one module,
@@ -851,7 +1151,10 @@ JANUS_LLM_API_KEY=
 
 JANUS_SENSITIVE_TAG_URNS=          # your own classification taxonomy
 JANUS_SENSITIVE_TERM_URNS=
+JANUS_PROTECTED_ATTRIBUTE_TAG_URNS=    # and your own protected attributes
+JANUS_PROTECTED_ATTRIBUTE_TERM_URNS=
 JANUS_LABEL_TERM_URN=              # honor your existing label term
+JANUS_OTEL_ENDPOINT=               # OTLP metrics, off unless set
 </code></pre>
   <p>Three rules govern that file, and they are worth knowing before you debug a run:</p>
   <ul>
@@ -880,9 +1183,11 @@ JANUS_LABEL_TERM_URN=              # honor your existing label term
     <code>JANUS_LABEL_TERM_URN</code> at it and the detector honors yours
     instead of creating one.
   </p>
+
 </section>
 
-<section id="security">
+<section id="security" data-pose="alert" data-x="0.46"
+         data-say="A SUCCESSFUL INJECTION STILL CANNOT INVENT A FINDING. IT ARRIVES AFTER I HAVE ALREADY DECIDED.">
   <h2>Security model</h2>
   <ul>
     <li>
@@ -892,6 +1197,12 @@ JANUS_LABEL_TERM_URN=              # honor your existing label term
       untrusted data and delimiter lookalikes are stripped before wrapping. Even
       a successful injection cannot invent a finding: it is downstream of the
       detectors.
+    </li>
+    <li>
+      <strong>No row of your data ever leaves DataHub.</strong> Every check
+      above is computed from metadata: lineage edges, schemas, timestamps, tags
+      and terms. There is no warehouse connection to configure, so there is none
+      to leak, and the narrator is shown facts rather than samples.
     </li>
     <li>
       <strong>Writes are fixed and parameterized.</strong> A closed set of
@@ -926,16 +1237,65 @@ JANUS_LABEL_TERM_URN=              # honor your existing label term
     </li>
   </ul>
   <p>Each detector implements a published result rather than a heuristic somebody liked:</p>
+  <div class="scroller">
   <table>
     <tr><th>What</th><th>Source</th></tr>
     <tr><td>Target leakage as illegitimate information about the target, found by inspecting how a feature was constructed</td><td>Kaufman, Rosset and Perlich, <em>Leakage in Data Mining</em> (KDD 2011 / ACM TKDD 2012)</td></tr>
     <tr><td>Undeclared consumers: a table acquiring model consumers its owners never agreed to serve</td><td>Sculley et al., <em>Hidden Technical Debt in Machine Learning Systems</em> (NeurIPS 2015)</td></tr>
     <tr><td>A schema fixed at training time, against which serving data is continuously validated</td><td>Breck, Polyzotis, Roy, Whang and Zinkevich, <em>Data Validation for Machine Learning</em> (MLSys 2019)</td></tr>
+    <tr><td>Proxy variables as the dominant mechanism of unintentional discrimination</td><td>Barocas and Selbst, <em>Big Data's Disparate Impact</em> (California Law Review, 2016)</td></tr>
+    <tr><td>The smallest change that would have produced a different outcome, as the explanation</td><td>Wachter, Mittelstadt and Russell, <em>Counterfactual Explanations Without Opening the Black Box</em> (2017)</td></tr>
     <tr><td>The prompt-injection and sensitive-disclosure threat model</td><td>OWASP Top 10 for LLM Applications (2025), LLM01 and LLM06</td></tr>
   </table>
+  </div>
 </section>
 
-<section id="crosswalk">
+<section id="selfobserve" data-pose="sniff" data-x="0.72"
+         data-say="I WRITE MY OWN RUNS INTO THE GRAPH TOO. AN AGENT YOU CANNOT AUDIT IS ONE MORE PIPELINE NOBODY CATALOGUED.">
+  <h2>Janus inside the graph it guards</h2>
+  <p>
+    The product's thesis is that a pipeline nobody catalogued is a pipeline
+    nobody can reason about. An agent that writes incidents into a graph while
+    remaining invisible in that same graph is exempting itself from its own
+    argument. So every scan is emitted as what it is: a process run.
+  </p>
+  <table>
+    <tr><th>Entity</th><th>What it holds</th></tr>
+    <tr><td>A <code>dataFlow</code></td><td>the Janus agent</td></tr>
+    <tr><td>A <code>dataJob</code></td><td>the scan</td></tr>
+    <tr><td>One <code>dataProcessInstance</code> per scan</td><td>keyed by the same <code>run_id</code> every write is already stamped with</td></tr>
+    <tr><td>Inputs and outputs</td><td>the entities read, and the entities written</td></tr>
+    <tr><td>A run event</td><td>started, then complete or <span class="c-bad">failed</span></td></tr>
+  </table>
+  <p>
+    No new dependency, no scrape endpoint and no second system to run: those are
+    DataHub's own shipped entities. What it buys is that an incident stamped
+    <code>Raised by Janus run scan-cb2ef85ba9a8</code> stops sending a reader to
+    grep a log file. The run is an entity they can open, whose inputs say what
+    was examined and whose outputs say what was touched.
+  </p>
+  <p>
+    <strong>A scan that dies emits a failed run rather than silence.</strong>
+    Detection runs inside the run too, so a scan that dies deciding what is
+    wrong is recorded the same way as one that dies writing it down. That is the
+    difference between "clean" and "never completed", and without it a
+    half-written graph says nothing at all. A <code>--dry-run</code> emits
+    nothing, and a rerun with the same <code>run_id</code> converges rather than
+    stacking, like every other write here.
+  </p>
+  <div class="note">
+    <strong>One honest limit.</strong> The input and output aspects accept
+    <code>dataset</code> and <code>mlModel</code> only, which is the
+    relationship annotation in DataHub's own model: a live GMS answers 422 for
+    anything else. So a column is reported as its parent dataset, and the
+    incidents, assertions and documents a run writes stay reachable from the
+    asset they hang off rather than appearing in the aspect. Each still carries
+    the <code>run_id</code>.
+  </div>
+</section>
+
+<section id="crosswalk" data-pose="sit" data-x="0.30"
+         data-say="THIS IS A MAPPING. IT IS NOT A CLAIM THAT YOU COMPLY WITH ANYTHING.">
   <h2>Where this fits a governance framework</h2>
   <p>
     This is a mapping, not a conformity claim. Each row says which NIST AI RMF subcategory a detector's output is evidence for; whether that subcategory is satisfied is a judgement about your organization's whole process, which no tool reading a metadata graph can make. Subcategory text is quoted from the NIST AI RMF 1.0 Playbook.
@@ -946,6 +1306,7 @@ JANUS_LABEL_TERM_URN=              # honor your existing label term
     <code>janus crosswalk</code> to print this table as markdown, straight
     into whatever document you have to file.
   </p>
+  <div class="scroller">
   <table>
     <tr><th>Detector</th><th>Evidence it writes into the graph</th><th>MAP</th><th>MEASURE</th><th>MANAGE</th></tr>
     <tr><td>Freshness and blast radius</td><td>A freshness incident on the failing table, a guarding assertion with its measured run, and the named live models downstream of it</td><td><code>MAP 4.1</code></td><td><code>MEASURE 2.4</code></td><td><code>MANAGE 4.1</code></td></tr>
@@ -956,6 +1317,7 @@ JANUS_LABEL_TERM_URN=              # honor your existing label term
     <tr><td>Deprecated input</td><td>An incident on the deprecated dataset, quoting its owners' own note and decommission date, against the models still training on it</td><td><code>MAP 4.2</code></td><td><code>MEASURE 2.4</code></td><td><code>MANAGE 2.2</code></td></tr>
     <tr><td>Table-level risk (degraded mode, no column link)</td><td>An incident on the training table naming the table-level fact, the mode that produced it, and that mode's measured precision, so the record states how far it can be trusted</td><td><code>MAP 4.1</code></td><td><code>MEASURE 2.5</code></td><td><code>MANAGE 4.1</code></td></tr>
   </table>
+  </div>
   <p>The subcategories cited above, quoted from the NIST AI RMF 1.0 Playbook:</p>
   <ul>
     <li><code>MAP 2.3</code> Scientific integrity and TEVV considerations are identified and documented, including those related to experimental design, data collection and selection.</li>
@@ -972,7 +1334,8 @@ JANUS_LABEL_TERM_URN=              # honor your existing label term
   </ul>
 </section>
 
-<section id="documents">
+<section id="documents" data-pose="scribble" data-x="0.56"
+         data-say="I GENERATE THE PAPERWORK FROM THE GRAPH. A HAND WRITTEN MODEL CARD IS WRONG BY TUESDAY.">
   <h2>Three documents, generated instead of maintained</h2>
 <pre><code>janus model-card    --model credit_risk_v3   # prints; --write publishes it to DataHub
 janus evidence-pack --model credit_risk_v3   # EU AI Act Article 10
@@ -982,9 +1345,11 @@ janus feature-card  --model credit_risk_v3   # one Data Card per feature
     A <strong>model card</strong> in the sense Mitchell et al. (FAT* 2019)
     proposed one: intended use, which columns each feature was actually computed
     from, the reported training metrics, the trust score with its waterfall, the
-    findings open against the model, and the checks that could not run. An
-    <strong>evidence pack</strong> mapping the same graph to Regulation (EU)
-    2024/1689 Article 10 and Article 12, by paragraph number, so a reader can
+    findings open against the model, and the checks that could not run. Intended
+    use is the one section a graph cannot derive, so an undeclared one says
+    exactly that rather than being omitted. An <strong>evidence pack</strong>
+    mapping the same graph to Regulation (EU) 2024/1689 Article 10 and Article
+    12, by paragraph number (10(2)(b), 10(3), 10(2)(f), 10(5)), so a reader can
     check the mapping rather than trust it.
   </p>
   <p>
@@ -1021,30 +1386,31 @@ janus feature-card  --model credit_risk_v3   # one Data Card per feature
     conformity would be worse than no document at all.
   </p>
   <p>
-    Both print by default and write nothing. <code>--write</code> publishes the
-    document against the model, keyed on the model alone, so regenerating
+    All three print by default and write nothing. <code>--write</code> publishes
+    the document against the model, keyed on the model alone, so regenerating
     replaces it rather than leaving a second copy behind. Either way the
     underlying scan is read-only: asking for documentation never raises an
     incident as a side effect.
   </p>
 </section>
 
-<section id="links">
+<section id="links" data-pose="sleep" data-x="0.88"
+         data-say="NOTHING BROKEN RIGHT NOW. I WILL BARK IF THAT CHANGES.">
   <h2>Everything else</h2>
+  <div class="scroller">
   <table>
     <tr><th>Where</th><th>What it answers</th></tr>
     <tr><td><a href="https://janus.ahmedxsaad.me">Live demo</a></td><td>A real DataHub instance with the failure planted and <code>watch</code> running against it</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/DataHub">GitHub</a></td><td>Source, issues, releases</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/architecture.md">architecture.md</a></td><td>How it works: layers, flows, diagrams</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md">RESULTS.md</a></td><td>The benchmark, its method, and what it does not measure</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/09-depth-axes.md">09-depth-axes.md</a></td><td>Where the product goes deeper, and what it deliberately will not build</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/07-weaknesses-and-remedies.md">07-weaknesses-and-remedies.md</a></td><td>An adversarial audit: known weaknesses, each with a fix</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/tree/main/skill/datahub-ml-guard">datahub-ml-guard</a></td><td>The skill, offered back to the DataHub ecosystem</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/most-valuable-feedback.md">most-valuable-feedback.md</a></td><td>Fourteen reproducible bugs and doc gaps found while building</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/most-valuable-feedback.md">most-valuable-feedback.md</a></td><td>Sixteen reproducible bugs and doc gaps found while building</td></tr>
   </table>
+  </div>
 </section>
-
-<canvas class="beat" data-pose="sleep" data-from="right"
-        data-say="NOTHING BROKEN RIGHT NOW. I WILL BARK IF THAT CHANGES."></canvas>
 
 </main>
 </div>
@@ -1054,6 +1420,10 @@ janus feature-card  --model credit_risk_v3   # one Data Card per feature
   Apache 2.0. Argos is drawn from
   <code>argos/ui/sprites/argos.txt</code>, the one copy of the art.
 </footer>
+
+<!-- The strip Argos walks along. Decorative: everything he says is said again
+     in the prose beside him, so a screen reader is told to skip it. -->
+<div class="companion" aria-hidden="true"><canvas id="argos"></canvas></div>
 
 <script src="../argos/ui/sprites.js"></script>
 <script src="argos-guide.js"></script>

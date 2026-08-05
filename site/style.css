@@ -1,10 +1,10 @@
 /*
- * The documentation page's theme: paper, ink, one blue.
+ * The documentation page's theme: ivory paper, dark brown ink, caramel, oxblood.
  *
  * Editorial rather than promotional. The rules this file keeps to, because the
  * two drafts before it broke all of them and read as a generic landing page:
  *
- *   no gradients, no glows, no drop shadows, no gradient text
+ *   no gradients as decoration, no glows, no drop shadows, no gradient text
  *   no pill badges, no glowing stat cards, no coloured panels for emphasis
  *   one accent, used for links and almost nothing else
  *   hairlines instead of borders, whitespace instead of boxes
@@ -14,27 +14,40 @@
  * colour carries meaning rather than decoration, and they are the same two the
  * desktop window reserves: --danger is a live finding and --ok is a check that
  * ran and passed. Nothing else may use them.
+ *
+ * The one gradient in the file is the floor the companion walks on. It is not
+ * decoration: an opaque speech bubble drawn over running body text is
+ * unreadable, so the strip the dog occupies has to stop being transparent
+ * before he reaches it.
  */
 
 :root {
-  /* Warm paper rather than white: a pure #fff page glares under a reading
-     lamp, and every long-form site worth reading pulls a few points of warmth
-     into it. */
-  --paper: #fdfcf9;
-  --paper-2: #f6f4ef;
-  --ink: #1a1a1a;
-  --body: #3f3f3d;
-  --muted: #6a6a66;
-  --faint: #91918c;
-  --rule: #e3e0d8;
-  --rule-soft: #edeae3;
+  /* Ivory rather than white. A pure #fff page glares under a reading lamp, and
+     this one has to sit under a brown ink and a caramel rule without either of
+     them reading as a stain on it. */
+  --paper: #faf5ea;
+  --paper-2: #f2ead9;
 
-  /* Desaturated, not electric. A saturated blue on a warm page reads as a
-     button asking to be clicked; this one reads as a citation. */
-  --accent: #2f5d7c;
-  --ok: #3f6d4e;
-  --danger: #a33a30;
-  --warn: #8a6415;
+  /* Dark brown, not black. The character's own outline is a near-black brown
+     (#160f0a in argos.txt), so the page's ink is the same family: the dog looks
+     drawn onto the document rather than pasted over it. */
+  --ink: #2b1d13;
+  --body: #4a3a2d;
+  --muted: #7a6553;
+  --faint: #a08b76;
+  --rule: #e2d5bf;
+  --rule-soft: #ece2d1;
+
+  /* Caramel. Deep enough for body-size link text on ivory (about 4.9:1), which
+     the lighter caramel below is not, so the light one is kept for rules and
+     marks where nothing has to be read out of it. */
+  --accent: #9a5d21;
+  --caramel: #c08a4a;
+
+  /* Oxblood is the live finding, and the only red on the page. */
+  --danger: #6e1f26;
+  --ok: #4f6137;
+  --warn: #8a5a12;
 
   --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Palatino Linotype",
     Palatino, Georgia, ui-serif, serif;
@@ -45,6 +58,10 @@
      the eye loses the line return on a serif this size. */
   --measure: 33rem;
   --max: 64rem;
+
+  /* How tall the companion strip is. Referenced by the page's bottom padding
+     too, so the last paragraph is never parked under the dog. */
+  --floor: 11rem;
 }
 
 * {
@@ -71,7 +88,7 @@ body {
 a {
   color: var(--accent);
   text-decoration: none;
-  border-bottom: 1px solid rgba(47, 93, 124, 0.3);
+  border-bottom: 1px solid rgba(154, 93, 33, 0.3);
 }
 
 a:hover {
@@ -114,7 +131,7 @@ pre code {
   background: none;
   border: 0;
   padding: 0;
-  color: #2b3038;
+  color: #3a2a1c;
   font-size: 1em;
 }
 
@@ -128,7 +145,7 @@ pre code {
   align-items: baseline;
   gap: 0.7rem;
   padding: 1rem 2rem;
-  background: rgba(253, 252, 249, 0.92);
+  background: rgba(250, 245, 234, 0.92);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--rule);
 }
@@ -140,8 +157,11 @@ pre code {
   color: var(--ink);
 }
 
+/* The second syllable in caramel, so the wordmark carries the palette without
+   a logo file to keep in sync with anything. */
 .topbar .brand em {
   font-style: normal;
+  color: var(--accent);
 }
 
 .topbar .for {
@@ -283,7 +303,7 @@ pre code {
   margin: 0;
   border: 0;
   border-radius: 0;
-  background: #fff;
+  background: #fffdf8;
   font-size: 0.78rem;
   line-height: 1.8;
 }
@@ -320,7 +340,9 @@ pre code {
 .page {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 4.5rem 2rem 5rem;
+  /* The bottom pad is the companion strip plus a line: the closing paragraph
+     has to be readable with the dog standing in front of it. */
+  padding: 4.5rem 2rem calc(var(--floor) + 3rem);
   display: grid;
   grid-template-columns: 13rem 1fr;
   gap: 4rem;
@@ -411,7 +433,7 @@ section li {
 blockquote {
   margin: 1.5rem 0;
   padding-left: 1.2rem;
-  border-left: 2px solid var(--rule);
+  border-left: 2px solid var(--caramel);
   color: var(--muted);
   font-style: italic;
 }
@@ -450,6 +472,12 @@ td {
 
 tr:last-child td {
   border-bottom: 0;
+}
+
+/* A wide table on a narrow screen scrolls in its own box rather than pushing
+   the whole document sideways. */
+.scroller {
+  overflow-x: auto;
 }
 
 /* --- notes --------------------------------------------------------------- */
@@ -569,7 +597,7 @@ tr:last-child td {
   margin-top: 0.2rem;
 }
 
-/* --- the five checks ----------------------------------------------------- */
+/* --- the checks ---------------------------------------------------------- */
 
 .checks {
   margin: 1.8rem 0;
@@ -639,19 +667,48 @@ pre:hover .copy,
   border-color: var(--ok);
 }
 
-/* --- Argos's beats ------------------------------------------------------- */
+/* --- the companion ------------------------------------------------------- */
 
-.beat {
-  display: block;
-  width: 100%;
-  height: auto;
-  margin: 3rem 0;
+/*
+ * Argos does not sit in the document any more. He stands on a fixed strip along
+ * the bottom of the window and walks to a new place, in a new pose, saying a
+ * new line, each time the reader arrives at a new section. One dog for the
+ * whole page rather than nine of them talking to an empty room.
+ *
+ * pointer-events: none is load-bearing. The strip covers the bottom of every
+ * screen, so without it the dog would eat the clicks on whatever is under him.
+ */
+.companion {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--floor);
+  z-index: 40;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(250, 245, 234, 0) 0%,
+    rgba(250, 245, 234, 0.86) 42%,
+    var(--paper) 66%
+  );
 }
 
-.hero-beat {
-  max-width: var(--max);
-  margin: 3.5rem auto 0;
-  padding: 0 2rem;
+/* The floor itself: one caramel hairline the character stands on, so he reads
+   as being somewhere rather than floating over the text. */
+.companion::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 1.4rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.companion canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* --- footer -------------------------------------------------------------- */
@@ -659,11 +716,10 @@ pre:hover .copy,
 footer {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 2.5rem 2rem 4rem;
+  padding: 2.5rem 2rem calc(var(--floor) + 2rem);
   border-top: 1px solid var(--rule);
   color: var(--faint);
   font-size: 0.84rem;
-  max-width: var(--max);
 }
 
 /* --- responsive ---------------------------------------------------------- */
@@ -732,8 +788,7 @@ footer {
   .figures,
   .term,
   .page,
-  footer,
-  .hero-beat {
+  footer {
     padding-left: 1.25rem;
     padding-right: 1.25rem;
   }
@@ -744,6 +799,19 @@ footer {
 
   .figures {
     grid-template-columns: 1fr;
+  }
+}
+
+/* A phone this narrow has no room for a dog and a bubble beside him without one
+   of the two being unreadable, and the document is the thing that has to work.
+   The script also stops animating when the canvas has no box. */
+@media (max-width: 28rem) {
+  :root {
+    --floor: 0rem;
+  }
+
+  .companion {
+    display: none;
   }
 }
 

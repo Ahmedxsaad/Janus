@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/", "destination": "/site/index.html" },
+    { "source": "/style.css", "destination": "/site/style.css" },
+    { "source": "/argos-guide.js", "destination": "/site/argos-guide.js" }
+  ],
+  "cleanUrls": true
+}
