@@ -59,7 +59,12 @@ from benchmarks.inject import (
 )
 from benchmarks.mutation_report import END_MARKER as MUTATION_END
 from benchmarks.mutation_report import START_MARKER as MUTATION_START
-from benchmarks.scale import ScaleMeasurement, measure_scale
+from benchmarks.scale import (
+    ScaleMeasurement,
+    WritePathCost,
+    measure_scale,
+    measure_write_path,
+)
 from modelguard.agent.pipeline import run_scan
 from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.config import TABLE_LEVEL_PRECISION, ScanConfig
@@ -788,6 +793,7 @@ def render_results(
     generated_at: datetime,
     approaches: Sequence[ApproachScore] = (),
     scale: Sequence[ScaleMeasurement] = (),
+    write_cost: WritePathCost | None = None,
     counterfactuals: Sequence[CounterfactualCheck] = (),
     multi_path: MultiPathCheck | None = None,
     faithfulness: FaithfulnessReport | None = None,
@@ -1022,6 +1028,39 @@ def render_results(
                 f"| {measurement.graph_reads} "
                 f"| {measurement.reads_per_model:.1f} |"
             )
+        if write_cost is not None:
+            lines += [
+                "",
+                "### What the write path costs",
+                "",
+                "The sweep above is dry-run, so the table is the *read* path. A",
+                "`scan --all-models --write` pays more than that, and the difference is not",
+                "the writes: reconciliation walks a resource's incidents to decide what to",
+                "clear, per finding rather than per sweep. Measured on the seeded model,",
+                "which already carries incidents, because a freshly created replica carries",
+                "none and would report the cheapest possible case as the cost.",
+                "",
+                "| Phase | Graph reads | Share |",
+                "|---|---|---|",
+                f"| Detection | {write_cost.detect_reads} "
+                f"| {write_cost.detect_reads / write_cost.total_write_reads:.0%} |",
+                f"| Write-back | {write_cost.write_reads} "
+                f"| {write_cost.write_reads / write_cost.total_write_reads:.0%} |",
+                f"| Reconciliation | {write_cost.reconcile_reads} "
+                f"| {write_cost.reconcile_share:.0%} |",
+                f"| **Total** | **{write_cost.total_write_reads}** | |",
+                "",
+                f"That is **{write_cost.amplification:.1f}x** the reads of the same scan in",
+                f"dry run ({metrics.format_seconds(write_cost.dry_run_seconds)} against "
+                f"{metrics.format_seconds(write_cost.write_seconds)} of wall clock), and",
+                f"reconciliation is {write_cost.reconcile_share:.0%} of it. A whole-catalog",
+                "write sweep therefore does not cost what the table above suggests, and the",
+                "gap grows with how many incidents each resource already carries. Nothing is",
+                "scored against a target here either; the number is published because a",
+                "reader planning a nightly sweep needs it and the read-path table alone",
+                "would understate it.",
+            ]
+
         lines += [
             "",
             "Measured against a local Docker Quickstart on one developer machine, which is",
@@ -1154,6 +1193,9 @@ def main() -> None:
     print("Scale: replicating models and sweeping the catalog...")
     scale = measure_scale(conn, config)
 
+    print("Write path: what reconciliation costs over a dry run...")
+    write_cost = measure_write_path(conn, config, str(spec.model_urn()))
+
     # Last measurement before the restore, and the ordering is load-bearing now:
     # it plants each family's positive state to have something to narrate, so
     # anything running after it would be reading a graph it did not set up.
@@ -1177,6 +1219,7 @@ def main() -> None:
         generated_at=datetime.now(UTC),
         approaches=approaches,
         scale=scale,
+        write_cost=write_cost,
         counterfactuals=counterfactuals,
         multi_path=multi_path,
         faithfulness=faithfulness,

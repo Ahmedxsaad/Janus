@@ -41,6 +41,7 @@ from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.metadata.schema_classes import MLModelPropertiesClass
 from datahub.metadata.urns import MlModelUrn
 
+from modelguard.agent import pipeline
 from modelguard.agent.pipeline import run_scan
 from modelguard.client import DataHubConnection
 from modelguard.config import ScanConfig
@@ -111,6 +112,45 @@ class ScaleMeasurement:
     def reads_per_model(self) -> float:
         """Graph round trips one model costs, which the wall clock is made of."""
         return self.graph_reads / self.models if self.models else 0.0
+
+
+@dataclass(frozen=True)
+class WritePathCost:
+    """What the write path costs over the read path, for one model, one finding.
+
+    The sweep above is dry-run, so it measures the read path and says so. That
+    leaves the more expensive half unmeasured, and it is the half a whole-catalog
+    `scan --all-models --write` actually pays: reconciliation walks a resource's
+    incidents to decide what to clear, and it does that per finding rather than
+    per sweep.
+
+    Reported as a ratio and a phase split rather than as a target. There is no
+    published number for what reconciliation should cost; what a reader needs is
+    that the write path is not the read path plus a few writes, and where the
+    difference goes.
+    """
+
+    detect_reads: int
+    write_reads: int
+    reconcile_reads: int
+    dry_run_seconds: float
+    write_seconds: float
+
+    @property
+    def total_write_reads(self) -> int:
+        """Every read one write-enabled scan issues."""
+        return self.detect_reads + self.write_reads + self.reconcile_reads
+
+    @property
+    def amplification(self) -> float:
+        """How many times the read path's cost a write-enabled scan pays."""
+        return self.total_write_reads / self.detect_reads if self.detect_reads else 0.0
+
+    @property
+    def reconcile_share(self) -> float:
+        """Reconciliation's share of the write path's reads, as a fraction."""
+        total = self.total_write_reads
+        return self.reconcile_reads / total if total else 0.0
 
 
 def _replica_urn(index: int) -> str:
@@ -219,3 +259,74 @@ def measure_scale(
     finally:
         # A failed measurement must not leave the catalog full of fakes.
         remove_replicas(conn, urns)
+
+
+def measure_write_path(
+    conn: DataHubConnection, config: ScanConfig, model_urn: str
+) -> WritePathCost:
+    """Measure what a write-enabled scan costs over a dry run, and where it goes.
+
+    Runs the same model twice: once dry, once writing. The write run is
+    instrumented per phase, because the interesting number is not that writing
+    costs more (it must) but that reconciliation, not the writes themselves,
+    dominates it.
+
+    Run on the seeded model rather than on a replica: reconciliation's cost is a
+    function of how many incidents the resource already carries, and a freshly
+    created replica carries none, which would measure the cheapest possible case
+    and report it as the cost.
+
+    The write run is idempotent by construction (writeback keys on
+    ``(resource_urn, incident_type, title)``), so this leaves the graph as it
+    found it apart from a new run_id stamp.
+    """
+    counting = _CountingGraph(conn.graph)
+    instrumented = DataHubConnection(
+        graph=counting,  # type: ignore[arg-type]
+        client=conn.client,
+        gms_url=conn.gms_url,
+        has_token=conn.has_token,
+    )
+
+    started = time.monotonic()
+    run_scan(instrumented, config, model_urn=model_urn, llm=None, dry_run=True)
+    dry_run_seconds = time.monotonic() - started
+
+    phases: dict[str, int] = {}
+    original_write_back = pipeline._write_back
+    original_reconcile = pipeline._reconcile_stale_findings
+
+    def _counted(name: str, fn: Any) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            before = counting.reads
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                phases[name] = phases.get(name, 0) + (counting.reads - before)
+
+        return wrapper
+
+    pipeline._write_back = _counted("write", original_write_back)
+    pipeline._reconcile_stale_findings = _counted("reconcile", original_reconcile)
+    try:
+        before_write = counting.reads
+        started = time.monotonic()
+        run_scan(instrumented, config, model_urn=model_urn, llm=None, dry_run=False)
+        write_seconds = time.monotonic() - started
+        write_total = counting.reads - before_write
+    finally:
+        pipeline._write_back = original_write_back
+        pipeline._reconcile_stale_findings = original_reconcile
+
+    reconcile_reads = phases.get("reconcile", 0)
+    write_reads = phases.get("write", 0)
+    return WritePathCost(
+        # Detection's share is what the write run spent outside the two measured
+        # phases, not the dry run's own total: a second run of the same scan
+        # re-reads the same graph and the two are equal only by coincidence.
+        detect_reads=max(write_total - reconcile_reads - write_reads, 1),
+        write_reads=write_reads,
+        reconcile_reads=reconcile_reads,
+        dry_run_seconds=dry_run_seconds,
+        write_seconds=write_seconds,
+    )
