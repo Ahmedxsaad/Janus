@@ -337,6 +337,19 @@ modelguard scan --table loans_raw             # no finding, no writes
   </p>
 <pre><code>modelguard inventory        # every model, and what can and cannot be checked
 </code></pre>
+
+  <h3>The same sweep as one number</h3>
+  <p>
+    <code>inventory</code> answers per model. <code>coverage</code> folds that
+    sweep into the figure a platform lead reports upward, names the single next
+    declaration that would raise it most, and with <code>--write</code> records
+    the point on ModelGuard's own <code>dataFlow</code> so the next sweep has a
+    direction to compare against. It measures how much has been declared, not
+    how healthy the models are: a catalog at 8% is one where ModelGuard mostly
+    cannot tell you either way.
+  </p>
+<pre><code>modelguard coverage --write
+</code></pre>
 </section>
 
 <canvas class="beat" data-pose="tilt"

@@ -22,7 +22,7 @@ from datahub.metadata.schema_classes import (
 from datahub.metadata.urns import StructuredPropertyUrn
 
 from modelguard.config import ScanConfig
-from modelguard.detect.coverage import coverage_gaps
+from modelguard.detect.coverage import MODEL_CHECKS, coverage_gaps
 from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
 from modelguard.writeback.properties import FEATURE_TABLE
 from tests.conftest import (
@@ -311,3 +311,26 @@ def test_a_walk_hitting_both_caps_names_both_remedies():
     line = next(line for line in described if "target leakage" in line)
     assert "MODELGUARD_LEAKAGE_MAX_HOPS" in line
     assert "MODELGUARD_LINEAGE_RESULT_CAP" in line
+
+
+def test_model_checks_names_exactly_what_a_bare_model_reports_as_unevaluated():
+    """MODEL_CHECKS is the catalog figure's row set, so it may not drift (T-15).
+
+    A model with nothing set up produces one gap per model-level check, which
+    makes this the one place a seventh detector's check name shows up without
+    anybody having to remember to add it. Asserted as equality and not as a
+    subset: a new check missing from the tuple is exactly the failure that would
+    otherwise leave a silent hole in a number a platform lead reports upward.
+    """
+    checks = {
+        gap.check
+        for gap in coverage_gaps(
+            make_connection(FakeGraph(), FakeClient()),
+            CONFIG,
+            table_urn=None,
+            model_urn=MODEL_URN,
+            findings=(),
+        )
+    }
+
+    assert checks == set(MODEL_CHECKS)

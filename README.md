@@ -179,7 +179,15 @@ ModelGuard can already see:
 
 ```bash
 modelguard inventory        # every model, and what can and cannot be checked
+modelguard coverage         # the same sweep as one catalog figure, with a trend
 ```
+
+`inventory` answers per model; `coverage` folds the same sweep into the number a
+platform lead reports upward ("34% of models have a checkable leakage path"),
+names the single next declaration that would raise it most, and with `--write`
+records the point so the next sweep has a direction to compare against. It
+measures how much has been declared, not how healthy the models are: a catalog at
+8% is one where ModelGuard mostly cannot tell you either way.
 
 Expect most models to come back "not checked", and that is the honest answer
 rather than a failure. DataHub's mlflow source records a model and its training

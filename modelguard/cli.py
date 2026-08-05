@@ -28,7 +28,7 @@ from rich.console import Console
 
 from modelguard import companion as companion_module
 from modelguard.adapters import ADAPTERS, AdapterError, DeclaredLink, read_declaration
-from modelguard.agent.pipeline import FindingWrites, ScanReport, run_scan
+from modelguard.agent.pipeline import FindingWrites, ScanReport, new_run_id, run_scan
 from modelguard.argos import events as argos_events
 from modelguard.argos.producer import ArgosProducer
 from modelguard.client import (
@@ -39,6 +39,7 @@ from modelguard.client import (
     is_local_gms,
 )
 from modelguard.config import SCORE_PROVENANCE, SCORING_VERSION, ScanConfig
+from modelguard.detect.guard_coverage import CatalogCoverage, ModelCoverage, aggregate
 from modelguard.discovery import search_model_urns
 from modelguard.env import ConfigError, scrub
 from modelguard.gate import (
@@ -65,6 +66,7 @@ from modelguard.render import (
     report_json,
     write_job_summary,
 )
+from modelguard.writeback.coverage_history import CoverageEntry, append_entry
 from modelguard.writeback.link import (
     LinkError,
     link_model,
@@ -79,6 +81,7 @@ from modelguard.writeback.model_documents import (
     render_evidence_pack,
     render_model_card,
 )
+from modelguard.writeback.process_instance import agent_flow_urn
 
 app = typer.Typer(
     add_completion=False,
@@ -1524,6 +1527,89 @@ def inventory(
             "graph is silent, declare it yourself: modelguard link --model <name> "
             "--features <table> --label-column <column>[/dim]"
         )
+
+
+@app.command()
+def coverage(
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Stop after this many models."),
+    ] = 50,
+    write: Annotated[
+        bool,
+        typer.Option(
+            "--write/--dry-run",
+            help="Record this sweep in the coverage trend on ModelGuard's own dataFlow.",
+        ),
+    ] = False,
+) -> None:
+    """Report what fraction of this catalog's models each check can run against (T-15).
+
+    `inventory` answers the question one model at a time. This is the same sweep
+    folded into the figure a platform lead reports upward: how observable is this
+    ML estate, which direction is it moving, and what is the single next
+    declaration that would raise it most.
+
+    It measures declaring, not health. A catalog at 100% coverage may still be
+    full of leaking models; a catalog at 8% is one where ModelGuard mostly cannot
+    tell you either way, which is the more urgent problem.
+
+    `--write` appends one capped entry to modelguard.coverage_history, keyed on
+    the sweep's run id so a rerun replaces its own row rather than adding a
+    second. Nothing else is written: the per-model scans are dry runs.
+    """
+    try:
+        config = ScanConfig.from_env()
+        conn = connect()
+    except (ConfigError, DataHubConnectionError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    model_urns = _model_urns(conn, limit=limit)
+    if not model_urns:
+        console.print(f"[yellow]No models in {conn.gms_url}.[/yellow] {_no_match_hint(conn)}")
+        raise typer.Exit(code=0)
+
+    run_id = new_run_id()
+    sweep = []
+    for model_urn in sorted(model_urns):
+        report = run_scan(conn, config, model_urn=model_urn, llm=None, dry_run=True)
+        sweep.append(ModelCoverage(model_urn=model_urn, gaps=report.not_evaluated))
+
+    catalog = aggregate(sweep)
+    _print_coverage(catalog)
+
+    if write:
+        history = append_entry(conn, catalog, run_id)
+        console.print(f"\n[green]Recorded[/green] on {agent_flow_urn()}")
+        _print_coverage_trend(history)
+
+
+def _print_coverage(catalog: CatalogCoverage) -> None:
+    """Print a catalog figure: the headline, the per-check rows, then the advice."""
+    console.print(
+        f"[bold]Guard coverage: {catalog.rate:.0%}[/bold] "
+        f"({catalog.covered_checks}/{catalog.total_checks} checks evaluable "
+        f"across {catalog.models} model(s))\n"
+    )
+    for check in catalog.checks:
+        # Colour tracks the rate and nothing else. A check nothing can run is not
+        # a failing check, it is an unasked one, so the worst colour here is
+        # yellow: red is reserved for a finding somebody has to act on.
+        colour = "green" if check.rate >= 1.0 else "yellow" if check.rate > 0.0 else "dim"
+        console.print(f"  [{colour}]{check.describe()}[/{colour}]")
+
+    if catalog.next_join is not None:
+        console.print(f"\n[bold]Next join[/bold]  {catalog.next_join.describe()}")
+
+
+def _print_coverage_trend(history: tuple[CoverageEntry, ...]) -> None:
+    """Print the recorded trend, most recent last, when there is more than a point."""
+    if len(history) < 2:
+        return
+    console.print("\n[bold]Trend[/bold]")
+    for entry in history:
+        console.print(f"  {entry.recorded_at}  {entry.rate:>4.0%}  ({entry.models} models)")
 
 
 def _print_proposal(proposal: LinkProposal) -> None:

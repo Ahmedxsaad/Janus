@@ -56,6 +56,11 @@ OPEN_LEAK_COLUMNS = "modelguard.open_leak_columns"
 #: week, and the direction is what tells somebody that a change shipped.
 TRUST_HISTORY = "modelguard.trust_history"
 
+#: One entry per catalog sweep, oldest first, carried on ModelGuard's own
+#: dataFlow rather than on any asset: guard coverage is a fact about the whole
+#: graph, and there is no model or dataset it belongs to (T-15).
+COVERAGE_HISTORY = "modelguard.coverage_history"
+
 #: What ``modelguard link`` was told, kept on the model so the link can be
 #: replayed after an ingest overwrites ``mlModelProperties`` (D-074). Declared
 #: here rather than beside ``link`` because more than one layer reads them:

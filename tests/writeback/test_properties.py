@@ -42,6 +42,9 @@ def test_the_shipped_declarations_parse_and_cover_the_planned_properties():
         # The scoring function behind the stored score, so a step in the trend
         # across a release reads as a discontinuity and not a regression (F7).
         "modelguard.scoring_version",
+        # The only one that is not about a guarded asset: how much of the whole
+        # catalog ModelGuard can check, carried on the agent's own flow (T-15).
+        "modelguard.coverage_history",
         # What `modelguard link` was told, kept so it can be replayed after an
         # ingestion run overwrites the model's own aspect (D-074).
         "modelguard.feature_table",

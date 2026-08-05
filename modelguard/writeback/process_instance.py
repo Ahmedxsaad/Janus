@@ -223,6 +223,17 @@ def _iolets(urns: Sequence[str]) -> list[str]:
     return sorted({mapped for urn in urns if (mapped := _iolet(urn)) is not None})
 
 
+def agent_flow_urn() -> str:
+    """The URN of ModelGuard's own dataFlow, without emitting anything.
+
+    Derived from the same constants :func:`_flow` builds the entity from, so a
+    caller hanging a catalog-level fact off the agent (the guard-coverage trend,
+    T-15) addresses the entity a scan run already created rather than a second
+    one that happens to look like it.
+    """
+    return str(_flow().urn)
+
+
 def scan_run_urn(run_id: str) -> str:
     """The URN the run with this id occupies, without emitting anything.
 
