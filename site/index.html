@@ -112,7 +112,7 @@
   <a href="#config">Configuration</a>
   <a href="#security">Security model</a>
   <a href="#crosswalk">NIST AI RMF</a>
-  <a href="#documents">Model card, AI Act pack</a>
+  <a href="#documents">Model card, AI Act pack, feature cards</a>
   <a href="#links">Everything else</a>
 </aside>
 
@@ -336,6 +336,33 @@ modelguard scan --table loans_raw             # no finding, no writes
     has nowhere to start.
   </p>
 <pre><code>modelguard inventory        # every model, and what can and cannot be checked
+</code></pre>
+
+  <h3>The same sweep as one number</h3>
+  <p>
+    <code>inventory</code> answers per model. <code>coverage</code> folds that
+    sweep into the figure a platform lead reports upward, names the single next
+    declaration that would raise it most, and with <code>--write</code> records
+    the point on ModelGuard's own <code>dataFlow</code> so the next sweep has a
+    direction to compare against. It measures how much has been declared, not
+    how healthy the models are: a catalog at 8% is one where ModelGuard mostly
+    cannot tell you either way.
+  </p>
+<pre><code>modelguard coverage --write
+</code></pre>
+
+  <h3>And the one report for a budget holder</h3>
+  <p>
+    <code>finops</code> lists the tables whose <em>every</em> downstream model
+    has no deployment in service and has gone untouched past
+    <code>MODELGUARD_UNUSED_MODEL_DAYS</code>. One live consumer and a table is
+    not listed, because that is not a saving. A model whose catalog entry
+    carries no date at all is reported separately as undated and never as
+    unused: in the one report here that suggests deleting something, an absence
+    is not evidence. It writes nothing and raises no incident, because nothing
+    here is broken.
+  </p>
+<pre><code>modelguard finops
 </code></pre>
 </section>
 
@@ -612,6 +639,50 @@ modelguard gate --model credit_risk_v3 --min-trust 80             # exit 1 if tr
   </p>
 <pre><code>modelguard watch --table loans_raw           # poll one table
 modelguard watch --table loans_raw --pet     # and put Argos on the desktop
+</code></pre>
+
+  <h3>Its own numbers, where your other numbers are</h3>
+  <p>
+    Every completed scan already logs what an SLO is built from: findings
+    raised, writes made, and how long detection itself took, separate from the
+    poll interval and from DataHub's own indexing, because <code>watch</code>
+    controls neither. Set <code>MODELGUARD_OTEL_ENDPOINT</code> and the same
+    three numbers go to an OTLP collector as metrics. Unset, and nothing is
+    imported and nothing is exported.
+  </p>
+  <p>
+    Three instruments and no traces, on purpose. A team that wants spans across
+    the DataHub SDK's HTTP calls installs
+    <code>opentelemetry-instrumentation-requests</code> and gets them, which is
+    better than this project shipping a second, worse copy of it.
+  </p>
+<pre><code>pip install "modelguard-datahub[otel]"
+MODELGUARD_OTEL_ENDPOINT=http://localhost:4318/v1/metrics modelguard watch --table loans_raw
+</code></pre>
+
+  <h3>React to the graph instead of a timer</h3>
+  <p>
+    <code>watch --events</code> consumes DataHub's own
+    <code>MetadataChangeLog</code> instead of polling, and does one thing polling
+    structurally cannot: it re-applies, <strong>catalog-wide</strong>, any
+    <code>modelguard link</code> an ingestion run drops.
+  </p>
+  <p>
+    That failure is the adoption cliff, and it is silent. DataHub's mlflow source
+    upserts the whole <code>mlModelProperties</code> aspect on every ingest,
+    which drops the <code>mlFeatures</code> that <code>link</code> attached. From
+    that moment the leakage, sensitive-source and proxy checks have nothing to
+    walk, and each reports "not evaluated" on a model that was fully checked
+    yesterday. Nothing errors.
+  </p>
+  <p>
+    It replays only what a human already confirmed, so a model nobody linked is
+    left alone: an inferred join looks identical to a confirmed one in the graph
+    and would make every detector downstream confident about the wrong columns.
+    Polling remains the default and needs no broker.
+  </p>
+<pre><code>pip install "modelguard-datahub[kafka]"
+modelguard watch --events --model credit_risk_v3
 </code></pre>
 </section>
 
@@ -902,9 +973,10 @@ MODELGUARD_LABEL_TERM_URN=              # honor your existing label term
 </section>
 
 <section id="documents">
-  <h2>Two documents, generated instead of maintained</h2>
+  <h2>Three documents, generated instead of maintained</h2>
 <pre><code>modelguard model-card    --model credit_risk_v3   # prints; --write publishes it to DataHub
 modelguard evidence-pack --model credit_risk_v3   # EU AI Act Article 10
+modelguard feature-card  --model credit_risk_v3   # one Data Card per feature
 </code></pre>
   <p>
     A <strong>model card</strong> in the sense Mitchell et al. (FAT* 2019)
@@ -923,6 +995,19 @@ modelguard evidence-pack --model credit_risk_v3   # EU AI Act Article 10
     record prints as <em>not recorded in the catalog</em> rather than being
     quietly dropped, so a gap is visible in the document instead of reading as
     an absence of a problem.
+  </p>
+  <p>
+    <code>feature-card</code> is the third, a <strong>Data Card</strong> in the
+    sense Pushkarna, Zaldivar and Kjartansson (FAccT 2022) proposed one, but for
+    a single feature: where it is computed from hop by hop, every other
+    derivation the walk found, each table that chain crosses and how current it
+    is, whether the chain reaches a column classified as restricted or as a
+    protected attribute, whether its type has moved since training, and, when a
+    finding names it, the changes that would clear it. Taken per model because
+    that is what somebody has in hand; <code>--feature</code> filters within it.
+    Its freshness figures say out loud that they are measured <em>now</em> and
+    not at training time, for the same reason the evidence pack refuses to
+    substitute one for the other.
   </p>
   <p>
     The evidence pack's first heading is <strong>This is not a compliance

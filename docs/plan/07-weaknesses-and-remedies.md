@@ -31,7 +31,7 @@ answer, lose data, or block adoption outright.
 | F8 | Six new modules have zero integration or benchmark coverage | Evidence | **High** | M |
 | F9 | CI tests one Python version; the package claims three | Packaging | Medium | S |
 | F10 | `--infer` needs an aspect the validated stack does not produce | Adoption | **High** | M |
-| F11 | `link` must be re-run per training run, with no automation hook | Adoption | **High** | L |
+| F11 | ~~`link` must be re-run per training run, with no automation hook~~ **CLOSED (D-132)** | Adoption | **High** | L |
 | F12 | `watch` hides the error message and never logs a failure | Operability | Medium | S |
 | F13 | No LLM timeout, so a hanging provider stalls a daemon forever | Operability | Medium | S |
 | F14 | `watch` runs a full scan twice on every change | Efficiency | Low | S |
@@ -914,6 +914,35 @@ skill.
 Ingest, confirm the features are gone, run the CronJob's command, confirm the
 scan is green again. And the new de-link check fires in between, which is what
 makes the gap visible rather than silent.
+
+### Status: CLOSED (D-132, T-20)
+
+All four remedies are in place, and the last of them is what actually closes it.
+Steps 1 to 3 landed earlier: the CronJob ships in `charts/modelguard-watch`, the
+README's training-script section shows the two-line integration, and
+`coverage.py`'s `_DELINKED` gap tells a model an ingest de-linked apart from one
+nobody ever linked (D-092).
+
+What stayed open was the sentence above: *"somebody has to notice and go re-run a
+command"*. `modelguard watch --events` removes that. It consumes DataHub's own
+`MetadataChangeLog`, sees the `mlModelProperties` upsert that drops the features
+on **any** model in the catalog, and replays the recorded link with no human
+action (`modelguard/mcl.py`, `modelguard/reconcile.py`).
+
+Verified as this section asks and as the plan asks: a model ingested through
+DataHub's own mlflow source three times against a live Quickstart. The second
+ingest reproduced the failure exactly, seven features to zero, with the recorded
+arguments surviving in structured properties; the third ran with `watch --events`
+up and the features were back before anybody looked.
+
+Two limits stated rather than glossed. It replays **only** what a human already
+confirmed, so a model nobody linked is left alone: an inferred join is
+indistinguishable from a confirmed one in the graph and would make every detector
+downstream confident about the wrong columns. And step 4 remains the real fix and
+remains open: an mlflow source that patched `mlModelProperties` instead of
+upserting it would delete this problem for every DataHub user rather than for
+this project's users, and `docs/most-valuable-feedback.md` still carries it as
+feedback #14.
 
 ---
 

@@ -11,7 +11,12 @@ from dataclasses import replace
 from datahub.metadata.schema_classes import GlossaryTermAssociationClass, GlossaryTermsClass
 
 from modelguard.config import ScanConfig
-from modelguard.detect.column_marks import ColumnMarkIndex, marked_ancestor, split_paths
+from modelguard.detect.column_marks import (
+    ColumnMarkIndex,
+    derivation_chains,
+    marked_ancestor,
+    split_paths,
+)
 from tests.conftest import (
     FEATURE_TABLE_URN,
     INCOME_COLUMN_URN,
@@ -340,3 +345,251 @@ def test_a_path_list_that_does_not_start_at_the_queried_column_is_left_whole():
     steps = column_path(LABEL_COLUMN_URN, INCOME_COLUMN_URN)
 
     assert split_paths(steps, LEAK_COLUMN_URN) == [steps]
+
+
+def test_derivation_chains_cuts_a_flattened_list_into_the_paths_it_came_from():
+    """Two derivations must not render as one impossible chain on a card (T-19).
+
+    The same split `marked_ancestor` needs, asked without a mark: a provenance
+    card wants the whole derivation, including the part nobody classified.
+    """
+    conn = make_connection(FakeGraph(), _two_flattened_paths())
+
+    chains = derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=CONFIG.leakage_max_hops)
+
+    assert [tuple(step.column_name for step in chain) for chain in chains] == [
+        ("prior_default_flag", "default_status"),
+        ("prior_default_flag", "default_status_backup"),
+    ]
+
+
+def test_derivation_chains_returns_one_entry_for_a_derivation_reached_twice():
+    """A card listing the same derivation twice claims two paths nothing measured."""
+    duplicated = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=1,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                ),
+                lineage_result(
+                    TABLE_URN,
+                    hops=2,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                ),
+            ]
+        }
+    )
+    conn = make_connection(FakeGraph(), duplicated)
+
+    chains = derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=CONFIG.leakage_max_hops)
+
+    assert len(chains) == 1
+
+
+def test_derivation_chains_honors_the_hop_cap_rather_than_trusting_the_server():
+    """Above two hops DataHub answers past max_hops (D-020, detect rule 3)."""
+    beyond = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=4,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                )
+            ]
+        }
+    )
+    conn = make_connection(FakeGraph(), beyond)
+
+    assert derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=3) == ()
+
+
+def test_a_column_with_no_upstream_lineage_yields_no_chain_rather_than_a_stub():
+    """The card renders "not recorded" for this, which needs an empty answer."""
+    conn = make_connection(FakeGraph(), FakeClient())
+
+    assert derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=3) == ()
+
+
+def test_a_path_holding_only_the_queried_column_is_not_a_derivation():
+    """A column derived from itself is not provenance, it is a rendering bug.
+
+    Kept out here rather than in the card, because a one-step chain renders as
+    a single backtick-quoted name and reads exactly like a complete derivation
+    to a source.
+    """
+    self_only = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=1,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN),
+                )
+            ]
+        }
+    )
+    conn = make_connection(FakeGraph(), self_only)
+
+    assert derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=3) == ()
+
+
+def test_derivation_chains_asks_the_graph_for_the_columns_own_upstream_cone():
+    """Asserted on the call issued, not only on the result it happened to return.
+
+    `FakeLineage` answers whatever it was seeded with regardless of its
+    arguments, so a walk that queried the wrong column, the wrong direction or
+    an unbounded depth returns the same list here and every assertion about the
+    *answer* passes. The read is the behaviour, so the read is what is pinned
+    (the same correction D-113 forced on the degraded-mode tests).
+    """
+    client = _two_flattened_paths()
+    conn = make_connection(FakeGraph(), client)
+
+    derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=4)
+
+    call = client.lineage.lineage_calls[0]
+    assert call["source_urn"] == FEATURE_TABLE_URN
+    assert call["source_column"] == "prior_default_flag"
+    assert call["direction"] == "upstream"
+    assert call["max_hops"] == 4
+    assert call["count"] == CONFIG.lineage_result_cap
+
+
+def test_derivation_chains_keeps_a_result_exactly_at_the_hop_cap():
+    """The boundary itself, which `> max_hops` includes and `>= max_hops` drops."""
+    at_cap = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=3,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                )
+            ]
+        }
+    )
+    conn = make_connection(FakeGraph(), at_cap)
+
+    assert len(derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=3)) == 1
+
+
+def test_a_result_past_the_cap_skips_that_result_and_not_the_rest():
+    """`continue`, never `break`: GMS does not return results in hop order.
+
+    Above two hops it answers from a full-graph search in network order, so the
+    first result past the cap can precede every result inside it. Stopping there
+    would drop a real derivation and the card would print a shorter provenance
+    than the graph holds.
+    """
+    unordered = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=9,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, INCOME_COLUMN_URN),
+                ),
+                lineage_result(
+                    TABLE_URN,
+                    hops=1,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                ),
+            ]
+        }
+    )
+    conn = make_connection(FakeGraph(), unordered)
+
+    chains = derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=3)
+
+    assert [tuple(step.column_name for step in chain) for chain in chains] == [
+        ("prior_default_flag", "default_status")
+    ]
+
+
+def test_a_path_without_the_queried_column_first_still_skips_only_its_own_step():
+    """The inner `continue` skips one step of one path, never the whole walk.
+
+    Turned to `break` it would stop at the first step and lose every chain
+    behind it in the same result.
+    """
+    two_paths = _two_flattened_paths()
+    conn = make_connection(FakeGraph(), two_paths)
+
+    chains = derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=CONFIG.leakage_max_hops)
+
+    assert len(chains) == 2
+
+
+def test_a_one_step_path_is_skipped_without_losing_the_paths_behind_it():
+    """The inner guard is `continue`, and `break` would cost the real chain.
+
+    The flattened list can open a path at the queried column and immediately
+    open another, which leaves a one-step path in front of a genuine
+    derivation. Stopping at the first would return no provenance at all for a
+    column that has some.
+    """
+    leading_stub = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=1,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                )
+            ]
+        }
+    )
+    conn = make_connection(FakeGraph(), leading_stub)
+
+    chains = derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=3)
+
+    assert [tuple(step.column_name for step in chain) for chain in chains] == [
+        ("prior_default_flag", "default_status")
+    ]
+
+
+def test_two_chains_of_equal_length_are_ordered_by_their_column_names():
+    """The tiebreaker is real, not decorative, and it is what makes a card stable.
+
+    Above two hops GMS answers in network order, so two derivations of the same
+    depth can arrive either way round. A card that printed them in whichever
+    order the server chose would show a different provenance on two reads of an
+    unchanged graph. Seeded here in the *reverse* of the expected order, so a
+    tiebreaker that collapsed to a constant would leave them as they arrived.
+    """
+    reversed_order = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=1,
+                    direction="upstream",
+                    paths=column_path(
+                        LEAK_COLUMN_URN,
+                        BACKUP_COLUMN_URN,
+                        LEAK_COLUMN_URN,
+                        LABEL_COLUMN_URN,
+                    ),
+                )
+            ]
+        }
+    )
+    conn = make_connection(FakeGraph(), reversed_order)
+
+    chains = derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=3)
+
+    assert [tuple(step.column_name for step in chain) for chain in chains] == [
+        ("prior_default_flag", "default_status"),
+        ("prior_default_flag", "default_status_backup"),
+    ]

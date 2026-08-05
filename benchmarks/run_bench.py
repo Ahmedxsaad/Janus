@@ -65,6 +65,8 @@ from modelguard.client import DataHubConnection, DataHubConnectionError, connect
 from modelguard.config import TABLE_LEVEL_PRECISION, ScanConfig
 from modelguard.detect.blast_radius import blast_radius
 from modelguard.detect.leakage import leakage_findings
+from modelguard.discovery import search_model_urns
+from modelguard.lifecycle import TypeLifecycle, mttr_by_type, read_lifecycles
 from modelguard.models import Finding, FindingType
 from modelguard.seed import graph_spec as spec
 from modelguard.seed import scenarios
@@ -603,6 +605,68 @@ def _faithfulness_lines(faithfulness: FaithfulnessReport | None) -> list[str]:
     return lines
 
 
+def measure_lifecycle(conn: DataHubConnection, config: ScanConfig) -> tuple[TypeLifecycle, ...]:
+    """Read back how long every ModelGuard incident on this graph stayed open (T-16).
+
+    Measured, not planted: this reads the incidents the run above just raised and
+    then resolved, plus whatever earlier runs left behind. Nothing here writes,
+    and there is no trial to construct, because the thing being measured is the
+    tool's own history rather than a detector's answer.
+    """
+    return mttr_by_type(read_lifecycles(conn, config, search_model_urns(conn)))
+
+
+def _lifecycle_lines(rows: Sequence[TypeLifecycle]) -> list[str]:
+    """Return the incident-lifecycle section, with what the number is not.
+
+    The caveat is the load-bearing part and it goes above the table, not below
+    it. On a benchmark graph, ModelGuard raises a finding and the very next
+    measurement reverts what caused it, so nearly every duration here is the
+    few seconds between a plant and its restore. That is a real measurement of
+    a real write path and it is *not* a mean time to resolution for a team. A
+    table published without saying so would be this project quoting its own
+    fixture back as an operational result.
+    """
+    lines = [
+        "",
+        "## Incident lifecycle",
+        "",
+        "**These are not production MTTRs, and the distinction matters.** Every number",
+        "below is read straight out of the graph, from `incidentInfo.created` and the",
+        "resolution stamp GMS wrote, for incidents carrying ModelGuard's own run footer",
+        "(T-16). But the graph they are read from is the benchmark's: a trial plants a",
+        "failure, the detector raises, and the next trial reverts the cause, so most of",
+        "these durations are the seconds between a plant and its restore. What they do",
+        "measure is that the raise-and-resolve loop closes at all, per detector, and",
+        "that the timestamps a real deployment would be measured with are actually",
+        "written. On a real catalog the same command prints the real figure:",
+        "`modelguard inventory`.",
+        "",
+        "The median is beside the mean because a single incident left open across a",
+        "weekend moves a mean by days and describes none of the others.",
+        "",
+        "| Detector | Raised | Still open | Resolved and timed | Mean | Median |",
+        "|---|---|---|---|---|---|",
+    ]
+    for row in rows:
+        mean = "-" if row.mean_hours is None else f"{row.mean_hours:.2f}h"
+        median = "-" if row.median_hours is None else f"{row.median_hours:.2f}h"
+        lines.append(
+            f"| {row.finding_type.value} | {row.raised} | {row.open_now} "
+            f"| {row.resolved} | {mean} | {median} |"
+        )
+    lines.append("")
+    if all(row.raised == 0 for row in rows):
+        lines += [
+            "Every row is zero, which means no incident on this graph carries ModelGuard's",
+            "run footer. That is the expected reading of a graph nothing has ever written",
+            "to, and it is reported rather than omitted: an absent section would look like",
+            "a measurement that was taken and came out fine.",
+            "",
+        ]
+    return lines
+
+
 def _ingested_lines(score: IngestedScore | None) -> list[str]:
     """Return the ingested-graph section, or the note saying it was not run.
 
@@ -728,10 +792,14 @@ def render_results(
     multi_path: MultiPathCheck | None = None,
     faithfulness: FaithfulnessReport | None = None,
     ingested: IngestedScore | None = None,
+    lifecycle: Sequence[TypeLifecycle] = (),
 ) -> str:
     """Render RESULTS.md. Pure: every number comes from the arguments."""
     grouped = _by_family(outcomes)
     errors = [outcome for outcome in outcomes if outcome.errored]
+    protected = ", ".join(
+        config.protected_attribute_tag_urns + config.protected_attribute_term_urns
+    )
     lines: list[str] = []
 
     lines += [
@@ -746,6 +814,10 @@ def render_results(
         f"- Blast-radius hop cap: {config.max_hops}; leakage hop cap: {config.leakage_max_hops}",
         f"- Sensitive classifications under test: "
         f"{', '.join(config.sensitive_tag_urns + config.sensitive_term_urns) or 'none'}",
+        # Reported beside the sensitive one rather than folded into it: the two
+        # are different taxonomies on purpose (T-11), and a reader checking which
+        # detector was actually switched on needs to see both (D-133).
+        f"- Protected attributes under test: {protected or 'none'}",
         f"- Trials: {len(outcomes)} ({len(errors)} unscoreable)",
         "",
         "## Detection",
@@ -920,6 +992,7 @@ def render_results(
     ]
 
     lines += _counterfactual_lines(counterfactuals, multi_path)
+    lines += _lifecycle_lines(lifecycle)
     lines += _ingested_lines(ingested)
 
     if scale:
@@ -1026,13 +1099,23 @@ def main() -> None:
     except DataHubConnectionError as exc:
         raise SystemExit(f"{exc}") from exc
 
-    # The sensitive-source detector is configuration-gated by design: with no
-    # classification named it does not run, and a scan reports it as not
-    # evaluated (D-079). That is the right default for a user and the wrong one
-    # for a benchmark, which would score a detector it never let run, so the
-    # classification the scenario plants is supplied here explicitly. The report
-    # says so, and every other value still comes from the environment.
-    config = replace(ScanConfig.from_env(), sensitive_tag_urns=(scenarios.SENSITIVE_TAG_URN,))
+    # Both governance detectors are configuration-gated by design: with no
+    # classification named neither runs, and a scan reports each as not
+    # evaluated (D-079, D-117). That is the right default for a user and the
+    # wrong one for a benchmark, which would score a detector it never let run,
+    # so the classifications the scenarios plant are supplied here explicitly.
+    # The report says so, and every other value still comes from the environment.
+    #
+    # The protected-attribute list was missing here until Phase 7 and the proxy
+    # row was scoreable only on a machine that happened to export the variable,
+    # which is benchmarks/CLAUDE.md rule 1's same-run-same-numbers failing
+    # silently: on a clean checkout `proxy-planted` reported WRONG for a
+    # detector that had never been switched on (D-133).
+    config = replace(
+        ScanConfig.from_env(),
+        sensitive_tag_urns=(scenarios.SENSITIVE_TAG_URN,),
+        protected_attribute_tag_urns=(scenarios.PROTECTED_TAG_URN,),
+    )
     trials = build_trials(config)
 
     print(f"ModelGuard-Bench: {len(trials)} trials against {conn.gms_url}\n")
@@ -1080,6 +1163,12 @@ def main() -> None:
     print("Restoring the seeded baseline...")
     restore_baseline(conn)
 
+    # After the restore, and that ordering is the measurement: the restore is
+    # what makes the recovery scans resolve the incidents this run raised, so
+    # reading before it would report every one of them as still open.
+    print("Incident lifecycle: how long this run's own findings stayed open...")
+    lifecycle = measure_lifecycle(conn, config)
+
     report = render_results(
         outcomes,
         blast,
@@ -1092,6 +1181,7 @@ def main() -> None:
         multi_path=multi_path,
         faithfulness=faithfulness,
         ingested=ingested,
+        lifecycle=lifecycle,
     )
     # The mutation section (T-08) is written by benchmarks/mutation_report.py on
     # its own schedule, and this function rewrites the whole file, so without

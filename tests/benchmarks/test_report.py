@@ -19,6 +19,7 @@ from benchmarks.inject import Target, Trial
 from benchmarks.run_bench import BlastRadiusCheck, TrialOutcome, WriteBackCheck, render_results
 from benchmarks.scale import ScaleMeasurement
 from modelguard.config import ScanConfig
+from modelguard.lifecycle import TypeLifecycle
 from modelguard.models import FindingType
 
 CONFIG = ScanConfig(freshness_sla_hours=6.0)
@@ -52,6 +53,11 @@ BLAST = BlastRadiusCheck(expected_models=1, found_models=1, named_the_live_deplo
 
 def _report(outcomes: list[TrialOutcome]) -> str:
     return render_results(outcomes, BLAST, WRITEBACK, CONFIG, generated_at=WHEN)
+
+
+def _lifecycle_report(*, lifecycle: tuple[TypeLifecycle, ...]) -> str:
+    """A report carrying only the incident-lifecycle section's inputs (T-16)."""
+    return render_results([], BLAST, WRITEBACK, CONFIG, generated_at=WHEN, lifecycle=lifecycle)
 
 
 def test_an_unscoreable_trial_is_kept_out_of_the_detection_table():
@@ -270,3 +276,77 @@ def test_every_detector_has_a_row_label_so_none_is_silently_dropped():
     from benchmarks.run_bench import _DETECTOR_LABELS
 
     assert set(_DETECTOR_LABELS) == set(FindingType)
+
+
+def _row(
+    family: FindingType,
+    *,
+    raised: int = 0,
+    open_now: int = 0,
+    resolved: int = 0,
+    mean_ms: float | None = None,
+    median_ms: float | None = None,
+) -> TypeLifecycle:
+    return TypeLifecycle(
+        finding_type=family,
+        raised=raised,
+        open_now=open_now,
+        resolved=resolved,
+        mean_ms=mean_ms,
+        median_ms=median_ms,
+    )
+
+
+def test_the_lifecycle_section_says_these_are_not_production_mttrs():
+    """The caveat is the section (T-16), and it goes above the table.
+
+    Almost every duration on a benchmark graph is the gap between a planted
+    failure and the next trial's restore. Publishing the table without saying so
+    would be this project quoting its own fixture back as an operational result,
+    which is exactly the misreading the rest of the report is built to prevent.
+    """
+    markdown = _lifecycle_report(
+        lifecycle=(
+            _row(
+                FindingType.TARGET_LEAKAGE,
+                raised=3,
+                resolved=3,
+                mean_ms=3_600_000,
+                median_ms=3_600_000,
+            ),
+        )
+    )
+
+    section = markdown.split("## Incident lifecycle")[1]
+    table_start = section.index("| Detector |")
+    assert "not production MTTRs" in section[:table_start]
+
+
+def test_the_lifecycle_table_reports_the_median_beside_the_mean():
+    markdown = _lifecycle_report(
+        lifecycle=(
+            _row(
+                FindingType.TARGET_LEAKAGE,
+                raised=2,
+                resolved=2,
+                mean_ms=7_200_000,
+                median_ms=3_600_000,
+            ),
+        )
+    )
+
+    assert "| target-leakage | 2 | 0 | 2 | 2.00h | 1.00h |" in markdown
+
+
+def test_a_detector_that_never_fired_is_a_dash_not_a_zero_duration():
+    """Zero hours would claim findings of that type close instantly."""
+    markdown = _lifecycle_report(lifecycle=(_row(FindingType.PROXY_CANDIDATE),))
+
+    assert "| proxy-candidate | 0 | 0 | 0 | - | - |" in markdown
+
+
+def test_an_all_zero_lifecycle_table_explains_itself_rather_than_reading_as_clean():
+    """A graph nothing has written to must not look like a graph with no problems."""
+    markdown = _lifecycle_report(lifecycle=(_row(FindingType.TARGET_LEAKAGE),))
+
+    assert "no incident on this graph carries ModelGuard's" in markdown

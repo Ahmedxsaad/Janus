@@ -28,6 +28,7 @@ from modelguard.models import (
     ChangeKind,
     Deduction,
     DeprecatedInputFinding,
+    Finding,
     FreshnessFinding,
     FreshnessSignal,
     LeakageFinding,
@@ -659,3 +660,34 @@ def emitted_about_the_graph(graph: FakeGraph) -> list[Any]:
     that no longer exists.
     """
     return [mcp for mcp in graph.emitted if not str(mcp.entityUrn).startswith(OWN_RUN_PREFIXES)]
+
+
+def one_of_every_finding() -> tuple[Finding, ...]:
+    """One instance of each concrete Finding subclass, built by the factories above.
+
+    Several tests have to hold something true of *every* detector's output: that
+    a report renders, that a title carries the prefix its finding type is
+    registered under. Written out by hand each time, that list goes stale the
+    moment a detector lands, which is how two governance findings once shipped
+    with no impact report at all (D-096). Here it is asserted against
+    ``Finding.__subclasses__()``, so a new detector with no factory fails this
+    rather than quietly leaving a hole in whatever the caller was checking.
+    """
+    findings: tuple[Finding, ...] = (
+        make_finding(),
+        make_leakage_finding(),
+        make_schema_drift_finding(),
+        make_sensitive_source_finding(),
+        make_proxy_candidate_finding(),
+        make_deprecated_input_finding(),
+        make_table_level_finding(),
+    )
+    covered = {type(finding) for finding in findings}
+    concrete = {
+        subclass
+        for subclass in Finding.__subclasses__()
+        if not getattr(subclass, "__abstractmethods__", frozenset())
+    }
+    missing = sorted(cls.__name__ for cls in concrete - covered)
+    assert covered == concrete, f"no factory for: {missing}"
+    return findings

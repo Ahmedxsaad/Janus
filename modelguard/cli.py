@@ -22,13 +22,14 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from datahub.metadata.urns import DatasetUrn, MlModelUrn, SchemaFieldUrn, Urn
+from datahub.metadata.schema_classes import MLModelPropertiesClass
+from datahub.metadata.urns import DatasetUrn, MlFeatureUrn, MlModelUrn, SchemaFieldUrn, Urn
 from datahub.sdk.search_filters import FilterDsl as F
 from rich.console import Console
 
 from modelguard import companion as companion_module
 from modelguard.adapters import ADAPTERS, AdapterError, DeclaredLink, read_declaration
-from modelguard.agent.pipeline import FindingWrites, ScanReport, run_scan
+from modelguard.agent.pipeline import FindingWrites, ScanReport, new_run_id, run_scan
 from modelguard.argos import events as argos_events
 from modelguard.argos.producer import ArgosProducer
 from modelguard.client import (
@@ -39,8 +40,11 @@ from modelguard.client import (
     is_local_gms,
 )
 from modelguard.config import SCORE_PROVENANCE, SCORING_VERSION, ScanConfig
+from modelguard.detect.guard_coverage import CatalogCoverage, ModelCoverage, aggregate
 from modelguard.discovery import search_model_urns
 from modelguard.env import ConfigError, scrub
+from modelguard.finops import describe_undated
+from modelguard.finops import report as finops_report
 from modelguard.gate import (
     EXIT_ERROR,
     GatePolicy,
@@ -48,8 +52,18 @@ from modelguard.gate import (
     github_annotations,
     summary,
 )
+from modelguard.lifecycle import mttr_by_type, read_lifecycles
 from modelguard.llm import LLMConfig, llm_config_from_env
 from modelguard.logs import LOG_FIELDS, configure_logging, logfmt
+from modelguard.mcl import (
+    ENV_KAFKA_BOOTSTRAP,
+    ENV_KAFKA_GROUP_ID,
+    ENV_SCHEMA_REGISTRY_URL,
+    ChangeLog,
+    MclConfig,
+    MclEvent,
+    mcl_config_from_env,
+)
 from modelguard.models import (
     Finding,
     FreshnessFinding,
@@ -58,12 +72,20 @@ from modelguard.models import (
     Severity,
     TableLevelRiskFinding,
 )
+from modelguard.reconcile import consider
 from modelguard.render import (
     OutputFormat,
     crosswalk_markdown,
     job_summary_markdown,
     report_json,
     write_job_summary,
+)
+from modelguard.telemetry import start_exporter
+from modelguard.writeback.coverage_history import CoverageEntry, append_entry
+from modelguard.writeback.feature_documents import (
+    gather_feature,
+    publish_feature_card,
+    render_feature_card,
 )
 from modelguard.writeback.link import (
     LinkError,
@@ -79,6 +101,7 @@ from modelguard.writeback.model_documents import (
     render_evidence_pack,
     render_model_card,
 )
+from modelguard.writeback.process_instance import agent_flow_urn
 
 app = typer.Typer(
     add_completion=False,
@@ -737,6 +760,97 @@ def _watch_once(
     return signature
 
 
+def _touches(event: MclEvent, table_urn: str | None, model_urn: str | None) -> bool:
+    """Whether a change-log event concerns one of the watched targets.
+
+    A column's own aspects arrive under a ``schemaField`` URN that embeds its
+    parent dataset, so containment rather than equality: a term applied to a
+    column of the watched table is exactly the change a leakage scan should wake
+    up for, and an equality test would sleep through it.
+    """
+    return any(
+        target is not None and target in event.entity_urn for target in (table_urn, model_urn)
+    )
+
+
+def _watch_events(
+    conn: DataHubConnection,
+    config: ScanConfig,
+    *,
+    table_urn: str | None,
+    model_urn: str | None,
+    llm: LLMConfig | None,
+    mcl: MclConfig,
+    argos: ArgosProducer | None,
+) -> None:
+    """Run the watch loop off DataHub's change log instead of a timer (T-20).
+
+    Two handlers over one subscription, which is what the plan means by "the same
+    consumer with a second handler":
+
+    * **Catalog-wide**, every event: an ``mlModelProperties`` upsert that dropped
+      a model's features gets the recorded link replayed. That failure is not
+      about the watched target, so it is deliberately not filtered by one.
+    * **Target-scoped**: an event touching the watched table or model runs the
+      same ``_watch_once`` a poll would have run, so detection, write-back and
+      the transition logic are byte-identical to polling. Only the wake-up
+      differs, which is the whole claim.
+
+    One scan runs before the loop opens. Without it the first event's transition
+    would be computed against an empty state and would announce every existing
+    finding as new.
+    """
+    state = WatchState()
+    _watch_once(
+        conn,
+        config,
+        table_urn=table_urn,
+        model_urn=model_urn,
+        llm=llm,
+        previous=state.signature,
+        state=state,
+        argos=argos,
+    )
+
+    with ChangeLog(mcl) as log:
+        console.print("[dim]listening to DataHub's change log; Ctrl-C to stop[/dim]\n")
+        for event in log.events():
+            try:
+                relink = consider(conn, config, event)
+                if relink is not None:
+                    colour = "green" if relink.relinked else "yellow"
+                    console.print(
+                        f"[{colour}]{relink.model_urn}[/{colour}]\n  {relink.reason}"
+                        + (f" ({relink.features} features)" if relink.relinked else "")
+                    )
+                if _touches(event, table_urn, model_urn):
+                    _watch_once(
+                        conn,
+                        config,
+                        table_urn=table_urn,
+                        model_urn=model_urn,
+                        llm=llm,
+                        previous=state.signature,
+                        state=state,
+                        argos=argos,
+                    )
+            except Exception as exc:  # noqa: BLE001 - a daemon must survive one bad event
+                # Logged and carried on, never re-raised: a single model whose
+                # feature table has since been deleted must not stop the loop
+                # from protecting every other model behind it. The offset is
+                # committed either way, because the handlers are idempotent and
+                # re-delivering an event that already failed would wedge the
+                # consumer on it forever.
+                fields = {"error_type": type(exc).__name__, "urn": event.entity_urn}
+                logger.warning(
+                    "change log handler failed %s",
+                    logfmt(fields),
+                    extra={LOG_FIELDS: fields},
+                    exc_info=True,
+                )
+                console.print(f"[yellow]event skipped:[/yellow] {safe_error(exc)}")
+
+
 def _wait(seconds: float, argos: ArgosProducer | None) -> None:
     """Sleep between polls, but wake early when the window asks for a scan.
 
@@ -1081,6 +1195,14 @@ def watch(
         bool,
         typer.Option("--once", help="Poll a single time and exit. For scripts and the demo."),
     ] = False,
+    events: Annotated[
+        bool,
+        typer.Option(
+            "--events",
+            help="React to DataHub's change log instead of polling, and re-apply any "
+            "link an ingestion run drops, anywhere in the catalog.",
+        ),
+    ] = False,
     pet: Annotated[
         bool,
         typer.Option(
@@ -1113,13 +1235,20 @@ def watch(
     human to prompt) and, because the writes are idempotent, it acts on the
     transitions, a new finding or a recovery, rather than on every poll.
 
-    This is polling, deliberately: it never depends on Kafka timing, which is what
-    makes it reliable for a demo. An event-driven build on DataHub's Actions
-    framework (``EntityChangeEvent``) is the upgrade path when poll latency matters.
-    """
-    # ponytail: polling loop, not the Actions/Kafka EntityChangeEvent consumer.
-    # Wire datahub-actions here if sub-poll-interval latency ever matters.
+    Polling is the default, deliberately: it never depends on Kafka timing, which
+    is what makes it reliable for a demo and behind a proxy.
 
+    ``--events`` is the upgrade 03-production-hardening.md section C.1 has always
+    named (T-20). It consumes DataHub's own ``MetadataChangeLog``, so a scan
+    happens when the graph changes rather than when a timer fires, and it does one
+    thing polling structurally cannot: it re-applies, **catalog-wide**, any
+    `modelguard link` an ingestion run drops. That failure is not about the
+    watched target, so no poll of one target could ever see it (D-074, F11).
+
+    It replays only what a human already confirmed. A model nobody linked is left
+    alone: guessing a training table would write a join indistinguishable from a
+    confirmed one and wrong.
+    """
     # The one entry point that runs unattended for days, so it is the one that
     # turns the pipeline's per-scan timing lines on. The other commands print a
     # report to a human who is standing there and would only be talked over.
@@ -1134,6 +1263,19 @@ def watch(
         raise typer.Exit(code=2) from exc
     console.print(f"[dim]logging: {log_format}[/dim]")
 
+    # Installed here and nowhere else, for the reason the log handler is: this is
+    # the one entry point that runs unattended, and a library that started a
+    # background exporter would be exporting from an application that never asked
+    # for it. Unset means off, and a misconfigured endpoint fails now rather than
+    # after a week of exporting nowhere (T-17).
+    try:
+        metrics = start_exporter()
+    except ConfigError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+    if metrics is not None:
+        console.print("[dim]exporting scan metrics over OTLP[/dim]")
+
     conn, config, llm, table_urn, model_urn = _prepare(
         table=table,
         model=model,
@@ -1147,14 +1289,58 @@ def watch(
     for target in (table_urn, model_urn):
         if target is not None:
             console.print(f"Watching [bold]{target}[/bold]")
-    if not once:
+    if not once and not events:
         console.print(f"[dim]polling every {interval:.0f}s; Ctrl-C to stop[/dim]")
     console.print()
+
+    argos = ArgosProducer.start(console) if pet else None
+    if events:
+        if once:
+            console.print(
+                "[red]--events and --once are not compatible.[/red] A subscription has "
+                "no single poll to take: --once is the scripted path, --events is the "
+                "daemon one."
+            )
+            raise typer.Exit(code=2)
+        try:
+            mcl = mcl_config_from_env()
+        except ConfigError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=2) from exc
+        if mcl is None:
+            console.print(
+                f"[red]--events needs the change log configured.[/red] Set "
+                f"{ENV_KAFKA_BOOTSTRAP}, {ENV_SCHEMA_REGISTRY_URL} and "
+                f"{ENV_KAFKA_GROUP_ID}, and install the client: "
+                'pip install "modelguard-datahub[kafka]"'
+            )
+            raise typer.Exit(code=2)
+        try:
+            _watch_events(
+                conn,
+                config,
+                table_urn=table_urn,
+                model_urn=model_urn,
+                llm=llm,
+                mcl=mcl,
+                argos=argos,
+            )
+        except ConfigError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=2) from exc
+        except KeyboardInterrupt:
+            console.print("\n[dim]watch stopped.[/dim]")
+        finally:
+            if argos is not None:
+                argos.close()
+            if metrics is not None:
+                metrics.force_flush()
+                metrics.shutdown()
+        return
 
     state = WatchState()
     backoff = interval
     consecutive_failures = 0
-    argos = ArgosProducer.start(console) if pet else None
     try:
         while True:
             try:
@@ -1209,6 +1395,13 @@ def watch(
     finally:
         if argos is not None:
             argos.close()
+        if metrics is not None:
+            # Flush before shutdown: the reader batches on an interval, so a
+            # watch stopped by Ctrl-C would otherwise drop up to one interval of
+            # measurements, including the failures that most likely prompted
+            # somebody to stop it.
+            metrics.force_flush()
+            metrics.shutdown()
 
 
 @app.command()
@@ -1516,6 +1709,8 @@ def inventory(
         else:
             console.print(f"[green]{name}[/green]  clean, every check ran")
 
+    _print_lifecycle(conn, config, model_urns)
+
     if unchecked:
         console.print(
             f"\n[dim]{unchecked} model(s) have nothing linking them to their training "
@@ -1524,6 +1719,175 @@ def inventory(
             "graph is silent, declare it yourself: modelguard link --model <name> "
             "--features <table> --label-column <column>[/dim]"
         )
+
+
+@app.command()
+def finops(
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Stop after this many models."),
+    ] = 200,
+    days: Annotated[
+        int | None,
+        typer.Option("--days", help="Idle window before a model counts as unused."),
+    ] = None,
+) -> None:
+    """List the tables that exist only to feed models nothing uses (T-18).
+
+    The one command here whose reader is a budget holder rather than an engineer.
+    Nothing is broken, so nothing is written and no incident is raised: a model
+    nobody deployed is a decision somebody may not have noticed they made.
+
+    A table is listed only when *every* model downstream of it is unused, and
+    "unused" means both no deployment in service and a recorded date older than
+    the window. A model whose catalog entry carries no date at all is reported
+    separately as undated, never as unused: in a report that suggests deleting
+    things, an absence is not evidence.
+    """
+    try:
+        config = ScanConfig.from_env()
+        if days is not None:
+            config = replace(config, unused_model_days=days)
+        conn = connect()
+    except (ConfigError, DataHubConnectionError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    model_urns = _model_urns(conn, limit=limit)
+    if not model_urns:
+        console.print(f"[yellow]No models in {conn.gms_url}.[/yellow] {_no_match_hint(conn)}")
+        raise typer.Exit(code=0)
+
+    result = finops_report(conn, config, model_urns, now_ms=int(time.time() * 1000))
+    console.print(
+        f"[bold]{result.examined} model(s) examined[/bold], idle window {result.window_days} days\n"
+    )
+
+    if result.unused:
+        console.print(f"[yellow]{len(result.unused)} model(s) with no live deployment[/yellow]")
+        for usage in result.unused:
+            idle = usage.idle_days(int(time.time() * 1000))
+            console.print(f"  {usage.model.name}  idle {idle:.0f} days")
+        console.print()
+
+    if result.candidates:
+        console.print(
+            f"[bold]{len(result.candidates)} table(s) feed nothing else[/bold]  "
+            "(every model downstream of these is unused)"
+        )
+        for candidate in result.candidates:
+            console.print(f"  {candidate.describe()}")
+    else:
+        console.print(
+            "[green]No table feeds only unused models.[/green] Every input reaches "
+            "something still in service, which is the usual answer on a warehouse "
+            "where marts are shared."
+        )
+
+    if result.undated:
+        console.print(f"\n[dim]{describe_undated(result.undated)}[/dim]")
+
+
+def _print_lifecycle(
+    conn: DataHubConnection, config: ScanConfig, model_urns: tuple[str, ...]
+) -> None:
+    """Print how long ModelGuard's own findings have stayed open (T-16).
+
+    Printed after the per-model list rather than before it: the list says what is
+    wrong now, and this says whether anything ever gets fixed. Silent when
+    ModelGuard has never raised an incident on this graph, because a table of
+    zeroes on a first run is noise, not a measurement.
+    """
+    rows = [row for row in mttr_by_type(read_lifecycles(conn, config, model_urns)) if row.raised]
+    if not rows:
+        return
+
+    console.print("\n[bold]Incident lifecycle[/bold]  (ModelGuard's own writes)")
+    for row in rows:
+        console.print(f"  {row.describe()}")
+
+
+@app.command()
+def coverage(
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Stop after this many models."),
+    ] = 50,
+    write: Annotated[
+        bool,
+        typer.Option(
+            "--write/--dry-run",
+            help="Record this sweep in the coverage trend on ModelGuard's own dataFlow.",
+        ),
+    ] = False,
+) -> None:
+    """Report what fraction of this catalog's models each check can run against (T-15).
+
+    `inventory` answers the question one model at a time. This is the same sweep
+    folded into the figure a platform lead reports upward: how observable is this
+    ML estate, which direction is it moving, and what is the single next
+    declaration that would raise it most.
+
+    It measures declaring, not health. A catalog at 100% coverage may still be
+    full of leaking models; a catalog at 8% is one where ModelGuard mostly cannot
+    tell you either way, which is the more urgent problem.
+
+    `--write` appends one capped entry to modelguard.coverage_history, keyed on
+    the sweep's run id so a rerun replaces its own row rather than adding a
+    second. Nothing else is written: the per-model scans are dry runs.
+    """
+    try:
+        config = ScanConfig.from_env()
+        conn = connect()
+    except (ConfigError, DataHubConnectionError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    model_urns = _model_urns(conn, limit=limit)
+    if not model_urns:
+        console.print(f"[yellow]No models in {conn.gms_url}.[/yellow] {_no_match_hint(conn)}")
+        raise typer.Exit(code=0)
+
+    run_id = new_run_id()
+    sweep = []
+    for model_urn in sorted(model_urns):
+        report = run_scan(conn, config, model_urn=model_urn, llm=None, dry_run=True)
+        sweep.append(ModelCoverage(model_urn=model_urn, gaps=report.not_evaluated))
+
+    catalog = aggregate(sweep)
+    _print_coverage(catalog)
+
+    if write:
+        history = append_entry(conn, catalog, run_id)
+        console.print(f"\n[green]Recorded[/green] on {agent_flow_urn()}")
+        _print_coverage_trend(history)
+
+
+def _print_coverage(catalog: CatalogCoverage) -> None:
+    """Print a catalog figure: the headline, the per-check rows, then the advice."""
+    console.print(
+        f"[bold]Guard coverage: {catalog.rate:.0%}[/bold] "
+        f"({catalog.covered_checks}/{catalog.total_checks} checks evaluable "
+        f"across {catalog.models} model(s))\n"
+    )
+    for check in catalog.checks:
+        # Colour tracks the rate and nothing else. A check nothing can run is not
+        # a failing check, it is an unasked one, so the worst colour here is
+        # yellow: red is reserved for a finding somebody has to act on.
+        colour = "green" if check.rate >= 1.0 else "yellow" if check.rate > 0.0 else "dim"
+        console.print(f"  [{colour}]{check.describe()}[/{colour}]")
+
+    if catalog.next_join is not None:
+        console.print(f"\n[bold]Next join[/bold]  {catalog.next_join.describe()}")
+
+
+def _print_coverage_trend(history: tuple[CoverageEntry, ...]) -> None:
+    """Print the recorded trend, most recent last, when there is more than a point."""
+    if len(history) < 2:
+        return
+    console.print("\n[bold]Trend[/bold]")
+    for entry in history:
+        console.print(f"  {entry.recorded_at}  {entry.rate:>4.0%}  ({entry.models} models)")
 
 
 def _print_proposal(proposal: LinkProposal) -> None:
@@ -2069,6 +2433,70 @@ def evidence_pack(
     conformity would be worse than no document at all.
     """
     _publish_model_document(model, write=write, kind="evidence-pack")
+
+
+@app.command(name="feature-card")
+def feature_card(
+    model: Annotated[
+        str,
+        typer.Option("--model", help="Model whose features to document."),
+    ],
+    feature: Annotated[
+        str | None,
+        typer.Option("--feature", help="Only features whose name contains this."),
+    ] = None,
+    write: Annotated[
+        bool,
+        typer.Option("--write/--dry-run", help="Publish to DataHub, or print and write nothing."),
+    ] = False,
+) -> None:
+    """Generate a Data Card for each of a model's features (T-19).
+
+    Where the feature is computed from, hop by hop; every table that derivation
+    crosses and how current each one is; whether it reaches a column classified
+    as restricted or as a protected attribute; whether its type has moved since
+    training; and, when a finding names it, the changes that would clear it.
+
+    Taken per model rather than per feature because that is what somebody has in
+    hand: `--feature` filters within it by substring. Read-only either way,
+    like the model card: generating documentation must not raise incidents.
+    """
+    conn, config, _, _, model_urn = _prepare(
+        table=None,
+        model=model,
+        sla_hours=None,
+        no_llm=True,
+        llm_provider=None,
+        llm_model=None,
+        writes=write,
+    )
+    if model_urn is None:
+        console.print("[red]This command needs --model.[/red]")
+        raise typer.Exit(code=2)
+
+    report = run_scan(conn, config, model_urn=model_urn, llm=None, dry_run=True)
+    properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
+    feature_urns = [
+        urn
+        for urn in ((properties.mlFeatures or []) if properties else [])
+        if feature is None or feature.lower() in MlFeatureUrn.from_string(urn).name.lower()
+    ]
+    if not feature_urns:
+        console.print(
+            f"[yellow]No matching feature on {model}.[/yellow] A model with no declared "
+            "features has nothing to document: `modelguard link` writes that join."
+        )
+        raise typer.Exit(code=0)
+
+    model_name = MlModelUrn.from_string(model_urn).name
+    for feature_urn in feature_urns:
+        facts = gather_feature(
+            conn, feature_urn, model_urn, model_name, config, findings=report.findings
+        )
+        print(render_feature_card(facts))
+        if write:
+            urn = publish_feature_card(conn, facts, run_id=report.run_id)
+            console.print(f"\n[green]Published[/green] {urn}\n")
 
 
 def _publish_model_document(model: str, *, write: bool, kind: str) -> None:

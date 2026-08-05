@@ -16,6 +16,244 @@ Entry template:
 
 ---
 
+## D-133: The benchmark scored a detector it had never switched on (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Found by: running `python -m benchmarks.run_bench` on a checkout whose `.env`
+  did not carry `MODELGUARD_PROTECTED_ATTRIBUTE_TAG_URNS`. `proxy-planted` came
+  back WRONG in 0.00s, which is a detector that returned before it read anything.
+- Decision: `run_bench.main` supplies `protected_attribute_tag_urns` explicitly,
+  the way it has always supplied `sensitive_tag_urns`, and RESULTS.md reports
+  both classifications in its header rather than only the sensitive one.
+- Why this was latent rather than new: both governance detectors are
+  configuration-gated by design (D-079, D-117), which is right for a user and
+  wrong for a benchmark, and `run_bench` already documented that reasoning in a
+  comment above the line that supplies the sensitive list. T-11 added the second
+  detector and did not add the second line, so the proxy row was scoreable only
+  on a machine that happened to export the variable. Every published proxy number
+  so far was measured on such a machine and is correct; what was broken is
+  benchmarks/CLAUDE.md rule 1, same run same numbers, and it was broken silently.
+- Result: the run is reproducible from a clean checkout. The header now says
+  which classifications were in force for both detectors, so a reader can see
+  that a governance row was actually switched on rather than assuming it.
+
+---
+
+## D-132: T-20, the change-log consumer, and a link that survives an ingest (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: `modelguard/mcl.py` consumes DataHub's `MetadataChangeLog` over the
+  topic GMS already publishes, and `modelguard/reconcile.py` replays a
+  `modelguard link` that an ingestion run dropped. Both are reached through
+  `modelguard watch --events`, behind a `[kafka]` extra. Polling stays the
+  default and needs no broker.
+- Options considered: (a) `datahub-actions`, the official framework; (b) a
+  direct `confluent-kafka` consumer; (c) leave T-20 blocked, as the plan had it,
+  and rely on the `link --all` CronJob the chart already ships.
+- Why (b): the framework delivers the same records through a plugin system with
+  its own YAML configuration and its own CLI. That is a second configuration
+  surface beside `env.py`, which root rule 6 exists to prevent, in exchange for
+  nothing this needs. The topic and its Avro schema are DataHub's published
+  contract either way, so the coupling is identical.
+- Why not (c): the CronJob is a good answer for a warehouse with one ingestion
+  window and the wrong one for a catalog where anybody can run a recipe. The gap
+  between an ingest and the next cron run is a window in which a model is
+  silently unchecked, and nothing records how long it was.
+- Why an event rather than a wider poll: the failure is not about the watched
+  target. Any ingest of any model drops that model's link (D-074, F11), so no
+  poll of one table or one model could ever see it. A catalog-wide failure needs
+  a catalog-wide signal.
+- What it deliberately will not do: link a model nobody linked. `recorded_link`
+  returns arguments a human confirmed once, and only those are replayed. An
+  inferred join is indistinguishable from a confirmed one in the graph, and every
+  detector downstream would then be confident about the wrong columns.
+- Verified as the plan asks, against a live stack: an MLflow tracking server, the
+  model registered, and DataHub's **own** mlflow source run three times. The
+  second ingest reproduced the failure exactly, 7 features to 0, with the
+  recorded link surviving in structured properties. The third ran with
+  `watch --events` up, and the features were back with no human action.
+- Two things the live run corrected. `subscribe()` returns before the broker
+  assigns partitions, and with `auto.offset.reset=latest` the starting offset is
+  fixed at *assignment*, so everything written in between was invisible: the
+  consumer now waits for the assignment and buffers anything that arrives while
+  waiting. And DataHub's mlflow source names an `mlModel` per model *version*
+  (`telco_churn_1_1`), not per model, which is the entity a replay has to target.
+- Result: F11 closes. `modelguard/CLAUDE.md` rule 2's "polling by design" becomes
+  "polling by default", and the Actions framework stops being the documented
+  upgrade path because the upgrade is built.
+
+---
+
+## D-131: T-21 dropped: sklearn cannot supply what `link` takes (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: the sklearn adapter is struck through in `docs/plan/10` and `09`
+  section 1.1 rather than built. SageMaker and Vertex stay speculative.
+- Options considered: (a) build it against a fitted estimator; (b) build a
+  variant reading a JSON side-car a training script writes at fit time;
+  (c) verify the `[confirm]` and drop it.
+- Why (c): the `[confirm]` was run against scikit-learn 1.9.0 and it fails on
+  the load-bearing point. The **label column's name is retained nowhere** in a
+  fitted estimator: `y` is passed to `fit` and only its values survive, on
+  `classes_`. The label is the one argument no inference reaches, which is
+  exactly why the Feast adapter was worth building (D-112).
+- Three further findings from the same run: `get_feature_names_out()` returns
+  transformed names (`num__tenure_months`, `cat__contract_m2m`), not source
+  columns, and a `PCA` step returns `pca0` and destroys the mapping outright;
+  `pipeline.get_feature_names_out()` raises `AttributeError` on a pipeline
+  ending in an estimator, so the planned snippet does not run; and
+  `feature_names_in_` does give the raw input columns, which is the DataFrame's
+  own `columns` and needs no adapter to recover.
+- Why not (a) regardless: reading any of it needs a fitted estimator in memory,
+  so an adapter would unpickle a file. `modelguard/adapters/CLAUDE.md`'s local
+  rule is that an adapter parses a declaration, offline, and never executes a
+  vendor artifact. Arbitrary code execution to recover a mapping the caller
+  already holds is not a trade worth making.
+- Why not (b): it invents a declaration format nobody produces, to carry data
+  the training script already has in hand at the moment it would write it.
+- Result: `modelguard.api.link_model`, called from the training script, already
+  serves the need, and the README already documents it as the one place
+  ModelGuard belongs inside somebody's code.
+
+---
+
+## D-130: T-19, a Data Card per feature (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: `writeback/feature_documents.py` and `modelguard feature-card`.
+  Same gather-then-pure-render shape as `model_documents.py`, so the two cannot
+  disagree about one feature. `column_marks.py` gains `derivation_chains`.
+- Options considered for the CLI surface: (a) `--feature <urn>`; (b) `--model`,
+  producing one card per declared feature, with `--feature` as a substring
+  filter.
+- Why (b): a model is what somebody has in hand and an `mlFeature` URN is not,
+  and it needs no new name-to-URN resolver.
+- Two places the card refuses to imply a value nothing measured. Its freshness
+  figures state that they are measured **now** and not at training time, which
+  is the substitution the Article 10 pack already refuses (D-119); a card that
+  quietly made it would contradict the pack about the same model. And the
+  training-time type is read from the snapshot entry for **this column's own
+  table**, never a flattening of every input, which is D-070's collision
+  arriving one level down.
+- Why `derivation_chains` rather than reusing `marked_ancestor`: a provenance
+  card wants the whole derivation, including the part nobody classified, and
+  `related_columns` throws the ordering away. It reuses `split_paths`, without
+  which two derivations render as one impossible chain, and drops a path holding
+  only the queried column, which would otherwise print as a complete derivation
+  of a column from itself.
+- Result: cites Pushkarna, Zaldivar and Kjartansson, *Data Cards* (FAccT 2022) in
+  `resources.md` with what it changed here.
+
+---
+
+## D-129: T-18, the tables that only feed models nothing uses (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: `modelguard/finops.py` and `modelguard finops`. A report, not a
+  detector: no `FindingType`, no incident, no trust deduction.
+- Why not a finding: nothing is broken. A model nobody deployed is a decision
+  somebody may not have noticed they made, and raising an incident about it
+  would put a cost question into the queue where correctness failures live.
+- Two guards, because this is the only output in the project whose advice is to
+  delete something. A table is listed only when **every** model downstream of it
+  is unused, since one live consumer means it is not a saving. And a model with
+  no recorded date is reported as *undated* and never as unused: in a report like
+  this, an absence is not evidence, and DataHub's mlflow source leaves a model
+  with no timestamps at all.
+- Why the model list comes from `discovery.py` and not from search: GMS hides
+  non-latest versions (D-100), and a hidden version is exactly the live consumer
+  that would make this recommend deleting a table something still reads. One test
+  asserts the *wrong* answer a filtered list produces, so the reason is pinned
+  rather than only written down.
+- `MODELGUARD_UNUSED_MODEL_DAYS` defaults to 90, a quarter, which is the period a
+  budget holder already thinks in. An algorithm parameter, so it carries a
+  documented default (root rule 6b).
+- Result: `blast_radius.py` gains `upstream_datasets`, the hop-capped mirror of
+  its own downstream walk, shared with `lifecycle.py` rather than copied: a
+  second copy of a capped lineage read is a second chance to get rule 3 wrong.
+
+---
+
+## D-128: T-17, three OTLP instruments and no traces (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: `modelguard/telemetry.py` exports the scan numbers `_log_scan`
+  already assembles, as three OTLP metrics, behind an `[otel]` extra, installed
+  by `watch` alone.
+- Options considered: (a) metrics; (b) OTel logs; (c) traces and spans;
+  (d) auto-instrumenting the DataHub SDK's HTTP calls.
+- Why (a) only: 09 section 3.3 says do it, keep it small, do not oversell it.
+  Everything past three instruments is somebody else's product: a team that wants
+  spans across GMS calls installs `opentelemetry-instrumentation-requests` and
+  gets them, rather than this project shipping a second, worse copy.
+- Why a logging handler rather than a call inside `run_scan`: the facts are
+  already assembled and already emitted, and threading an exporter through the
+  pipeline's signature would create a second place a scan's numbers are stated.
+  One measurement, two renderings, exactly as `argos/handler.py` does it.
+- `MODELGUARD_OTEL_ENDPOINT` is an address, so no default and no fallback (rule
+  6a). Headers are optional rather than an all-or-nothing group, because a
+  collector in the same cluster needs none, and are carried as `SecretStr`: that
+  is where an authenticated collector's token goes (rule 6d).
+- Result: unset means nothing is imported and nothing is exported. Set with the
+  extra missing fails at startup rather than after a week of exporting nowhere.
+
+---
+
+## D-127: T-16, how long ModelGuard's own findings stay open (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: `modelguard/lifecycle.py` reads MTTR per finding type out of
+  `incidentInfo`'s two stamps, for incidents carrying the run footer
+  `raise_incident` already writes. Reported in `inventory` and in `RESULTS.md`.
+- Nothing new is recorded to make it possible: every fact was already in the
+  graph, which is the reason this was worth doing at all.
+- Why incidents are reached inbound over `IncidentOn` from a model's resources:
+  incident *search* does not work. `scrollAcrossEntities(types: [INCIDENT])`
+  fails with a GraphQL non-null violation on a live GMS 1.5.0.6, through every
+  route the SDK offers. `writeback/incidents.py` already documented that failure
+  for one query (D-018); it turns out to hold for all of them.
+- A wrong number caught by running it: the freshness row read "0 raised" on a
+  graph holding thirty-one of them, because a stale-table incident lands on the
+  table that stopped refreshing, which is never a model's own input but something
+  behind it. `model_resources` now walks upstream of the inputs too.
+- Two guards on the arithmetic: a resolution stamped before its creation is
+  reported as untimed rather than clamped to zero, because a clamp would pull a
+  mean down with a number nothing measured; and the median is published beside
+  the mean, because one incident left open across a weekend moves a mean by days.
+- RESULTS.md's section leads with what the number is **not**: on a benchmark
+  graph a trial plants a failure and the next trial reverts it, so almost every
+  duration there is the seconds between a plant and a restore. Publishing the
+  table without saying so would be this project quoting its own fixture back as
+  an operational result.
+- Result: the SRE loop 03-hardening C.4 opened is closed, and `inventory` now
+  says whether anything ever gets fixed as well as what is wrong now.
+
+---
+
+## D-126: T-15, guard coverage as one catalog figure with a trend (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: `detect/guard_coverage.py` folds `coverage.py`'s per-model gaps into
+  a catalog figure and names the single remedy that would unblock the most;
+  `writeback/coverage_history.py` trends it; `modelguard coverage` prints it and,
+  with `--write`, records the point.
+- Options considered for where the trend hangs: (a) a synthetic entity;
+  (b) every model, duplicated; (c) ModelGuard's own `dataFlow`, the entity T-04
+  already creates.
+- Why (c): a catalog-level figure belongs to no model or dataset, and minting a
+  synthetic asset would put a made-up entity in somebody's catalog. That a
+  `dataFlow` accepts a structured property was verified against a live GMS by
+  writing one and reading it back, before the module was written, rather than
+  assumed.
+- Why the aggregation reads nothing: it is a pure fold over gaps a caller
+  already collected, which is what keeps `detect/` from having to import
+  `agent/pipeline` to get a sweep and would invert the layering.
+- Freshness is deliberately not in the figure, and 09 section 3.2's illustrative
+  sentence is corrected in place for it (docs/CLAUDE.md rule 1): freshness is
+  asked of a *table*, and folding one table check and five model checks into one
+  percentage divides two different denominators and calls the result one number.
+- `coverage.py`'s check names become constants and `MODEL_CHECKS` names the five
+  model-level ones, asserted equal to what a bare model actually reports, so a
+  seventh detector cannot open a silent sixth row in a number a platform lead
+  reports upward.
+- Result: the adoption cliff (F10, F11) is reframed as a roadmap. The tool
+  measures how observable an ML estate is and names the next declaration that
+  would raise it most.
+
+---
+
 ## D-125: A test read a file mutmut does not copy, and the score went to zero (2026-08-05)
 - Decided by: Ahmed Saad.
 - Decision: `README.md` joins `[tool.mutmut] also_copy`, and `tests/test_docs.py`

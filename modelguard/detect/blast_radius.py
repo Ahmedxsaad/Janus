@@ -195,6 +195,41 @@ def _downstream_traversal(
     return tuple(datasets), tuple(features), models, truncated
 
 
+def upstream_datasets(
+    conn: DataHubConnection,
+    table_urn: str,
+    config: ScanConfig,
+) -> tuple[str, ...]:
+    """Return the datasets a table is derived from, within the hop cap.
+
+    The mirror of the traversal above and it lives here for that reason: two
+    callers outside this module need it (which tables a freshness incident about
+    this model's inputs could have landed on, T-16; which tables exist only to
+    feed a model, T-18), and a second copy of a hop-capped lineage read is a
+    second chance to get the cap wrong.
+
+    Filtered by hop count rather than trusted, per rule 3: above two hops
+    DataHub switches to a full-graph search and returns entities beyond the cap.
+    Filtered to datasets by URN and never by ``LineageResult.type``, which is a
+    display string (rule 4).
+    """
+    results = conn.client.lineage.get_lineage(
+        source_urn=table_urn,
+        direction="upstream",
+        max_hops=config.max_hops,
+        count=config.lineage_result_cap,
+    )
+    return tuple(
+        sorted(
+            {
+                result.urn
+                for result in results
+                if result.hops <= config.max_hops and entity_type(result.urn) == _DATASET
+            }
+        )
+    )
+
+
 def downstream_models(
     conn: DataHubConnection,
     table_urn: str,

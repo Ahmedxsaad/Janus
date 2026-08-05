@@ -77,6 +77,22 @@ properties:
     cardinality: MULTIPLE
     entity_types: [mlModel]
 
+  # The only property that does not describe somebody else's asset. It describes
+  # this agent's reach across the whole catalog, so it hangs on ModelGuard's own
+  # dataFlow, the entity every scan run already belongs to. A dataFlow carrying a
+  # structured property is verified against a live GMS, not assumed (T-15).
+  - qualified_name: modelguard.coverage_history
+    display_name: ModelGuard Guard Coverage History
+    description: >-
+      One entry per catalog sweep, oldest first, as
+      "<ISO-8601 UTC>|<run_id>|<models>|<covered>/<total>|<check>=<covered>/<total>,...".
+      What fraction of this catalog's models each check can actually be run
+      against. It measures how much has been declared, not how healthy the
+      models are, so the direction over time is the only part worth acting on.
+    value_type: string
+    cardinality: MULTIPLE
+    entity_types: [dataFlow]
+
   # The three below are not findings: they are what `modelguard link` was told,
   # kept so it can be re-run without repeating the arguments. They live in
   # structuredProperties rather than in mlModelProperties precisely because they

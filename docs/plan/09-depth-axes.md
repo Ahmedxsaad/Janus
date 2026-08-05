@@ -76,7 +76,7 @@ time.
 |---|---|---|
 | **Feast** | `FeatureView` declares its source and per-field mapping; the source's `field_mapping` names the underlying column | `datahub.ingestion.source.feast` ships with acryl-datahub `[verified]`; the `feast` package itself is not installed `[verified]`, so this is an extra |
 | **dbt semantic models** | `semantic_model` declares entities, dimensions and measures against source columns | `[confirm]` against the dbt manifest schema in use |
-| **sklearn `ColumnTransformer`** | `get_feature_names_out()` maps derived feature to input column, in memory, at fit time | `[confirm]` |
+| ~~**sklearn `ColumnTransformer`**~~ | ~~`get_feature_names_out()` maps derived feature to input column, in memory, at fit time~~ | **Confirmed against scikit-learn 1.9.0 and it does not** (D-131). It returns transformed names (`num__tenure_months`), never source columns; `PCA` returns `pca0` and destroys the mapping; the label column's *name* is retained nowhere, which is the one argument no inference reaches; and reading any of it needs a fitted estimator in memory, so an adapter would have to unpickle a file, which this package's own rule forbids. `modelguard.api.link_model`, called from the training script, already serves this need |
 | **SageMaker / Vertex feature stores** | Feature group definitions carry source column references | `[confirm]` |
 
 Design:

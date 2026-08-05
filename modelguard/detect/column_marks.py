@@ -346,6 +346,72 @@ def marked_ancestor(
     return WalkResult(matches=tuple(matches), truncated=truncated, hop_capped=hop_capped)
 
 
+def derivation_chains(
+    conn: DataHubConnection,
+    source_column_urn: str,
+    config: ScanConfig,
+    *,
+    max_hops: int,
+) -> tuple[tuple[LineagePath, ...], ...]:
+    """Every ordered chain from a column back to a source, shortest first.
+
+    The third question over the same walk. :func:`marked_ancestor` asks whether a
+    chain reaches something interesting and returns only the chains that do;
+    :func:`related_columns` asks what a column touches and throws the ordering
+    away. A provenance card (T-19) needs neither: it needs the chains themselves,
+    including the ones ending in a column nobody has marked anything, because
+    "where does this feature come from" is answered by the whole derivation and
+    not by the interesting part of it.
+
+    Reads ``LineageResult.paths`` and never ``LineageResult.urn``, and cuts the
+    SDK's flattened list apart with :func:`split_paths`, for the reasons the
+    module docstring gives. Without the split, two derivations through one
+    upstream table would render as one impossible chain on the card.
+
+    Args:
+        conn: An open connection.
+        source_column_urn: The column to walk upstream from.
+        config: Supplies the lineage result cap.
+        max_hops: How far back to walk.
+
+    Returns:
+        The distinct chains, each starting at ``source_column_urn``, ordered
+        shortest first and then by their column names so a card renders the same
+        way twice. Empty when the column has no upstream lineage, which is a
+        column the warehouse holds no derivation for and not an error.
+    """
+    field = SchemaFieldUrn.from_string(source_column_urn)
+    results = conn.client.lineage.get_lineage(
+        source_urn=field.parent,
+        source_column=field.field_path,
+        direction="upstream",
+        max_hops=max_hops,
+        count=config.lineage_result_cap,
+    )
+
+    # Keyed by the chain's URNs so the same derivation arriving through two
+    # results is one chain. A card listing a derivation twice reads as two
+    # different paths to the same place, which is a claim about the warehouse
+    # that nothing measured.
+    chains: dict[tuple[str, ...], tuple[LineagePath, ...]] = {}
+    for result in results:
+        # Enforced here rather than trusted: above two hops DataHub answers from
+        # a full-graph search and returns entities past the cap (D-020).
+        if result.hops > max_hops:
+            continue
+        for path in split_paths(result.paths or [], source_column_urn):
+            if len(path) < 2:
+                continue
+            chains.setdefault(tuple(step.urn for step in path), tuple(path))
+
+    return tuple(
+        sorted(
+            chains.values(),
+            key=lambda chain: (len(chain), tuple(step.column_name or "" for step in chain)),
+        )
+    )
+
+
 def related_columns(
     conn: DataHubConnection,
     source_column_urn: str,

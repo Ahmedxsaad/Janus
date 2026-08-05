@@ -46,6 +46,33 @@ from modelguard.models import (
 )
 from modelguard.writeback.properties import FEATURE_TABLE, read_properties
 
+#: The checks, named as a user knows them. Constants rather than literals at each
+#: construction site because :mod:`modelguard.detect.guard_coverage` aggregates
+#: gaps *by* these names: a typo in one gap function would silently open a sixth
+#: category in a catalog figure that is supposed to have five (T-15).
+CHECK_FRESHNESS = "freshness"
+CHECK_LEAKAGE = "target leakage"
+CHECK_SCHEMA_DRIFT = "schema drift"
+CHECK_SENSITIVE_SOURCE = "sensitive source"
+CHECK_PROXY = "proxy candidate"
+CHECK_DEPRECATED_INPUT = "deprecated input"
+
+#: Every check :func:`coverage_gaps` can report against a *model*, in the order a
+#: report lists them. Freshness is not here: it is asked of a table, and a
+#: catalog-level model figure that quietly counted a table check would be
+#: comparing two different denominators (T-15, and 09 section 3.2 corrected in
+#: place per docs/CLAUDE.md rule 1).
+#:
+#: A test asserts this tuple equals what a model with nothing set up actually
+#: produces, so a seventh detector cannot be added without appearing here.
+MODEL_CHECKS: tuple[str, ...] = (
+    CHECK_LEAKAGE,
+    CHECK_SCHEMA_DRIFT,
+    CHECK_SENSITIVE_SOURCE,
+    CHECK_DEPRECATED_INPUT,
+    CHECK_PROXY,
+)
+
 
 @dataclass(frozen=True)
 class Unevaluated:
@@ -101,7 +128,7 @@ def _freshness_gap(
     if freshness_signal(conn, table_urn, config) is not None:
         return None
     return Unevaluated(
-        check="freshness",
+        check=CHECK_FRESHNESS,
         target_urn=table_urn,
         reason=(
             "this dataset has no operation aspect, so DataHub holds no record of "
@@ -129,9 +156,7 @@ def _leakage_gap(
     """
 
     def gap(reason: str, remedy: str) -> Unevaluated:
-        return Unevaluated(
-            check="target leakage", target_urn=model_urn, reason=reason, remedy=remedy
-        )
+        return Unevaluated(check=CHECK_LEAKAGE, target_urn=model_urn, reason=reason, remedy=remedy)
 
     if properties is None or not properties.mlFeatures:
         if was_linked(conn, model_urn):
@@ -230,7 +255,7 @@ def _drift_gap(
     """Whether the drift check had a training-time schema to diff against."""
     if properties is None or not properties.trainingJobs:
         return Unevaluated(
-            check="schema drift",
+            check=CHECK_SCHEMA_DRIFT,
             target_urn=model_urn,
             reason=(
                 "no training run is recorded on the model "
@@ -245,7 +270,7 @@ def _drift_gap(
 
     if not schema_drift_candidate_resources(conn, model_urn, config):
         return Unevaluated(
-            check="schema drift",
+            check=CHECK_SCHEMA_DRIFT,
             target_urn=model_urn,
             reason=(
                 f"no training run of this model carries a {config.training_schema_property!r} "
@@ -273,7 +298,7 @@ def _sensitive_gap(
 
     def gap(reason: str, remedy: str) -> Unevaluated:
         return Unevaluated(
-            check="sensitive source", target_urn=model_urn, reason=reason, remedy=remedy
+            check=CHECK_SENSITIVE_SOURCE, target_urn=model_urn, reason=reason, remedy=remedy
         )
 
     if not sensitive_index(conn, config).configured:
@@ -337,9 +362,7 @@ def _proxy_gap(
     """
 
     def gap(reason: str, remedy: str) -> Unevaluated:
-        return Unevaluated(
-            check="proxy candidate", target_urn=model_urn, reason=reason, remedy=remedy
-        )
+        return Unevaluated(check=CHECK_PROXY, target_urn=model_urn, reason=reason, remedy=remedy)
 
     if not protected_attribute_index(conn, config).configured:
         return gap(
@@ -373,7 +396,7 @@ def _deprecated_input_gap(
     """Whether the deprecation check had any training input to look at."""
     if properties is None or not properties.trainingJobs:
         return Unevaluated(
-            check="deprecated input",
+            check=CHECK_DEPRECATED_INPUT,
             target_urn=model_urn,
             reason=(
                 "no training run is recorded on the model "
@@ -388,7 +411,7 @@ def _deprecated_input_gap(
 
     if not model_input_datasets(conn, model_urn):
         return Unevaluated(
-            check="deprecated input",
+            check=CHECK_DEPRECATED_INPUT,
             target_urn=model_urn,
             reason=(
                 "the model's training runs record no input datasets "

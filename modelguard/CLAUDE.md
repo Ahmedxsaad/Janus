@@ -24,13 +24,24 @@ security and observability cross-cutting.
 ## Local rules
 
 1. Findings passed between layers are typed models (models.py), not dicts.
-2. Four triggers, one core: cli.py exposes scan (batch), watch (polling), and
-   gate (CI); mcp_server.py adds a fourth, conversational, over MCP rather than a
-   shell. All four share the identical detect -> reason -> write core in
-   agent/pipeline.py (run_scan), not in the trigger itself. watch polls and acts
-   on finding-set transitions, auto-approving because it is unattended; it is
-   polling by design (never Kafka-dependent), with the Actions/EntityChangeEvent
-   framework as the documented upgrade path.
+2. Every trigger, one core. A *trigger* is an entry point that runs detection:
+   cli.py exposes scan (batch), watch (polling or events), gate (CI), and the
+   read-only sweeps over them (inventory, coverage, finops, and the three
+   document commands); mcp_server.py adds a conversational one over MCP rather
+   than a shell; api.py adds the two functions a training script may pin to.
+   Every one of them shares the identical detect -> reason -> write core in
+   agent/pipeline.py (run_scan), never a copy in the trigger itself. Do not
+   count them here: this rule is about the sharing, and a number in it has gone
+   stale on every phase that added a command.
+   watch acts on finding-set transitions, auto-approving because it is
+   unattended; it is polling by *default*, and the core install is never
+   Kafka-dependent.
+   `watch --events` is the built upgrade (T-20, D-132): it consumes DataHub's
+   own MetadataChangeLog through mcl.py, behind the `[kafka]` extra, and adds
+   the one thing polling structurally cannot do, re-applying catalog-wide any
+   `link` an ingest drops (reconcile.py). Polling stays the documented default
+   because it depends on nothing but GMS and cannot fall behind a consumer
+   group somebody rebalanced.
    gate is the preventive one: it judges a dry-run scan against a policy and
    answers in an exit code (0 shippable, 1 blocked, 2 could not tell). It reads
    and does not write, because it runs on every push to every branch and one
@@ -94,3 +105,11 @@ security and observability cross-cutting.
 | 2026-08-04 | Claude (for Ghassen Naouar) | T-05/T-06 (D-112): adapters/ is a new layer boundary, read-only and offline. It parses a declaration on disk and returns what `link` takes; it never connects to a vendor service, never writes, and never invents an argument the file does not carry. Rule 2's `link` paragraph gains --from, which proposes like --infer and writes nothing until a human answers |
 | 2026-08-04 | Claude (for Ghassen Naouar) | T-07 (D-113): a model with no column link now gets the table-level answer instead of silence, as its own finding type, capped at MEDIUM, scored separately by the benchmark and excluded from the trust score. Rule 3's thresholds-in-config gains TABLE_LEVEL_PRECISION, which is a measurement rather than a knob: run_bench compares it against the baseline it measures and says so in RESULTS.md |
 | 2026-08-04 | Claude (for Ghassen Naouar) | T-14 (D-121) fixed two things running against an ingested graph found: `resolve_table` accepts any dotted suffix of a dataset's name, because a declaration names a relation the way the warehouse does (`analytics.customer_features`) and DataHub names the dataset with the database in front, so every imported declaration resolved against nothing; and the Feast reader asks a source for its relation through `get_table_query_string` when it exposes it nowhere else, which is every SQL contrib source |
+| 2026-08-05 | Claude (for Ghassen Naouar) | T-15 (D-126): rule 2's trigger list gains `coverage`, the eighth entry. It is `inventory`'s sweep folded into one number and, with --write, one capped entry on the agent's own flow. Read-only over the catalog like `inventory`, so the only write is the trend point itself |
+| 2026-08-05 | Claude (for Ghassen Naouar) | lifecycle.py lands (D-127, T-16): how long ModelGuard's own findings stay open, read back out of `incidentInfo`'s two stamps for incidents carrying the run footer raise_incident writes. Nothing new is recorded to make it possible. Incidents are reached inbound over IncidentOn from a model's resources, because incident *search* fails with a GraphQL non-null violation on a live GMS through every route the SDK offers, which is the same failure writeback/incidents.py already documents for one query and turns out to be true of all of them |
+| 2026-08-05 | Claude (for Ghassen Naouar) | telemetry.py lands behind the [otel] extra (D-128, T-17): the scan numbers _log_scan already assembles, exported as three OTLP metrics by a logging handler reading the same record argos/handler.py reads. One measurement, two renderings, so a metric and a log line cannot disagree about a scan. MODELGUARD_OTEL_ENDPOINT is an address and has no default; the headers are a SecretStr and never reach a log. Deliberately three instruments and no traces (09 section 3.3) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | finops.py and `modelguard finops` land (D-129, T-18), a ninth trigger and the only one whose reader is a budget holder. It is a report and not a detector on purpose: nothing is broken, so no FindingType, no incident and no trust deduction. Two guards make it safe to act on: a table is listed only when every downstream model is unused, and a model with no recorded date is reported as undated rather than unused, because this is the one output that suggests deleting something and an absence is not evidence. detect/blast_radius.py gains upstream_datasets, the hop-capped mirror of its own walk, shared with lifecycle.py rather than copied |
+| 2026-08-05 | Claude (for Ghassen Naouar) | T-19 (D-130): `feature-card` joins the trigger list as the tenth, taken per model with a --feature substring filter because a model is what somebody has in hand and an mlFeature URN is not. Read-only like the other two document commands: generating documentation must not raise incidents |
+| 2026-08-05 | Claude (for Ghassen Naouar) | mcl.py and reconcile.py land (D-132, T-20), and rule 2's four-triggers-one-core gains its event-driven wake-up: `watch --events` consumes DataHub's own MetadataChangeLog instead of the poll timer. Rule 2's polling-by-design sentence is now polling-by-default: the poll stays the out-of-the-box path and needs no broker, and the consumer is an opt-in extra. Not datahub-actions, which would put a second configuration surface next to env.py for the same records. F11 closes: an ingest that drops a link is re-applied catalog-wide, which no poll of one target could ever see, and only what a human already confirmed is ever replayed |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Rule 2's own text updated, not only logged: "polling by design (never Kafka-dependent), with the Actions/EntityChangeEvent framework as the documented upgrade path" was stale the moment T-20 landed, because the upgrade is built. It now reads polling by *default*, names `watch --events` and says why polling stays the default anyway (D-132) |
+| 2026-08-05 | Claude (for Ghassen Naouar) | Rule 2 stops counting. It opened "Four triggers" while its own change log had been counting up to ten across three phases, which is the rule rotting one row at a time. It now states the invariant it was always about, that every entry point running detection shares run_scan and none reimplements it, and says explicitly not to put a number back |
