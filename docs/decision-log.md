@@ -16,6 +16,47 @@ Entry template:
 
 ---
 
+## D-143: The rename happens first, and the three surfaces a judge opens are named (2026-08-06)
+- Decided by: Ghassen Naouar.
+- Decision: Five additions to `plan/11-judge-readiness.md`, and one of them
+  reorders the whole file.
+  - **The repository rename is decided and goes first**, as phase J-00. It was
+    the open box in `deploy/pypi-release.md` and had been deferred twice
+    (D-076).
+  - **The demo VM is reconfigured** (J-06). It has not picked up the codebase
+    since it was verified on 2026-07-30.
+  - **`site/` is deployed to Cloudflare Pages** (J-07), making the
+    documentation page a third judge-facing surface alongside the VM and the
+    repository.
+  - **The README is rewritten to be concise** as part of the doc work (J-03).
+  - **The demo video runs against a real project**, not a seeded scenario
+    (J-08).
+- Why, per item:
+  - The rename leads because its consequences all get worse when they happen
+    after the thing they touch: the PyPI pending publisher matches on
+    `Repository name: DataHub` and rejects rather than warns, the README's
+    links are absolute so PyPI can resolve them and nothing catches a stale
+    one, the VM's cloud-init clones by URL, and a Cloudflare project binds to
+    the repository it was connected to.
+  - The VM is what the submission rules point judges at for a working project.
+    A checkout from before D-136 renamed identifiers repo-wide does not fail
+    loudly; it fails as a service that starts and finds nothing.
+  - The site needs no build step and was already made self-contained in D-139
+    for exactly this deployment shape (`site/` as its own root), so it is
+    configuration, not porting.
+  - The README is 25 sections and roughly 850 lines because it absorbed the
+    user manual. The manual is what the site is for. The material is not
+    wrong, it is in the wrong place, and the README is the first thing a judge
+    reads.
+  - A demo on fixture data is discounted, correctly. `examples/real-project/`
+    already exists as the stack Janus was validated against as an ordinary
+    user would (D-074) and scored on (D-121), so the video can show the same
+    thing the benchmark measured.
+- Result: the checklist is ten phases, J-00 through J-09. Each new phase
+  carries its own `[decision]` items rather than assuming an answer: the name
+  itself, update-in-place versus re-provision for the VM, the site's domain,
+  and which real project the video uses.
+
 ## D-142: The remaining work is a delivery checklist, and the plan docs become judge-facing (2026-08-06)
 - Decided by: Ghassen Naouar.
 - Decision: Three things at once. (a) `plan/11-judge-readiness.md` lands as the
@@ -44,12 +85,11 @@ Entry template:
   images are committed or a proxy link is used. Both are carried as explicit
   `[decision]` items inside 11-judge-readiness.md (J-03 and J-04) rather than
   resolved here, because each changes what the rewrite actually does.
-- Result: `docs/plan/11-judge-readiness.md`, seven phases (J-01 publish to
-  PyPI, J-02 OSS PRs, J-03 doc rewrite, J-04 diagrams, J-05 user-perspective
-  package test, J-06 demo video, J-07 submission gate), each sequencing the
-  runbooks that already exist rather than restating them. The doc names what is
+- Result: `docs/plan/11-judge-readiness.md`, each phase sequencing the runbooks
+  that already exist rather than restating them. The doc names what is
   deliberately excluded: no new features, no fixing 07's open weaknesses, no
-  benchmark rerun.
+  benchmark rerun. Extended the same day by D-143, which added the rename, the
+  VM, the site deployment and the README to it.
 
 ## D-141: The page explains mechanisms with diagrams, not paragraphs (2026-08-06)
 - Decided by: Ghassen Naouar.
