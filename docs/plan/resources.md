@@ -55,6 +55,11 @@ https://arxiv.org/abs/1810.03993
 - **Read:** §3 the **model-card section schema** (Model Details, Intended Use, Factors, Metrics, Evaluation/Training Data, Ethical Considerations).
 - **Maps to:** P4 write-back - we populate DataHub's model-card fields + `trust_score` structured property (`writeback/properties.py`; `architecture.md §7`).
 
+**Pushkarna, Zaldivar, Kjartansson - Data Cards: Purposeful and Transparent Dataset Documentation for Responsible AI (FAccT 2022)**
+https://arxiv.org/abs/2204.01075
+- **Read:** §3 the **Data Card structure** (provenance, composition, collection, intended use, limitations) and §5's argument that documentation which is *produced* by a system outlives documentation a person promises to maintain.
+- **Maps to:** T-19's per-feature provenance card (`writeback/feature_documents.py`, D-130). What it changed here: the card renders what it could *not* establish as a section of its own rather than omitting it, which is the paper's "known limitations" field applied to metadata that is missing rather than to data that is. It also settled the freshness question: the card states its freshness figure is measured now and not at training time, because a Data Card's provenance claim has to say when it was true.
+
 **Polyzotis, Roy, Whang, Zinkevich - Data Lifecycle Challenges in Production ML: A Survey (SIGMOD Record 2018)**
 https://sigmodrecord.org/publications/sigmodRecord/1806/pdfs/09_Surveys_Polyzotis.pdf
 - **Read:** the **data understanding / validation / cleaning** sections; the taxonomy of data issues in prod ML.

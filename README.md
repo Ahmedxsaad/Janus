@@ -765,9 +765,10 @@ process, and nothing that reads a metadata graph is in a position to make it.
 ```bash
 modelguard model-card    --model credit_risk_v3   # prints; --write publishes it to DataHub
 modelguard evidence-pack --model credit_risk_v3   # EU AI Act Article 10
+modelguard feature-card  --model credit_risk_v3   # one Data Card per feature
 ```
 
-Two documents, both read entirely out of the catalog. A model card in the sense
+Three documents, all read entirely out of the catalog. A model card in the sense
 Mitchell et al. (FAT* 2019) proposed one: intended use, which columns each
 feature was actually computed from, the reported training metrics, the trust
 score with its waterfall, the findings open against the model, and the checks
@@ -791,9 +792,20 @@ training time is unknowable from this graph (ModelGuard measures freshness
 examined the data for bias is an activity no catalog records. A generated
 document that implied conformity would be worse than no document at all.
 
-Both print by default and write nothing. `--write` publishes the document
-against the model, keyed on the model alone, so regenerating replaces it rather
-than leaving a second copy behind. Either way the underlying scan is read-only:
+`feature-card` is the third, a **Data Card** in the sense Pushkarna, Zaldivar and
+Kjartansson (FAccT 2022) proposed one, but for a single feature: where it is
+computed from hop by hop, every other derivation the walk found, each table that
+chain crosses and how current it is, whether the chain reaches a column
+classified as restricted or as a protected attribute, whether its type has moved
+since training, and, when a finding names it, the changes that would clear it.
+Taken per model because that is what somebody has in hand; `--feature` filters
+within it. Its freshness figures say out loud that they are measured *now* and
+not at training time, for the same reason the evidence pack refuses to
+substitute one for the other.
+
+All three print by default and write nothing. `--write` publishes the document,
+keyed on the model or the feature alone, so regenerating replaces it rather than
+leaving a second copy behind. Either way the underlying scan is read-only:
 asking for documentation never raises an incident as a side effect.
 
 ## OSS contributions

@@ -11,7 +11,12 @@ from dataclasses import replace
 from datahub.metadata.schema_classes import GlossaryTermAssociationClass, GlossaryTermsClass
 
 from modelguard.config import ScanConfig
-from modelguard.detect.column_marks import ColumnMarkIndex, marked_ancestor, split_paths
+from modelguard.detect.column_marks import (
+    ColumnMarkIndex,
+    derivation_chains,
+    marked_ancestor,
+    split_paths,
+)
 from tests.conftest import (
     FEATURE_TABLE_URN,
     INCOME_COLUMN_URN,
@@ -340,3 +345,96 @@ def test_a_path_list_that_does_not_start_at_the_queried_column_is_left_whole():
     steps = column_path(LABEL_COLUMN_URN, INCOME_COLUMN_URN)
 
     assert split_paths(steps, LEAK_COLUMN_URN) == [steps]
+
+
+def test_derivation_chains_cuts_a_flattened_list_into_the_paths_it_came_from():
+    """Two derivations must not render as one impossible chain on a card (T-19).
+
+    The same split `marked_ancestor` needs, asked without a mark: a provenance
+    card wants the whole derivation, including the part nobody classified.
+    """
+    conn = make_connection(FakeGraph(), _two_flattened_paths())
+
+    chains = derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=CONFIG.leakage_max_hops)
+
+    assert [tuple(step.column_name for step in chain) for chain in chains] == [
+        ("prior_default_flag", "default_status"),
+        ("prior_default_flag", "default_status_backup"),
+    ]
+
+
+def test_derivation_chains_returns_one_entry_for_a_derivation_reached_twice():
+    """A card listing the same derivation twice claims two paths nothing measured."""
+    duplicated = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=1,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                ),
+                lineage_result(
+                    TABLE_URN,
+                    hops=2,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                ),
+            ]
+        }
+    )
+    conn = make_connection(FakeGraph(), duplicated)
+
+    chains = derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=CONFIG.leakage_max_hops)
+
+    assert len(chains) == 1
+
+
+def test_derivation_chains_honors_the_hop_cap_rather_than_trusting_the_server():
+    """Above two hops DataHub answers past max_hops (D-020, detect rule 3)."""
+    beyond = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=4,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN, LABEL_COLUMN_URN),
+                )
+            ]
+        }
+    )
+    conn = make_connection(FakeGraph(), beyond)
+
+    assert derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=3) == ()
+
+
+def test_a_column_with_no_upstream_lineage_yields_no_chain_rather_than_a_stub():
+    """The card renders "not recorded" for this, which needs an empty answer."""
+    conn = make_connection(FakeGraph(), FakeClient())
+
+    assert derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=3) == ()
+
+
+def test_a_path_holding_only_the_queried_column_is_not_a_derivation():
+    """A column derived from itself is not provenance, it is a rendering bug.
+
+    Kept out here rather than in the card, because a one-step chain renders as
+    a single backtick-quoted name and reads exactly like a complete derivation
+    to a source.
+    """
+    self_only = FakeClient(
+        lineage_by_column={
+            "prior_default_flag": [
+                lineage_result(
+                    TABLE_URN,
+                    hops=1,
+                    direction="upstream",
+                    paths=column_path(LEAK_COLUMN_URN),
+                )
+            ]
+        }
+    )
+    conn = make_connection(FakeGraph(), self_only)
+
+    assert derivation_chains(conn, LEAK_COLUMN_URN, CONFIG, max_hops=3) == ()

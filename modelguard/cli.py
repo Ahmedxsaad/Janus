@@ -22,7 +22,8 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from datahub.metadata.urns import DatasetUrn, MlModelUrn, SchemaFieldUrn, Urn
+from datahub.metadata.schema_classes import MLModelPropertiesClass
+from datahub.metadata.urns import DatasetUrn, MlFeatureUrn, MlModelUrn, SchemaFieldUrn, Urn
 from datahub.sdk.search_filters import FilterDsl as F
 from rich.console import Console
 
@@ -71,6 +72,11 @@ from modelguard.render import (
 )
 from modelguard.telemetry import start_exporter
 from modelguard.writeback.coverage_history import CoverageEntry, append_entry
+from modelguard.writeback.feature_documents import (
+    gather_feature,
+    publish_feature_card,
+    render_feature_card,
+)
 from modelguard.writeback.link import (
     LinkError,
     link_model,
@@ -2267,6 +2273,70 @@ def evidence_pack(
     conformity would be worse than no document at all.
     """
     _publish_model_document(model, write=write, kind="evidence-pack")
+
+
+@app.command(name="feature-card")
+def feature_card(
+    model: Annotated[
+        str,
+        typer.Option("--model", help="Model whose features to document."),
+    ],
+    feature: Annotated[
+        str | None,
+        typer.Option("--feature", help="Only features whose name contains this."),
+    ] = None,
+    write: Annotated[
+        bool,
+        typer.Option("--write/--dry-run", help="Publish to DataHub, or print and write nothing."),
+    ] = False,
+) -> None:
+    """Generate a Data Card for each of a model's features (T-19).
+
+    Where the feature is computed from, hop by hop; every table that derivation
+    crosses and how current each one is; whether it reaches a column classified
+    as restricted or as a protected attribute; whether its type has moved since
+    training; and, when a finding names it, the changes that would clear it.
+
+    Taken per model rather than per feature because that is what somebody has in
+    hand: `--feature` filters within it by substring. Read-only either way,
+    like the model card: generating documentation must not raise incidents.
+    """
+    conn, config, _, _, model_urn = _prepare(
+        table=None,
+        model=model,
+        sla_hours=None,
+        no_llm=True,
+        llm_provider=None,
+        llm_model=None,
+        writes=write,
+    )
+    if model_urn is None:
+        console.print("[red]This command needs --model.[/red]")
+        raise typer.Exit(code=2)
+
+    report = run_scan(conn, config, model_urn=model_urn, llm=None, dry_run=True)
+    properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
+    feature_urns = [
+        urn
+        for urn in ((properties.mlFeatures or []) if properties else [])
+        if feature is None or feature.lower() in MlFeatureUrn.from_string(urn).name.lower()
+    ]
+    if not feature_urns:
+        console.print(
+            f"[yellow]No matching feature on {model}.[/yellow] A model with no declared "
+            "features has nothing to document: `modelguard link` writes that join."
+        )
+        raise typer.Exit(code=0)
+
+    model_name = MlModelUrn.from_string(model_urn).name
+    for feature_urn in feature_urns:
+        facts = gather_feature(
+            conn, feature_urn, model_urn, model_name, config, findings=report.findings
+        )
+        print(render_feature_card(facts))
+        if write:
+            urn = publish_feature_card(conn, facts, run_id=report.run_id)
+            console.print(f"\n[green]Published[/green] {urn}\n")
 
 
 def _publish_model_document(model: str, *, write: bool, kind: str) -> None:

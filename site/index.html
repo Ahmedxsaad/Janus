@@ -112,7 +112,7 @@
   <a href="#config">Configuration</a>
   <a href="#security">Security model</a>
   <a href="#crosswalk">NIST AI RMF</a>
-  <a href="#documents">Model card, AI Act pack</a>
+  <a href="#documents">Model card, AI Act pack, feature cards</a>
   <a href="#links">Everything else</a>
 </aside>
 
@@ -948,9 +948,10 @@ MODELGUARD_LABEL_TERM_URN=              # honor your existing label term
 </section>
 
 <section id="documents">
-  <h2>Two documents, generated instead of maintained</h2>
+  <h2>Three documents, generated instead of maintained</h2>
 <pre><code>modelguard model-card    --model credit_risk_v3   # prints; --write publishes it to DataHub
 modelguard evidence-pack --model credit_risk_v3   # EU AI Act Article 10
+modelguard feature-card  --model credit_risk_v3   # one Data Card per feature
 </code></pre>
   <p>
     A <strong>model card</strong> in the sense Mitchell et al. (FAT* 2019)
@@ -969,6 +970,19 @@ modelguard evidence-pack --model credit_risk_v3   # EU AI Act Article 10
     record prints as <em>not recorded in the catalog</em> rather than being
     quietly dropped, so a gap is visible in the document instead of reading as
     an absence of a problem.
+  </p>
+  <p>
+    <code>feature-card</code> is the third, a <strong>Data Card</strong> in the
+    sense Pushkarna, Zaldivar and Kjartansson (FAccT 2022) proposed one, but for
+    a single feature: where it is computed from hop by hop, every other
+    derivation the walk found, each table that chain crosses and how current it
+    is, whether the chain reaches a column classified as restricted or as a
+    protected attribute, whether its type has moved since training, and, when a
+    finding names it, the changes that would clear it. Taken per model because
+    that is what somebody has in hand; <code>--feature</code> filters within it.
+    Its freshness figures say out loud that they are measured <em>now</em> and
+    not at training time, for the same reason the evidence pack refuses to
+    substitute one for the other.
   </p>
   <p>
     The evidence pack's first heading is <strong>This is not a compliance

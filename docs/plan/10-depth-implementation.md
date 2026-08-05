@@ -575,9 +575,41 @@ None of these are on the critical path. Each is independently landable.
 - [ ] Verify by ingesting a model twice through DataHub's own mlflow source and
       asserting the features survive with no human action.
 
-### T-21 sklearn and feature-store adapters (09 section 1.1) - M each
-- [ ] `[confirm]` `get_feature_names_out()` gives the mapping needed.
-- [ ] SageMaker / Vertex only if a real user asks. Speculative otherwise.
+### ~~T-21 sklearn and feature-store adapters (09 section 1.1) - M each~~ [dropped, D-131]
+
+~~`[confirm]` `get_feature_names_out()` gives the mapping needed.~~ Confirmed
+against scikit-learn 1.9.0 and it does not (D-131). Four measured reasons, in
+order of how fatal each is:
+
+- **The label column name is nowhere in a fitted estimator.** `y` is passed to
+  `fit` and its name is not retained on anything: `classes_` holds the label's
+  *values*. The label is the one argument no inference reaches, which is exactly
+  why the Feast adapter was worth building (D-112), and sklearn cannot supply it.
+- `get_feature_names_out()` returns transformed names, not source columns:
+  `num__tenure_months`, `cat__contract_m2m`. Recovering a column from those means
+  reversing a transformer's own naming convention, and a step like `PCA` returns
+  `pca0`, `pca1` and destroys the mapping outright.
+- The snippet as planned does not run: `pipeline.get_feature_names_out()` raises
+  `AttributeError` on a pipeline ending in an estimator; it has to be sliced
+  (`pipeline[:-1]`).
+- `feature_names_in_` does give the raw input columns, and that is the one useful
+  thing here. It is also the DataFrame's own `columns`, which the training script
+  already holds, so an adapter to read it back off a fitted model would be a
+  round trip to nowhere.
+
+And reading any of it needs a **fitted estimator in memory**, which means
+unpickling a file. `modelguard/adapters/CLAUDE.md`'s local rule is that an adapter
+parses a declaration, offline, and never executes a vendor artifact. Arbitrary
+code execution to recover a mapping the caller already has is not a trade worth
+making.
+
+The need this was meant to serve is already met by `modelguard.api.link_model`,
+called from the training script, which is the one moment the feature table, the
+label column and the training-time schema are all known (README, "Call it from
+your training script").
+
+- [ ] ~~SageMaker / Vertex only if a real user asks.~~ Unchanged and still
+      speculative: no user has asked.
 
 ---
 
