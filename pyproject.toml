@@ -149,10 +149,24 @@ otel = [
     "opentelemetry-sdk==1.44.0",
     "opentelemetry-exporter-otlp-proto-http==1.44.0",
 ]
+# `modelguard watch --events`: consuming DataHub's own MetadataChangeLog so a
+# scan happens when the graph changes, and so a `link` an ingestion run drops is
+# re-applied catalog-wide (modelguard/mcl.py, T-20).
+#
+# confluent-kafka rather than datahub-actions, which would deliver the same
+# records through a plugin system with its own YAML configuration and its own
+# CLI: a second configuration surface beside env.py is what root rule 6 exists
+# to prevent. The topic and its Avro schema are DataHub's published contract
+# either way. The schemaregistry and avro extras are what decode the Confluent
+# framing GMS's own registry serves.
+kafka = [
+    "confluent-kafka[avro,schemaregistry]==2.15.0",
+]
 dev = [
     # The strict mypy hook scans every package module, including the optional
     # approval agent and MCP server. Keep the dev environment complete so a
     # clean clone does not silently skip its tests or fail type checking.
+    "confluent-kafka[avro,schemaregistry]==2.15.0",
     "feast>=0.65,<1",
     "langgraph==1.2.9",
     "mcp==1.28.1",

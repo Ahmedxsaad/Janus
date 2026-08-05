@@ -659,6 +659,31 @@ modelguard watch --table loans_raw --pet     # and put Argos on the desktop
 <pre><code>pip install "modelguard-datahub[otel]"
 MODELGUARD_OTEL_ENDPOINT=http://localhost:4318/v1/metrics modelguard watch --table loans_raw
 </code></pre>
+
+  <h3>React to the graph instead of a timer</h3>
+  <p>
+    <code>watch --events</code> consumes DataHub's own
+    <code>MetadataChangeLog</code> instead of polling, and does one thing polling
+    structurally cannot: it re-applies, <strong>catalog-wide</strong>, any
+    <code>modelguard link</code> an ingestion run drops.
+  </p>
+  <p>
+    That failure is the adoption cliff, and it is silent. DataHub's mlflow source
+    upserts the whole <code>mlModelProperties</code> aspect on every ingest,
+    which drops the <code>mlFeatures</code> that <code>link</code> attached. From
+    that moment the leakage, sensitive-source and proxy checks have nothing to
+    walk, and each reports "not evaluated" on a model that was fully checked
+    yesterday. Nothing errors.
+  </p>
+  <p>
+    It replays only what a human already confirmed, so a model nobody linked is
+    left alone: an inferred join looks identical to a confirmed one in the graph
+    and would make every detector downstream confident about the wrong columns.
+    Polling remains the default and needs no broker.
+  </p>
+<pre><code>pip install "modelguard-datahub[kafka]"
+modelguard watch --events --model credit_risk_v3
+</code></pre>
 </section>
 
 <section id="python">

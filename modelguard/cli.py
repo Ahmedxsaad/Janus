@@ -55,6 +55,15 @@ from modelguard.gate import (
 from modelguard.lifecycle import mttr_by_type, read_lifecycles
 from modelguard.llm import LLMConfig, llm_config_from_env
 from modelguard.logs import LOG_FIELDS, configure_logging, logfmt
+from modelguard.mcl import (
+    ENV_KAFKA_BOOTSTRAP,
+    ENV_KAFKA_GROUP_ID,
+    ENV_SCHEMA_REGISTRY_URL,
+    ChangeLog,
+    MclConfig,
+    MclEvent,
+    mcl_config_from_env,
+)
 from modelguard.models import (
     Finding,
     FreshnessFinding,
@@ -63,6 +72,7 @@ from modelguard.models import (
     Severity,
     TableLevelRiskFinding,
 )
+from modelguard.reconcile import consider
 from modelguard.render import (
     OutputFormat,
     crosswalk_markdown,
@@ -750,6 +760,97 @@ def _watch_once(
     return signature
 
 
+def _touches(event: MclEvent, table_urn: str | None, model_urn: str | None) -> bool:
+    """Whether a change-log event concerns one of the watched targets.
+
+    A column's own aspects arrive under a ``schemaField`` URN that embeds its
+    parent dataset, so containment rather than equality: a term applied to a
+    column of the watched table is exactly the change a leakage scan should wake
+    up for, and an equality test would sleep through it.
+    """
+    return any(
+        target is not None and target in event.entity_urn for target in (table_urn, model_urn)
+    )
+
+
+def _watch_events(
+    conn: DataHubConnection,
+    config: ScanConfig,
+    *,
+    table_urn: str | None,
+    model_urn: str | None,
+    llm: LLMConfig | None,
+    mcl: MclConfig,
+    argos: ArgosProducer | None,
+) -> None:
+    """Run the watch loop off DataHub's change log instead of a timer (T-20).
+
+    Two handlers over one subscription, which is what the plan means by "the same
+    consumer with a second handler":
+
+    * **Catalog-wide**, every event: an ``mlModelProperties`` upsert that dropped
+      a model's features gets the recorded link replayed. That failure is not
+      about the watched target, so it is deliberately not filtered by one.
+    * **Target-scoped**: an event touching the watched table or model runs the
+      same ``_watch_once`` a poll would have run, so detection, write-back and
+      the transition logic are byte-identical to polling. Only the wake-up
+      differs, which is the whole claim.
+
+    One scan runs before the loop opens. Without it the first event's transition
+    would be computed against an empty state and would announce every existing
+    finding as new.
+    """
+    state = WatchState()
+    _watch_once(
+        conn,
+        config,
+        table_urn=table_urn,
+        model_urn=model_urn,
+        llm=llm,
+        previous=state.signature,
+        state=state,
+        argos=argos,
+    )
+
+    with ChangeLog(mcl) as log:
+        console.print("[dim]listening to DataHub's change log; Ctrl-C to stop[/dim]\n")
+        for event in log.events():
+            try:
+                relink = consider(conn, config, event)
+                if relink is not None:
+                    colour = "green" if relink.relinked else "yellow"
+                    console.print(
+                        f"[{colour}]{relink.model_urn}[/{colour}]\n  {relink.reason}"
+                        + (f" ({relink.features} features)" if relink.relinked else "")
+                    )
+                if _touches(event, table_urn, model_urn):
+                    _watch_once(
+                        conn,
+                        config,
+                        table_urn=table_urn,
+                        model_urn=model_urn,
+                        llm=llm,
+                        previous=state.signature,
+                        state=state,
+                        argos=argos,
+                    )
+            except Exception as exc:  # noqa: BLE001 - a daemon must survive one bad event
+                # Logged and carried on, never re-raised: a single model whose
+                # feature table has since been deleted must not stop the loop
+                # from protecting every other model behind it. The offset is
+                # committed either way, because the handlers are idempotent and
+                # re-delivering an event that already failed would wedge the
+                # consumer on it forever.
+                fields = {"error_type": type(exc).__name__, "urn": event.entity_urn}
+                logger.warning(
+                    "change log handler failed %s",
+                    logfmt(fields),
+                    extra={LOG_FIELDS: fields},
+                    exc_info=True,
+                )
+                console.print(f"[yellow]event skipped:[/yellow] {safe_error(exc)}")
+
+
 def _wait(seconds: float, argos: ArgosProducer | None) -> None:
     """Sleep between polls, but wake early when the window asks for a scan.
 
@@ -1094,6 +1195,14 @@ def watch(
         bool,
         typer.Option("--once", help="Poll a single time and exit. For scripts and the demo."),
     ] = False,
+    events: Annotated[
+        bool,
+        typer.Option(
+            "--events",
+            help="React to DataHub's change log instead of polling, and re-apply any "
+            "link an ingestion run drops, anywhere in the catalog.",
+        ),
+    ] = False,
     pet: Annotated[
         bool,
         typer.Option(
@@ -1126,13 +1235,20 @@ def watch(
     human to prompt) and, because the writes are idempotent, it acts on the
     transitions, a new finding or a recovery, rather than on every poll.
 
-    This is polling, deliberately: it never depends on Kafka timing, which is what
-    makes it reliable for a demo. An event-driven build on DataHub's Actions
-    framework (``EntityChangeEvent``) is the upgrade path when poll latency matters.
-    """
-    # ponytail: polling loop, not the Actions/Kafka EntityChangeEvent consumer.
-    # Wire datahub-actions here if sub-poll-interval latency ever matters.
+    Polling is the default, deliberately: it never depends on Kafka timing, which
+    is what makes it reliable for a demo and behind a proxy.
 
+    ``--events`` is the upgrade 03-production-hardening.md section C.1 has always
+    named (T-20). It consumes DataHub's own ``MetadataChangeLog``, so a scan
+    happens when the graph changes rather than when a timer fires, and it does one
+    thing polling structurally cannot: it re-applies, **catalog-wide**, any
+    `modelguard link` an ingestion run drops. That failure is not about the
+    watched target, so no poll of one target could ever see it (D-074, F11).
+
+    It replays only what a human already confirmed. A model nobody linked is left
+    alone: guessing a training table would write a join indistinguishable from a
+    confirmed one and wrong.
+    """
     # The one entry point that runs unattended for days, so it is the one that
     # turns the pipeline's per-scan timing lines on. The other commands print a
     # report to a human who is standing there and would only be talked over.
@@ -1173,14 +1289,58 @@ def watch(
     for target in (table_urn, model_urn):
         if target is not None:
             console.print(f"Watching [bold]{target}[/bold]")
-    if not once:
+    if not once and not events:
         console.print(f"[dim]polling every {interval:.0f}s; Ctrl-C to stop[/dim]")
     console.print()
+
+    argos = ArgosProducer.start(console) if pet else None
+    if events:
+        if once:
+            console.print(
+                "[red]--events and --once are not compatible.[/red] A subscription has "
+                "no single poll to take: --once is the scripted path, --events is the "
+                "daemon one."
+            )
+            raise typer.Exit(code=2)
+        try:
+            mcl = mcl_config_from_env()
+        except ConfigError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=2) from exc
+        if mcl is None:
+            console.print(
+                f"[red]--events needs the change log configured.[/red] Set "
+                f"{ENV_KAFKA_BOOTSTRAP}, {ENV_SCHEMA_REGISTRY_URL} and "
+                f"{ENV_KAFKA_GROUP_ID}, and install the client: "
+                'pip install "modelguard-datahub[kafka]"'
+            )
+            raise typer.Exit(code=2)
+        try:
+            _watch_events(
+                conn,
+                config,
+                table_urn=table_urn,
+                model_urn=model_urn,
+                llm=llm,
+                mcl=mcl,
+                argos=argos,
+            )
+        except ConfigError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=2) from exc
+        except KeyboardInterrupt:
+            console.print("\n[dim]watch stopped.[/dim]")
+        finally:
+            if argos is not None:
+                argos.close()
+            if metrics is not None:
+                metrics.force_flush()
+                metrics.shutdown()
+        return
 
     state = WatchState()
     backoff = interval
     consecutive_failures = 0
-    argos = ArgosProducer.start(console) if pet else None
     try:
         while True:
             try:
