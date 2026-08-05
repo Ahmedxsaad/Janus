@@ -328,7 +328,7 @@ def measure_ingested(conn: DataHubConnection, config: ScanConfig) -> IngestedSco
 
     restore_ingested_state(conn, model_urn)
     unlinked = run_scan(conn, config, model_urn=model_urn, llm=None, dry_run=True)
-    unlinked_tables = training_tables(conn, model_urn)
+    unlinked_tables = training_tables(conn, model_urn, config)
 
     routes, declaration = read_routes(conn)
     if declaration is None:
