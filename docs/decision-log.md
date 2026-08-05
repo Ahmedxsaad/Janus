@@ -16,6 +16,31 @@ Entry template:
 
 ---
 
+## D-138: The page carries every flag and every setting, not only the story (2026-08-05)
+- Decided by: Ghassen Naouar.
+- Decision: `site/index.html` gains a flag reference covering every option of
+  every command, the fifteen `.env` keys it never showed (the parameter
+  defaults, the logging and OTLP headers, the Kafka three, the Argos and
+  companion settings), the versioned-model behaviour in `discovery.py`, and
+  rows for the MCP extension RFC and the Helm chart.
+- Options considered: (a) leave `--help` as the reference and keep the page
+  narrative; (b) add a flag table and complete the configuration section;
+  (c) generate the reference from the Typer app at build time.
+- Why (b): `tests/test_docs.py` already forces every *command* onto the page,
+  which is the check that exists because two commands shipped
+  undiscoverable. Options are the same failure one level down:
+  `scan --report-out` writes the impact report to disk for a reader with no
+  DataHub login, and nothing on the page said so. (c) is the right answer for
+  a page with a build step, and this one deliberately has none (site/CLAUDE.md
+  rule 2), so a generator would be the first dependency.
+- Result: New `#flags` section with one table per command, the configuration
+  section extended with the parameter and operational key groups and the
+  reasoning for the two separate hop caps, a subsection under `inventory` on
+  why every sweep turns off DataHub's non-latest-version hiding. Site and doc
+  tests pass. Not enforced by a test: an option can still be added without
+  landing here, which is the same promise rule 5 makes for a command and is
+  the natural next thing to make mechanical.
+
 ## D-137: The page is set in autumn, and one dog walks it (2026-08-05)
 - Decided by: Ghassen Naouar.
 - Decision: `site/` is rebuilt on a warm autumn palette (ivory paper, dark

@@ -119,6 +119,7 @@
   <a href="#argos">Argos, the pet</a>
   <a href="#docker">Docker</a>
   <div class="group">Reference</div>
+  <a href="#flags">Every flag</a>
   <a href="#config">Configuration</a>
   <a href="#security">Security model</a>
   <a href="#selfobserve">Janus in the graph</a>
@@ -431,6 +432,27 @@ janus scan --table loans_raw             # no finding, no writes
     Janus's own incidents. Nothing new is recorded to make that possible, and
     the median sits beside the mean because one incident left open across a
     weekend moves a mean by days and describes none of the others.
+  </p>
+
+  <h3>Including the model versions search hides from you</h3>
+  <p>
+    Registering a second version of an MLflow model produces a <em>second</em>
+    <code>mlModel</code> entity and stamps the first one's
+    <code>isLatest</code> false. GMS then drops every non-latest version out of
+    search results, so the earlier entity is invisible to any query that finds
+    models by searching, while remaining perfectly alive: not deleted, still
+    carrying its aspects, still carrying whatever Janus wrote to it.
+  </p>
+  <p>
+    Every sweep here (<code>inventory</code>, <code>scan --all-models</code>,
+    <code>link --all</code>) turns that hiding off, because two of its
+    consequences are silent correctness failures rather than cosmetic ones: a
+    model <code>link --all</code> cannot see is one that quietly stops being
+    checked after the next ingest, and an incident raised on a version that
+    later stops being latest can never be resolved, because nothing reaches the
+    model to notice the finding is gone. Scanning every version costs less than
+    it sounds, since the detectors only write for a model somebody linked, and
+    an unlinked old version reports itself unchecked and writes nothing.
   </p>
 
   <h3>Before anybody links anything: the table-level answer</h3>
@@ -1133,6 +1155,124 @@ docker compose up janus-mcp       # long-running, stdio
   </p>
 </section>
 
+<section id="flags" data-pose="tilt" data-x="0.40"
+         data-say="EVERY FLAG I TAKE, WRITTEN DOWN. NOTHING OF MINE LIVES ONLY INSIDE HELP.">
+  <h2>Every flag, in one table</h2>
+  <p>
+    The sections above show each command doing the thing it exists for. This is
+    the whole of the rest, so no option is reachable only by typing
+    <code>--help</code>. Every command also takes <code>--help</code>, and none
+    of them take a positional argument.
+  </p>
+
+  <h3>scan</h3>
+  <div class="scroller">
+  <table>
+    <tr><th>Flag</th><th>What it does</th></tr>
+    <tr><td><code>--table</code></td><td>A dataset to audit: a full URN, or a name such as <code>loans_raw</code></td></tr>
+    <tr><td><code>--model</code></td><td>A model to audit: a full URN, or a name such as <code>credit_risk_v3</code></td></tr>
+    <tr><td><code>--all-models</code></td><td>Every model in the graph, one after another</td></tr>
+    <tr><td><code>--dry-run</code></td><td>Detect and explain, write nothing</td></tr>
+    <tr><td><code>--review</code></td><td>Show each finding and prompt before writing it</td></tr>
+    <tr><td><code>--auto-approve</code></td><td>Run the same approval agent but write without prompting</td></tr>
+    <tr><td><code>--sla-hours</code></td><td>Freshness SLA for this run, overriding <code>JANUS_FRESHNESS_SLA_HOURS</code></td></tr>
+    <tr><td><code>--format</code></td><td><code>text</code> for a human, <code>json</code> for a program</td></tr>
+    <tr><td><code>--report-out</code></td><td>Also write the impact report markdown to a path on disk</td></tr>
+    <tr><td><code>--assertion-out</code></td><td>Also write the guarding assertion as YAML to a path on disk</td></tr>
+    <tr><td><code>--contract-out</code></td><td>Write the ODCS input contract there. Needs <code>--model</code></td></tr>
+    <tr><td><code>--no-llm</code></td><td>Skip the narrator and use the deterministic template prose</td></tr>
+    <tr><td><code>--llm-provider</code>, <code>--llm-model</code></td><td>Override the provider and model id for this run only</td></tr>
+  </table>
+  </div>
+  <p>
+    The two <code>-out</code> flags are for the reader who has no DataHub login:
+    the same report and the same assertion the scan writes into the graph, as
+    files to attach to a ticket or commit beside the model. They are additional,
+    never instead of the write.
+  </p>
+
+  <h3>gate</h3>
+  <div class="scroller">
+  <table>
+    <tr><th>Flag</th><th>What it does</th></tr>
+    <tr><td><code>--table</code>, <code>--model</code></td><td>What to judge, same resolution as <code>scan</code></td></tr>
+    <tr><td><code>--block-at-or-above</code></td><td>Exit 1 on any finding this severe or worse: critical, high, medium, low</td></tr>
+    <tr><td><code>--min-trust</code></td><td>Exit 1 below this score (0-100). The blunt secondary control</td></tr>
+    <tr><td><code>--write</code></td><td>Write findings back too. Off by default: a gate runs on every push</td></tr>
+    <tr><td><code>--sla-hours</code></td><td>As above</td></tr>
+    <tr><td><code>--format</code></td><td><code>json</code> also suppresses the GitHub annotations, which are not JSON</td></tr>
+    <tr><td><code>--llm</code></td><td>Narrate the violations. A gate defaults to <em>no</em> LLM: it needs a verdict, not prose, and only with this flag do <code>--llm-provider</code> and <code>--llm-model</code> mean anything</td></tr>
+  </table>
+  </div>
+
+  <h3>link</h3>
+  <div class="scroller">
+  <table>
+    <tr><th>Flag</th><th>What it does</th></tr>
+    <tr><td><code>--model</code></td><td>The trained model. Omit only with <code>--all</code></td></tr>
+    <tr><td><code>--features</code></td><td>The table it trains on. Omit to reuse what a previous link recorded</td></tr>
+    <tr><td><code>--label-column</code></td><td>The column it predicts. Omit to reuse what a previous link recorded</td></tr>
+    <tr><td><code>--label-table</code></td><td>Where that column lives. Defaults to the feature table</td></tr>
+    <tr><td><code>--exclude</code></td><td>A feature-table column that is not a feature, such as a join key. Repeatable</td></tr>
+    <tr><td><code>--infer</code></td><td>Work the arguments out from the graph and show them for confirmation</td></tr>
+    <tr><td><code>--yes</code></td><td>Accept an inferred proposal without prompting</td></tr>
+    <tr><td><code>--from</code>, <code>--repo</code>, <code>--select</code></td><td>Read the declaration out of a Feast or dbt repo instead of typing it</td></tr>
+    <tr><td><code>--all</code></td><td>Replay the recorded link for every model that has one</td></tr>
+    <tr><td><code>--dry-run</code></td><td>Show what would be declared, write nothing</td></tr>
+  </table>
+  </div>
+
+  <h3>watch</h3>
+  <div class="scroller">
+  <table>
+    <tr><th>Flag</th><th>What it does</th></tr>
+    <tr><td><code>--table</code>, <code>--model</code></td><td>What to keep looking at</td></tr>
+    <tr><td><code>--interval</code></td><td>Seconds between polls</td></tr>
+    <tr><td><code>--once</code></td><td>Poll a single time and exit. For scripts and for a recorded demo</td></tr>
+    <tr><td><code>--events</code></td><td>React to the change log instead of polling, and re-apply a dropped link catalog-wide</td></tr>
+    <tr><td><code>--pet</code></td><td>Put Argos on the desktop and let this watch drive him</td></tr>
+    <tr><td><code>--sla-hours</code>, <code>--no-llm</code>, <code>--llm-provider</code>, <code>--llm-model</code></td><td>As on <code>scan</code></td></tr>
+  </table>
+  </div>
+
+  <h3>companion</h3>
+  <div class="scroller">
+  <table>
+    <tr><th>Flag</th><th>What it does</th></tr>
+    <tr><td><code>--owner</code></td><td>The owner URN whose assets to sweep. Defaults to <code>JANUS_COMPANION_OWNER</code></td></tr>
+    <tr><td><code>--interval</code></td><td>Seconds between sweeps</td></tr>
+    <tr><td><code>--once</code></td><td>Sweep a single time and exit</td></tr>
+    <tr><td><code>--no-window</code></td><td>Report in the terminal rather than on the desktop. What runs over SSH</td></tr>
+  </table>
+  </div>
+
+  <h3>The read-only reports</h3>
+  <div class="scroller">
+  <table>
+    <tr><th>Command</th><th>Flags</th></tr>
+    <tr><td><code>janus inventory</code></td><td><code>--limit</code>, to stop after this many models</td></tr>
+    <tr><td><code>janus coverage</code></td><td><code>--limit</code>, and <code>--write</code> to record the point in the trend</td></tr>
+    <tr><td><code>janus finops</code></td><td><code>--limit</code>, and <code>--days</code>, the idle window before a model counts as unused</td></tr>
+    <tr><td><code>janus crosswalk</code></td><td>None. It prints the table generated from the detector registry</td></tr>
+    <tr><td><code>janus model-card</code></td><td><code>--model</code>, and <code>--write</code> to publish it against the model</td></tr>
+    <tr><td><code>janus evidence-pack</code></td><td><code>--model</code>, <code>--write</code></td></tr>
+    <tr><td><code>janus feature-card</code></td><td><code>--model</code>, <code>--write</code>, and <code>--feature</code> to filter within it</td></tr>
+  </table>
+  </div>
+  <p>
+    <code>--limit</code> is there because a first run against somebody else's
+    catalog should be cheap to try. It is a stop, not a sample: the models are
+    taken in the order the graph returns them, so a limited sweep answers
+    honestly about the models it looked at and says nothing about the rest.
+  </p>
+
+  <h3>The other three commands</h3>
+<pre><code>janus-seed         # build the demo ML supply chain
+janus-scenario     # plant a failure: --lag-hours, --scenario, --revert
+janus-mcp          # the read-only MCP server, over stdio
+</code></pre>
+</section>
+
 <section id="config" data-pose="scribble" data-x="0.12"
          data-say="MISSING MEANS MISSING. I WILL NOT GUESS AT A SERVER, A KEY OR A TAXONOMY.">
   <h2>Configuration</h2>
@@ -1184,6 +1324,57 @@ JANUS_OTEL_ENDPOINT=               # OTLP metrics, off unless set
     instead of creating one.
   </p>
 
+  <h3>The parameters, with the defaults they ship with</h3>
+  <p>
+    These are the third rule above: they change how hard the detectors look, not
+    what they connect to, so each carries a documented default and a run with an
+    empty <code>.env</code> uses it.
+  </p>
+<pre><code>JANUS_FRESHNESS_SLA_HOURS=6      # past this, a table is stale
+JANUS_MAX_HOPS=3                 # how far a blast-radius walk goes downstream
+JANUS_LEAKAGE_MAX_HOPS=6         # a leak path may be longer than a blast radius
+JANUS_PROXY_MAX_HOPS=3           # how far up to look for a common ancestor
+JANUS_LINEAGE_RESULT_CAP=500     # edges read per hop, so one hub table cannot stall a scan
+JANUS_LABEL_COLUMN_NAMES=        # the names --infer will propose as a label
+JANUS_UNUSED_MODEL_DAYS=90       # idle window before finops calls a model unused
+JANUS_COMPANION_ENTITY_CAP=200   # assets one companion sweep reads
+</code></pre>
+  <p>
+    The two hop caps are separate on purpose. A blast radius answers "who is
+    affected", and three hops of that is already a wide answer. A leak path
+    answers "where did this value come from", and a real warehouse puts six
+    joins between a label and the feature that quietly carries it, so the same
+    cap on both would either miss leaks or make every scan expensive.
+  </p>
+
+  <h3>And the operational half</h3>
+<pre><code>JANUS_LOG_FORMAT=                # json, for a log pipeline. Unset: human-readable lines
+JANUS_OTEL_HEADERS=              # for a collector behind an auth header
+
+JANUS_KAFKA_BOOTSTRAP=           # the three watch --events needs, all or none
+JANUS_SCHEMA_REGISTRY_URL=
+JANUS_KAFKA_GROUP_ID=
+
+JANUS_ARGOS_BIN=                 # the desktop window, if it is not on PATH
+JANUS_DATAHUB_UI_URL=            # the UI port, not GMS: what Argos opens on a click
+JANUS_COMPANION_OWNER=           # whose assets janus companion sweeps
+</code></pre>
+  <p>
+    <code>JANUS_LOG_FORMAT=json</code> is for the one process that runs for
+    days. A human tailing <code>watch</code> wants
+    <code>scan complete run_id=... findings=1</code>; Loki or an ELK stack wants
+    fields it can index without a per-tool regular expression that breaks the
+    first time a key is added. Both come from the same call site, so a field
+    cannot exist in one and be missing from the other.
+  </p>
+  <p>
+    <code>JANUS_DATAHUB_UI_URL</code> is a different port from
+    <code>DATAHUB_GMS_URL</code> above (9002 rather than 8080 on a Quickstart),
+    which is why it is asked for rather than derived. Without it Argos says so
+    on the finding instead of opening a browser at a guess. The Kafka three are
+    a group, so setting one of them and not the others fails loudly rather than
+    quietly falling back to polling.
+  </p>
 </section>
 
 <section id="security" data-pose="alert" data-x="0.46"
@@ -1407,6 +1598,8 @@ janus feature-card  --model credit_risk_v3   # one Data Card per feature
     <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/09-depth-axes.md">09-depth-axes.md</a></td><td>Where the product goes deeper, and what it deliberately will not build</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/07-weaknesses-and-remedies.md">07-weaknesses-and-remedies.md</a></td><td>An adversarial audit: known weaknesses, each with a fix</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/tree/main/skill/datahub-ml-guard">datahub-ml-guard</a></td><td>The skill, offered back to the DataHub ecosystem</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/mcp_ext/RFC-ml-incidents.md">RFC-ml-incidents.md</a></td><td>The second contribution: an incident-raising tool for DataHub's own MCP server, which has no incident, assertion or lineage-write tool today</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/tree/main/charts/janus-watch">charts/janus-watch</a></td><td>The Helm chart: <code>watch</code> as a deployment, with an optional <code>link --all</code> CronJob</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/most-valuable-feedback.md">most-valuable-feedback.md</a></td><td>Sixteen reproducible bugs and doc gaps found while building</td></tr>
   </table>
   </div>
