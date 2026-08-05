@@ -262,11 +262,15 @@ def raise_incident(
     return IncidentWrite(urn=urn, created=True)
 
 
-def resolve_incident(conn: DataHubConnection, incident_urn: str, message: str) -> bool:
+def resolve_incident(conn: DataHubConnection, incident_urn: str, message: str) -> None:
     """Mark an incident resolved.
 
-    Returns:
-        Whether DataHub accepted the state change.
+    Raises:
+        IncidentWriteError: DataHub rejected the state change. Raised rather than
+            returned as a bool so a caller cannot forget to check it: every caller
+            in agent/pipeline.py's reconciliation clears the model's risk flag and
+            tag right after this returns, and a swallowed rejection would leave
+            DataHub's own incident ACTIVE while ModelGuard reports the model recovered.
     """
     response = conn.graph.execute_graphql(
         _UPDATE_INCIDENT_STATUS,
@@ -275,4 +279,7 @@ def resolve_incident(conn: DataHubConnection, incident_urn: str, message: str) -
             "input": {"state": IncidentStateClass.RESOLVED, "message": message},
         },
     )
-    return bool(response.get("updateIncidentStatus"))
+    if not response.get("updateIncidentStatus"):
+        raise IncidentWriteError(
+            f"updateIncidentStatus rejected the resolve for {incident_urn}: {response}"
+        )

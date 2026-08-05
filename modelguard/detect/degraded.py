@@ -70,10 +70,24 @@ def has_column_link(conn: DataHubConnection, properties: MLModelPropertiesClass 
     return any(feature_source_column(conn, urn) is not None for urn in properties.mlFeatures)
 
 
-def _upstream_datasets(conn: DataHubConnection, model_urn: str) -> tuple[str, ...]:
-    """Return datasets the catalog declares one hop upstream of the model."""
+def _upstream_datasets(
+    conn: DataHubConnection, model_urn: str, config: ScanConfig
+) -> tuple[str, ...]:
+    """Return datasets the catalog declares one hop upstream of the model.
+
+    ``max_hops=1`` is fixed, not ``config.max_hops``: this is a direct
+    declaration Spark and some ingestion sources emit, not a depth-bounded
+    walk, and widening it would start pulling in tables the model does not
+    itself train on. ``count`` still comes from config, like every other
+    ``get_lineage`` call in this package (detect/CLAUDE.md rule 3): a model
+    with a wide fan-in of declared upstream tables must not have that list
+    silently capped at the SDK's own default.
+    """
     results = conn.client.lineage.get_lineage(
-        source_urn=model_urn, direction="upstream", max_hops=1
+        source_urn=model_urn,
+        direction="upstream",
+        max_hops=1,
+        count=config.lineage_result_cap,
     )
     return tuple(
         sorted(
@@ -82,14 +96,16 @@ def _upstream_datasets(conn: DataHubConnection, model_urn: str) -> tuple[str, ..
     )
 
 
-def training_tables(conn: DataHubConnection, model_urn: str) -> tuple[str, ...]:
+def training_tables(conn: DataHubConnection, model_urn: str, config: ScanConfig) -> tuple[str, ...]:
     """Return every table this model is declared to train on, however declared.
 
     Both routes are unioned rather than ordered by confidence: unlike
     ``link --infer``, nothing here has to pick one table, so a model that
     declares two inputs gets both checked instead of one chosen.
     """
-    found = set(model_input_datasets(conn, model_urn)) | set(_upstream_datasets(conn, model_urn))
+    found = set(model_input_datasets(conn, model_urn)) | set(
+        _upstream_datasets(conn, model_urn, config)
+    )
     return tuple(sorted(found))
 
 
@@ -188,7 +204,7 @@ def table_level_findings(
     if has_column_link(conn, properties):
         return ()
 
-    tables = training_tables(conn, model_urn)
+    tables = training_tables(conn, model_urn, config)
     if not tables:
         return ()
 

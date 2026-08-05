@@ -99,6 +99,15 @@ def _document_id(model_urn: str, finding_type: FindingType, resource_urn: str) -
     return f"modelguard-impact-{model_name}-{resource_hash}"
 
 
+def urn_hash(urn: str) -> str:
+    """Short stable hash of a URN, folded into a document id alongside a display name.
+
+    Keeps the id unique across two resources sharing that name: a bare
+    MlModelUrn/MlFeatureUrn name drops platform, env, or owning table.
+    """
+    return hashlib.sha256(urn.encode()).hexdigest()[:12]
+
+
 def _model_section(model: ModelAtRisk) -> str:
     """Render one at-risk model as a markdown block."""
     serving = (

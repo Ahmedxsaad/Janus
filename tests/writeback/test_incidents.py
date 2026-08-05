@@ -308,7 +308,8 @@ def test_raise_incident_errors_when_the_mutation_returns_nothing():
 
 def test_resolve_incident_reports_the_servers_answer():
     graph = FakeGraph(graphql_response={"updateIncidentStatus": True})
-    assert resolve_incident(make_connection(graph), INCIDENT, "fixed upstream") is True
+    assert resolve_incident(make_connection(graph), INCIDENT, "fixed upstream") is None
 
     graph = FakeGraph(graphql_response={"updateIncidentStatus": False})
-    assert resolve_incident(make_connection(graph), INCIDENT, "nope") is False
+    with pytest.raises(IncidentWriteError, match="rejected the resolve"):
+        resolve_incident(make_connection(graph), INCIDENT, "nope")

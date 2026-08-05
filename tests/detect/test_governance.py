@@ -193,6 +193,26 @@ class TestSensitiveSource:
         assert len(findings) == 1
         assert findings[0].exposure.marker_urn == SENSITIVE_TERM_URN
 
+    def test_a_protected_attribute_classification_is_honored_too(self):
+        """Direct descent from a *protected-attribute*-only column is still proved.
+
+        sensitive_term_urns/tag_urns and protected_attribute_term_urns/tag_urns
+        are separate, independently-configured groups (config.py). A column
+        classified only as a protected attribute, with no sensitive tag or term
+        applied, must still be caught here: it is the strongest form of exposure
+        (direct use, not a shared ancestor), and proxy_candidate_findings
+        deliberately excludes this same direct descent on the assumption that
+        this detector is the one that reports it.
+        """
+        graph, client = _classified_graph(classified=False)
+        graph.set_aspect(INCOME_COLUMN_URN, _tags("urn:li:tag:protected-attribute"))
+        config = ScanConfig(protected_attribute_tag_urns=("urn:li:tag:protected-attribute",))
+
+        findings = sensitive_source_findings(make_connection(graph, client), MODEL_URN, config)
+
+        assert len(findings) == 1
+        assert findings[0].exposure.marker_urn == "urn:li:tag:protected-attribute"
+
     def test_a_classification_applied_through_the_ui_is_honored(self):
         """The UI writes editableSchemaMetadata on the parent, not the schemaField."""
         graph, client = _classified_graph(classified=False)

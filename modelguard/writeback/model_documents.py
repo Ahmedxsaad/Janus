@@ -51,6 +51,7 @@ from modelguard.models import Finding, ModelRef, TrustScore
 from modelguard.writeback.documents import (
     RUN_ID_PROPERTY,
     render_trust_waterfall,
+    urn_hash,
 )
 
 #: DataHub document subtypes. Distinct from the impact report's, so a reader
@@ -502,15 +503,18 @@ def publish_model_card(
 ) -> str:
     """Write the model card as a document linked to the model. Returns its URN.
 
-    Keyed on the model alone, so a rerun replaces the card rather than adding a
-    second one: unlike an impact report there is exactly one card per model, and
-    it is meant to be current rather than historical.
+    Keyed on the model's full URN, not its bare name: MlModelUrn.name drops the
+    platform and env, so two models named the same on different platforms (or
+    in PROD vs STAGING) would otherwise collide on one document. A rerun of the
+    same model still replaces its own card rather than adding a second one:
+    unlike an impact report there is exactly one card per model, and it is
+    meant to be current rather than historical.
     """
     return _publish(
         conn,
         facts,
         run_id=run_id,
-        document_id=f"modelguard-model-card-{facts.model.name}",
+        document_id=f"modelguard-model-card-{facts.model.name}-{urn_hash(facts.model.urn)}",
         title=f"Model card: {facts.model.name}",
         subtype=MODEL_CARD_SUBTYPE,
         markdown=render_model_card(facts),
@@ -523,12 +527,18 @@ def publish_evidence_pack(
     *,
     run_id: str,
 ) -> str:
-    """Write the Article 10 evidence pack as a document. Returns its URN."""
+    """Write the Article 10 evidence pack as a document. Returns its URN.
+
+    Keyed on the model's full URN for the same reason as ``publish_model_card``:
+    the bare name collides across platforms and environments, and silently
+    overwriting another model's Article 10 pack is the most damaging thing this
+    module could ship.
+    """
     return _publish(
         conn,
         facts,
         run_id=run_id,
-        document_id=f"modelguard-evidence-pack-{facts.model.name}",
+        document_id=f"modelguard-evidence-pack-{facts.model.name}-{urn_hash(facts.model.urn)}",
         title=f"AI Act Article 10 evidence pack: {facts.model.name}",
         subtype=EVIDENCE_PACK_SUBTYPE,
         markdown=render_evidence_pack(facts),

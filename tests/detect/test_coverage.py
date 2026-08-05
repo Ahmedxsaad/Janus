@@ -26,6 +26,7 @@ from modelguard.detect.coverage import MODEL_CHECKS, coverage_gaps
 from modelguard.detect.leakage import SOURCE_COLUMN_PROPERTY
 from modelguard.writeback.properties import FEATURE_TABLE
 from tests.conftest import (
+    CLEAN_FEATURE_URN,
     FEATURE_TABLE_URN,
     LEAK_COLUMN_URN,
     LEAK_FEATURE_URN,
@@ -168,6 +169,33 @@ def test_a_fully_wired_model_leaves_no_leakage_gap():
     )
     described = _gaps(graph, model_urn=MODEL_URN)
     assert not any("target leakage" in line for line in described)
+
+
+def test_a_partially_linked_model_is_a_gap_not_a_clean_leakage_result():
+    """One of two features resolves a source column; the other does not.
+
+    leakage_findings() only walks the resolved feature, so a clean result from
+    it is proof that *one* feature does not leak, not proof the model was
+    checked. Reporting this as no gap would silently claim the unlinked
+    feature was cleared when it was never looked at.
+    """
+    graph = FakeGraph(
+        aspects={
+            (MODEL_URN, MLModelPropertiesClass): MLModelPropertiesClass(
+                mlFeatures=[LEAK_FEATURE_URN, CLEAN_FEATURE_URN]
+            ),
+            (LEAK_FEATURE_URN, MLFeaturePropertiesClass): MLFeaturePropertiesClass(
+                customProperties={SOURCE_COLUMN_PROPERTY: LEAK_COLUMN_URN}
+            ),
+            # CLEAN_FEATURE_URN carries no source-column property: unresolved.
+        },
+        exists=True,
+    )
+    described = _gaps(graph, model_urn=MODEL_URN)
+    assert any(
+        "target leakage" in line and "1 of 2" in line and "no column-level lineage" in line
+        for line in described
+    )
 
 
 def test_a_truncated_leakage_walk_is_reported_as_a_gap_not_clean():

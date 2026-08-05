@@ -16,6 +16,65 @@ Entry template:
 
 ---
 
+## D-134: Full-implementation review of phases 0-7 (2026-08-05)
+- Decided by: Claude (for Ghassen Naouar).
+- Decision: A recall-biased review of the whole `modelguard/` package against a
+  live Quickstart (GMS v1.7.0) found ten real defects; all ten are fixed and the
+  full suite (933 offline, 71 integration) is green, ruff and mypy clean.
+  Highest severity, in order: (1) `_reconcile_stale_findings` had no branch for
+  `TABLE_LEVEL_RISK` or `PROXY_CANDIDATE`, so those incidents, the
+  `model-at-risk` tag and the risk flag never cleared once raised; (2)
+  `link.py`'s `_capture_training_schema` overwrote the whole multi-input
+  snapshot instead of merging into it, silently blinding schema-drift detection
+  for a second linked input table; (3) `feature_documents.py` and
+  `model_documents.py` keyed a Data Card / model card / AI Act evidence pack's
+  document id on `MlFeatureUrn.name` / `MlModelUrn.name` alone, which drops the
+  owning feature table / platform / env, so two distinct entities sharing a
+  bare name silently overwrote each other's document; (4) `governance.py`'s
+  `proxy_candidate_findings` excluded direct descent from a protected attribute
+  using its own index, while `sensitive_source_findings` (the detector the
+  exclusion assumed would cover it) only checked a separate, independently
+  configured `sensitive_index`, so a column classified solely as a protected
+  attribute produced zero findings from either detector; (5) `coverage.py`
+  reported a model as fully checked for leakage/sensitive-source the moment any
+  one feature resolved a source column, so a partially linked model's unlinked
+  features were silently never walked; (6) `resolve_incident` returned a bool
+  no caller checked instead of raising, so a rejected resolve left DataHub's
+  incident ACTIVE while ModelGuard reported the model recovered; (7)
+  `adapters/feast.py` could call a SQL contrib source's
+  `get_table_query_string()` on a `SparkSource`, which starts a live Spark
+  session, violating the read-only/offline adapter contract
+  (adapters/CLAUDE.md rule 1); (8) `degraded.py`'s `_upstream_datasets` omitted
+  `count=config.lineage_result_cap`, capping a wide fan-in at the SDK's own
+  default (detect/CLAUDE.md rule 3); (9) `cli.py` mapped
+  `DataHubConnectionError` to exit 1 in some subcommands and exit 2
+  (`ConfigError`'s code) in others, for the identical failure; (10)
+  `tests/conftest.py`'s `unconfigured_environment` fixture (already in-flight
+  when the review started, closing the same class of local-vs-CI drift D-078
+  fixed for one variable) was missing three optional `ENV_*` names
+  (`ENV_OWNER`, `ENV_BINARY`, `ENV_UI_URL`).
+- Options considered: (a) report findings only, (b) fix everything found. The
+  session's own instruction was to fix, and by the time findings 1-3 and 6-9
+  were verified, fixes for them were already landing in the working tree from
+  the same instruction running in parallel; reviewing those fixes for
+  correctness and finishing the two the parallel work had not reached (4, 5)
+  was the coherent completion of (b), not a second, competing fix.
+- Why classification_index over duplicating the exclusion fix in two places:
+  once `sensitive_source_findings` walked the union of both classification
+  groups (the fix already in flight), the correct exclusion in
+  `proxy_candidate_findings` is the same union, not `sensitive_index` alone;
+  checking the narrower index would have left the fork search wastefully
+  walking cases the union already proves.
+- Result: two new regression tests
+  (`test_a_partially_linked_model_is_a_gap_not_a_clean_leakage_result`,
+  `test_a_protected_attribute_classification_is_honored_too`), each confirmed
+  red against the pre-fix code per tests/CLAUDE.md rule 6. `FakeGraph`'s
+  default `graphql_response` now accepts `updateIncidentStatus` (the common
+  case), since `resolve_incident`'s new raise-on-rejection contract needed a
+  fixture default rather than eleven call sites each supplying one.
+
+---
+
 ## D-133: The benchmark scored a detector it had never switched on (2026-08-05)
 - Decided by: Ghassen Naouar.
 - Found by: running `python -m benchmarks.run_bench` on a checkout whose `.env`

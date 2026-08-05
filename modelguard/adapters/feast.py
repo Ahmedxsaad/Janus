@@ -115,11 +115,20 @@ def _source_table(source: Any) -> str:
     dialect that quotes its identifiers returns them quoted; neither is a table
     name, and both fall through to the declared name rather than being handed to
     a catalog lookup as one.
+
+    Never asked of a Spark source: unlike the SQL contrib sources' pure string
+    build, a ``SparkSource`` with neither ``table`` nor ``path`` set answers by
+    calling ``SparkSession.builder.getOrCreate()`` and loading a dataframe, a
+    live side effect this offline, read-only reader must never trigger
+    (adapters/CLAUDE.md rule 1). Checked by module name rather than imported,
+    so this reader never has to import pyspark to stay safe without it.
     """
     for attribute in _TABLE_ATTRIBUTES:
         value = getattr(source, attribute, None)
         if value:
             return str(value)
+    if "spark" in type(source).__module__.lower():
+        return str(source.name)
     relation = getattr(source, "get_table_query_string", None)
     if callable(relation):
         try:
