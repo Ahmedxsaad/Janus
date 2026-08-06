@@ -516,7 +516,7 @@ an ingest drops it (see above), so a link declared once decays on a schedule you
 do not control. Declared here, it is re-declared by the same run that produces
 the model, so the next training run repairs it whether or not anybody noticed.
 For the models that are not retrained nightly, schedule `janus link --all`
-after your ingest: the [`janus-watch` chart](charts/janus-watch)
+after your ingest: the [`janus-watch` chart](https://github.com/Ahmedxsaad/janus/tree/main/charts/janus-watch)
 ships that as a CronJob (`link.enabled=true`). And when neither has happened,
 a scan says so specifically ("carries a recorded janus link but declares
 no features") rather than reporting a model it cannot see as healthy.
