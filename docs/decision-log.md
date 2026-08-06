@@ -16,6 +16,26 @@ Entry template:
 
 ---
 
+## D-148: Intel macOS moves to macos-15-intel, macos-13 is gone (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from the first dispatched run
+- Decision: The `macos x86_64` matrix row runs on `macos-15-intel`.
+- Options considered: (a) macos-15-intel, GitHub's remaining Intel image,
+  (b) cross-compile x86_64 from the arm64 runner with maturin `--target`,
+  (c) drop Intel macOS from the `pet` extra.
+- Why: macos-13 has been retired. The job did not fail, it queued: a runner
+  label with nothing behind it waits forever, so this reads as a slow build
+  rather than a broken one, which is why it was the last of the four to be
+  understood. (b) works but cannot run the stdio smoke, because an arm64
+  runner will not execute the x86_64 binary it just built, and losing the
+  smoke on a platform is what D-146 just finished arguing against. (c) leaves
+  `pip install "janus-datahub[pet]"` unresolvable on Intel Macs.
+- Result: One label changed. macos-15-intel is itself the last Intel image
+  GitHub offers, so the row is on borrowed time; the fallback order (b) then
+  (c) is recorded in a comment beside it rather than left to be rediscovered.
+  The other three platforms of that run: linux and macos arm64 green, windows
+  failed in "Prepare all required actions" on a 503 from GitHub's own action
+  resolution service, which is infrastructure and not this repository.
+
 ## D-147: janus-argos publishes itself, on its own tag namespace (2026-08-06)
 - Decided by: Claude (for Ghassen Naouar), with Ghassen Naouar choosing to
   publish rather than withdraw the extra
