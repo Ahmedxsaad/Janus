@@ -16,6 +16,33 @@ Entry template:
 
 ---
 
+## D-149: The Windows build needs an .ico, and make_icon.py writes it (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from the Windows job's first build
+- Decision: `argos/icons/make_icon.py` emits `icon.ico` alongside `icon.png`,
+  four sizes (32, 64, 128, 256) of uncompressed 32-bit DIB written with struct,
+  and `tauri.conf.json` lists both.
+- Options considered: (a) generate the .ico from the same sprite with the
+  standard library, (b) add Pillow and let it write the .ico, (c) commit a
+  hand-made .ico, (d) embed PNG data inside the .ico container rather than DIB.
+- Why: `tauri-build` compiles a Windows resource file into the executable and
+  refuses to continue without `icons/icon.ico`. This is a compile failure, not
+  a bundling one, so it took the whole Windows job down after the runner and
+  the infrastructure problems had been cleared. (b) breaks make_icon.py's
+  stated property of running in a clean clone with nothing installed, for one
+  file. (c) puts art in the repository that no longer traces to the sprite the
+  window and the site read, which rule 6 exists to prevent. (d) is legal in a
+  modern .ico and would have been ten lines shorter, but the consumer here is
+  whichever `rc.exe` is on the build machine, and an uncompressed DIB is what
+  every version of that reads.
+- Result: The four entries decode pixel-identical to icon.png at every size,
+  right way up, with transparency intact, checked against Pillow as an
+  independent reader. icon.png itself is byte-identical after the refactor that
+  gave both formats one scaler. A test parses the committed .ico rather than
+  trusting the writer, because struct-written binary is exactly the kind of
+  output that looks fine on disk and is unreadable to the tool that matters.
+  `cargo tauri build` on Linux was re-run with the new icon list and is
+  unaffected. Windows itself is still unverified from this machine.
+
 ## D-148: Intel macOS moves to macos-15-intel, macos-13 is gone (2026-08-06)
 - Decided by: Claude (for Ghassen Naouar), from the first dispatched run
 - Decision: The `macos x86_64` matrix row runs on `macos-15-intel`.

@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import stat
+import struct
 import sys
 import time
 from pathlib import Path
@@ -66,6 +67,33 @@ def test_every_frame_is_a_square_of_palette_characters():
         assert len(rows) == SPRITE, f"{name} has {len(rows)} rows"
         assert {len(row) for row in rows} == {SPRITE}, f"{name} has a row of the wrong width"
         assert set("".join(rows)) <= PALETTE_CHARS, f"{name} uses a colour outside the palette"
+
+
+def test_the_windows_icon_is_a_committed_ico_that_parses():
+    # tauri-build compiles a Windows resource file into the executable and
+    # fails `cargo build` outright when icons/icon.ico is missing, so this is a
+    # build dependency and not a bundling nicety. It is written by hand out of
+    # struct in make_icon.py, which is exactly the kind of code that can emit a
+    # file no resource compiler will read while still looking fine on disk.
+    ico = UI.parent / "icons" / "icon.ico"
+    assert ico.is_file(), "icons/icon.ico is missing; run argos/icons/make_icon.py"
+    blob = ico.read_bytes()
+    reserved, kind, count = struct.unpack_from("<HHH", blob, 0)
+    assert (reserved, kind) == (0, 1), "not an icon directory"
+    assert count, "no images in the icon"
+    sides = []
+    for index in range(count):
+        side, _, _, _, planes, depth, length, offset = struct.unpack_from(
+            "<BBBBHHII", blob, 6 + 16 * index
+        )
+        assert (planes, depth) == (1, 32), "entries must be 32-bit BGRA"
+        assert offset + length <= len(blob), "an entry points past the end of the file"
+        # A DIB entry stores the colour image and the 1-bit mask stacked, so
+        # its declared height is twice the icon's.
+        _, width, height = struct.unpack_from("<Iii", blob, offset)
+        assert height == width * 2, "entry is not a stacked colour-plus-mask DIB"
+        sides.append(256 if side == 0 else side)
+    assert sides == sorted(sides) and len(set(sides)) == len(sides)
 
 
 def test_no_frame_paints_red_because_red_is_state_the_renderer_applies():

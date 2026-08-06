@@ -1,13 +1,20 @@
-"""Render the application icon from the sprite file, with no image library.
+"""Render the application icons from the sprite file, with no image library.
 
-The icon has to be a PNG: every OS bundler wants one, and neither the wheel nor
-the .deb can carry a text file there. So it is generated from the same art
-everything else reads, and regenerating it after a redraw is one command:
+The icon has to be a binary image: every OS bundler wants one, and neither the
+wheel nor the .deb can carry a text file there. So both are generated from the
+same art everything else reads, and regenerating them after a redraw is one
+command:
 
     python argos/icons/make_icon.py
 
-Standard library only (zlib and struct write a PNG in about thirty lines), so
-this runs in a clean clone without installing anything.
+Two formats, because Windows will not take the PNG. `tauri-build` compiles a
+Windows resource file into the executable and fails the build outright when
+`icons/icon.ico` is absent, which is not a bundling nicety: it stops
+`cargo build` on that platform.
+
+Standard library only (zlib and struct write a PNG in about thirty lines, and
+an ICO is a header and a bottom-up DIB), so this runs in a clean clone without
+installing anything.
 """
 
 from __future__ import annotations
@@ -33,11 +40,18 @@ PALETTE: dict[str, tuple[int, int, int, int]] = {
 
 HERE = Path(__file__).resolve().parent
 SPRITES = HERE.parent / "ui" / "sprites" / "argos.txt"
-OUTPUT = HERE / "icon.png"
+PNG_OUTPUT = HERE / "icon.png"
+ICO_OUTPUT = HERE / "icon.ico"
 
 #: A multiple of the sprite's own size, so every pixel scales to an exact
 #: square and nothing is resampled. 768 is 32 x 24.
 SIZE = 768
+
+#: The sizes inside the .ico, every one an exact power-of-two multiple of the
+#: 32-row sprite, so these are scaled and never resampled either. 16 is left
+#: out deliberately: it would be the one entry that had to throw pixels away,
+#: and Windows downscales the 32 for a small slot perfectly well.
+ICO_SIZES = (32, 64, 128, 256)
 
 
 def read_frame(name: str) -> list[str]:
@@ -56,19 +70,29 @@ def read_frame(name: str) -> list[str]:
     return rows
 
 
+def scaled_rows(rows: list[str], size: int) -> list[list[tuple[int, int, int, int]]]:
+    """Return ``size`` rows of ``size`` RGBA pixels, nearest-neighbour.
+
+    ``size`` must be a whole multiple of the sprite's own row count, which is
+    what keeps every sprite pixel an exact square.
+    """
+    scale = size // len(rows)
+    out: list[list[tuple[int, int, int, int]]] = []
+    for row in rows:
+        line = [PALETTE[char] for char in row for _ in range(scale)]
+        out.extend([line] * scale)
+    return out
+
+
 def png_bytes(rows: list[str], size: int) -> bytes:
     """Encode the frame as an RGBA PNG scaled up to ``size`` pixels square."""
-    scale = size // len(rows)
     raw = bytearray()
-    for row in rows:
-        line = bytearray()
-        for char in row:
-            line.extend(bytes(PALETTE[char]) * scale)
+    for line in scaled_rows(rows, size):
         # Filter type 0 (None) per scanline: the image is tiny and flat, so
         # nothing here is worth the complexity of a real filter choice.
-        for _ in range(scale):
-            raw.append(0)
-            raw.extend(line)
+        raw.append(0)
+        for pixel in line:
+            raw.extend(pixel)
 
     def chunk(tag: bytes, payload: bytes) -> bytes:
         body = tag + payload
@@ -83,10 +107,63 @@ def png_bytes(rows: list[str], size: int) -> bytes:
     )
 
 
+def dib_bytes(rows: list[str], size: int) -> bytes:
+    """Encode one .ico entry: a BITMAPINFOHEADER, BGRA pixels, and a mask.
+
+    Uncompressed DIB rather than an embedded PNG. Both are legal in a modern
+    .ico, but the DIB is what every resource compiler back to the ones in older
+    Windows SDKs will read, and this file is consumed by whichever `rc.exe`
+    happens to be on the build machine.
+    """
+    pixels = scaled_rows(rows, size)
+    # biHeight is doubled because the DIB holds the colour image and the mask
+    # stacked; both are stored bottom-up, hence the reversed() below.
+    header = struct.pack("<IiiHHIIiiII", 40, size, size * 2, 1, 32, 0, 0, 0, 0, 0, 0)
+
+    colour = bytearray()
+    for line in reversed(pixels):
+        for red, green, blue, alpha in line:
+            colour.extend((blue, green, red, alpha))
+
+    # The 1-bit AND mask predates the alpha channel and is redundant with it,
+    # but leaving it blank makes the transparent border opaque black wherever
+    # something ignores alpha, so it is filled from alpha anyway. A set bit
+    # means transparent. Rows are padded to a 4-byte boundary.
+    stride = ((size + 31) // 32) * 4
+    mask = bytearray()
+    for line in reversed(pixels):
+        bits = bytearray(stride)
+        for x, pixel in enumerate(line):
+            if pixel[3] == 0:
+                bits[x // 8] |= 0x80 >> (x % 8)
+        mask.extend(bits)
+
+    return header + bytes(colour) + bytes(mask)
+
+
+def ico_bytes(rows: list[str], sizes: tuple[int, ...]) -> bytes:
+    """Encode the frame as a multi-resolution Windows .ico."""
+    images = [dib_bytes(rows, size) for size in sizes]
+    directory = struct.pack("<HHH", 0, 1, len(images))
+    offset = len(directory) + 16 * len(images)
+    entries = bytearray()
+    for size, image in zip(sizes, images):
+        # 256 is written as 0: the width and height fields are single bytes.
+        side = 0 if size >= 256 else size
+        entries.extend(
+            struct.pack("<BBBBHHII", side, side, 0, 0, 1, 32, len(image), offset)
+        )
+        offset += len(image)
+    return directory + bytes(entries) + b"".join(images)
+
+
 def main() -> int:
-    """Write icon.png next to this script. Returns a process exit code."""
-    OUTPUT.write_bytes(png_bytes(read_frame("idle_a"), SIZE))
-    print(f"wrote {OUTPUT} ({OUTPUT.stat().st_size} bytes)")
+    """Write icon.png and icon.ico next to this script. Returns an exit code."""
+    frame = read_frame("idle_a")
+    PNG_OUTPUT.write_bytes(png_bytes(frame, SIZE))
+    ICO_OUTPUT.write_bytes(ico_bytes(frame, ICO_SIZES))
+    for path in (PNG_OUTPUT, ICO_OUTPUT):
+        print(f"wrote {path} ({path.stat().st_size} bytes)")
     return 0
 
 
