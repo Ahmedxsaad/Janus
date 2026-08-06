@@ -16,6 +16,117 @@ Entry template:
 
 ---
 
+## D-154: A classification URN that cannot match anything is refused (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: The four classification variables are read through a new
+  `env.optional_urn_list(name, urn_type)`, which parses every entry with the
+  SDK's own URN class and raises `ConfigError` naming the variable and the entry.
+  `optional_list` is unchanged and still serves `JANUS_LABEL_COLUMN_NAMES`, which
+  takes column names rather than URNs.
+- Options considered: (a) validate the `urn:li:` prefix only; (b) parse with the
+  specific SDK URN class, rejecting a wrong entity type too; (c) check each URN
+  exists in the catalog; (d) leave it, since an unmatched URN is the user's error.
+- Why: `JANUS_SENSITIVE_TERM_URNS=not-a-urn` was accepted in silence, and took a
+  live catalog's guard coverage from 33% to 93% with sensitive source and proxy
+  candidate both reporting 100%. Neither can ever fire: no column carries a term
+  whose URN is `not-a-urn`. So the two detectors ran, compared against nothing,
+  and reported clean, while the headline figure said the estate was guarded. That
+  is the silent pass this project exists to catch, reproduced inside its own
+  configuration, and root CLAUDE.md rule 6a already says a value like this fails
+  loudly naming the variable. (b) over (a) because a tag URN in the term variable
+  is the likelier typo of the two and is equally dead. (c) was rejected: it turns
+  reading configuration into a graph call, and a term legitimately declared after
+  Janus was configured would fail on startup.
+- Result: All three cases (a non-URN, a name like `PII`, a tag URN where a term
+  belongs) now fail loudly and name the variable; a correct term URN is unchanged.
+  Four tests in `tests/test_env.py`.
+
+## D-153: TableResolutionError joins the supported public surface (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: `janus.__init__` re-exports `TableResolutionError` and lists it in
+  `__all__`, alongside `LinkError`.
+- Options considered: (a) leave it in `janus.cli`; (b) re-export it from the
+  package root; (c) move the class into api.py and have cli.py import it back.
+- Why: Running the README's own training-script snippet against a real catalog
+  raised `janus.cli.TableResolutionError` on the first call, because
+  `analytics.customer_features` exists on both dbt and postgres, which is the
+  ordinary state of a warehouse relation and not an edge case. A script that
+  wants to catch it had to import the command line to name it, in a package whose
+  documented surface is "two functions and their result types". `LinkError` was
+  already exported and this is the sibling a caller meets sooner. (c) is the
+  tidier home and was not taken now: api.py already imports resolve_table from
+  cli.py, so the move is a wider refactor than the defect justifies.
+- Result: `from janus import TableResolutionError` works. `tests/test_api.py`
+  pins it in the surface set the other tests already guard.
+
+## D-152: How many checks a model buys is counted, not typed (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: `_print_clean` derives a model's check count from
+  `detect.coverage.MODEL_CHECKS` instead of the literal `2`.
+- Options considered: (a) update the literal to 5; (b) count from MODEL_CHECKS.
+- Why: The literal was correct when target leakage and schema drift were the only
+  model detectors, and stayed 2 after sensitive source, deprecated input and
+  proxy candidate landed. A scan of a model whose only two gaps were the
+  unconfigured classification checks computed `ran = 2 - 2 = 0` and printed
+  "Nothing was evaluated. No check had the metadata it needs." over a leakage
+  check and a drift check that had both just run clean. Found by linking a real
+  unlinked model and rescanning it, which is the exact sequence the tool tells a
+  new user to follow: the reply to doing the recommended thing was that it had
+  changed nothing. (a) was rejected because it would go stale on the next
+  detector; MODEL_CHECKS already has a test pinning it to what a bare model
+  produces, which is the property that makes counting from it safe.
+- Result: The same scan now reads "No finding from the 3 of 5 checks that ran".
+  Two tests in `tests/test_cli.py` cover it, including that a model with every
+  check gapped still gets the honest "Nothing was evaluated".
+
+## D-151: Text nobody here wrote is escaped before rich prints it (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: Every site interpolating an exception into a rich markup string wraps
+  it in `rich.markup.escape` (26 sites across cli.py and the two seed entry
+  points).
+- Options considered: (a) escape at each call site; (b) print these messages with
+  `markup=False`, losing the red; (c) route them through one helper.
+- Why: `janus link --from feast` without the extra installed printed
+  `pip install "janus-datahub"`. The string in adapters/feast.py is correct and
+  says `"janus-datahub[feast]"`; rich parsed `[feast]` as a style tag and dropped
+  it, so the one actionable token in the message was the one token removed, and
+  the advice became the command the user had already run. The same silent
+  deletion applied to `[kafka]` and `[pet]`, and to any exception text from
+  someone else's SDK that happens to contain brackets. (c) was rejected as an
+  indirection over a one-call fix: `escape(...)` at the site is greppable and
+  says what it does, and a helper would hide which text is untrusted.
+- Result: Extras advice survives to the terminal. `tests/test_cli.py` pins it by
+  asserting the bracketed install target is still in the captured output.
+
+## D-150: A confirmation prompt must show the command it will run (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: `link` folds the flags the user typed into an inferred proposal
+  before printing it, in `_with_typed_flags`. Two smaller fixes ship with it:
+  `client.py` suppresses the SDK's `IngestionAttributionWarning`, and the
+  missing-`DATAHUB_GMS_URL` message stops assuming the reader has a clone.
+- Options considered: (a) leave the display alone, since the write path already
+  honoured the typed flags; (b) refuse `--infer` together with `--label-column`,
+  as `--infer` and `--from` already refuse each other; (c) merge the typed flags
+  into the proposal before it is printed.
+- Why: `janus link --model M --infer --label-column churned` printed a proposal
+  whose reasons still read "label column: NOT FOUND ... has to be supplied with
+  --label-column", rendered a command with no `--label-column` in it, and then
+  asked "Declare this? [Y/n]". The link written was the right one, so this was
+  never a data defect, but the user was confirming a command that was not the
+  command. `_print_proposal`'s own docstring says a proposal accepted without
+  reading the reasoning is a guess with a confirmation prompt stapled to it, and
+  printing stale reasoning is the same failure one level down. (b) was rejected
+  because combining them is the documented recovery: the tool tells the user to
+  rerun with `--label-column` when nothing in the graph names a label.
+  The warning suppression is the same class of defect: every write is idempotent
+  read-before-write (root rule 5) and rerunning is documented, so the SDK warned,
+  with a site-packages path, on every entity a second run correctly left alone,
+  under a line promising nothing would duplicate.
+- Result: The printed reasons and command now match what runs, with one line per
+  override naming the flag it came from. Verified against a live Quickstart from
+  a wheel installed into a clean venv on Python 3.12. 962 unit tests still pass;
+  `tests/test_cli_link.py` gains coverage of the merge.
+
 ## D-149: The Windows build needs an .ico, and make_icon.py writes it (2026-08-06)
 - Decided by: Claude (for Ghassen Naouar), from the Windows job's first build
 - Decision: `argos/icons/make_icon.py` emits `icon.ico` alongside `icon.png`,
