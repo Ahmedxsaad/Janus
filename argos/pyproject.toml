@@ -38,7 +38,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Ahmedxsaad/DataHub"
+Homepage = "https://github.com/Ahmedxsaad/janus"
 
 [tool.maturin]
 # A plain binary, no Python extension module: the wheel's only job is to put an

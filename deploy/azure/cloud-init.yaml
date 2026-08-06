@@ -49,7 +49,7 @@ runcmd:
   - [ufw, allow, "9002/tcp"]
   - [ufw, --force, enable]
 
-  # A 4GB swap file, because this image ships with none and the whole DataHub
+  # An 8GB swap file, because this image ships with none and the whole DataHub
   # stack plus janus-watch runs tight on 8GB. Observed for real: OpenSearch
   # died 13 times with "unable to create native thread", which is *not* a thread
   # or PID limit (1150 threads against a 62881 host max, 9432 allowed in its own
@@ -59,13 +59,19 @@ runcmd:
   # outage; swap is what stops it happening (D-071). Costs nothing: the disk has
   # over 40GB free.
   #
+  # Started at 4G; doubled to 8G (D-143) as a margin for the judging window's
+  # sustained concurrent access, ahead of any actual second crash: available
+  # memory was still comfortable (3Gi) and swap barely touched (57Mi of 4G)
+  # when this was raised, so the doubling is precautionary rather than a fix
+  # for an observed shortfall this time.
+  #
   # Guarded so a re-run cannot corrupt a live swapfile or append a duplicate
   # fstab line: cloud-init runcmd is once-per-instance, but this file also gets
   # pasted into a rebuilt VM, and the manual runbook says to re-apply it.
   - >-
     bash -c
     "swapon --show | grep -q . ||
-    { fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile &&
+    { fallocate -l 8G /swapfile && chmod 600 /swapfile && mkswap /swapfile &&
     swapon /swapfile; }"
   - >-
     bash -c
@@ -92,7 +98,7 @@ runcmd:
   - chown azureuser:azureuser /opt/janus
   - >-
     sudo -u azureuser git clone --depth 1
-    https://__GITHUB_CLONE_TOKEN__@github.com/Ahmedxsaad/DataHub.git
+    https://__GITHUB_CLONE_TOKEN__@github.com/Ahmedxsaad/janus.git
     /opt/janus/DataHub
 
   # The .env write used to live in write_files, which cloud-init runs in an

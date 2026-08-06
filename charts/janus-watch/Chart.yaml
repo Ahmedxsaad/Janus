@@ -9,9 +9,9 @@ description: >-
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
-home: https://github.com/Ahmedxsaad/DataHub
+home: https://github.com/Ahmedxsaad/janus
 sources:
-  - https://github.com/Ahmedxsaad/DataHub
+  - https://github.com/Ahmedxsaad/janus
 keywords:
   - datahub
   - mlops
@@ -19,4 +19,4 @@ keywords:
   - data-quality
 maintainers:
   - name: Janus Contributors
-    url: https://github.com/Ahmedxsaad/DataHub
+    url: https://github.com/Ahmedxsaad/janus

@@ -16,6 +16,160 @@ Entry template:
 
 ---
 
+## D-144: The GitHub repository is renamed to janus (2026-08-06)
+- Decided by: Ahmed Saad (name); executed by Ahmed Saad via the GitHub UI
+  (`Ahmedxsaad/DataHub` -> `Ahmedxsaad/Janus`, case-insensitive in GitHub's
+  own routing; every reference in this repo uses lowercase `janus`, matching
+  the PyPI distribution and CLI name).
+- Options considered, name: `janus`, `janus-datahub`, or defer. Checked
+  availability first (`gh api repos/Ahmedxsaad/<name>`, all three free, since
+  GitHub repo names are scoped per-owner and do not compete with PyPI's global
+  namespace the way `modelguard`/`janus` bare did there).
+- Why now rather than deferred again (P1-1 had been open since D-076): almost
+  nothing breaks that GitHub's redirect does not already cover for git and
+  API operations (checked live: `gh repo view Ahmedxsaad/DataHub` resolved
+  through to the new name without error). The one thing that does not
+  redirect, PyPI Trusted Publishing's repository-name match, was going to
+  need a fresh pending publisher regardless (D-142 found the existing status
+  claim for one was itself a rename casualty), so renaming first means
+  setting that up once with the right name instead of twice.
+- Result: local sandbox and the live VM's git remotes updated
+  (`git remote set-url origin https://github.com/Ahmedxsaad/janus.git`),
+  confirmed fetching. Every hardcoded `Ahmedxsaad/DataHub` reference this
+  repo's own `git grep` could find (61 occurrences across README.md,
+  `site/index.html`, `pyproject.toml`, `charts/janus-watch/`, both skill
+  docs, `cloud-init.yaml`, `argos/Cargo.toml`, `argos/pyproject.toml`, one
+  workflow comment) is now `Ahmedxsaad/janus`, including the two places that
+  needed the *derived* GHCR path fixed rather than the literal string
+  (`README.md` and `charts/janus-watch/README.md`'s `--set
+  image.repository=` examples: `publish-image.yml` computes this from
+  `github.repository` at build time, so it will actually push to
+  `ghcr.io/ahmedxsaad/janus/janus` on the next tag, not the
+  `.../datahub/janus` the examples showed). `docs/deploy/pypi-release.md`'s
+  P1-1 checklist item closes here. The repository is still private; that is
+  a separate, not-yet-actioned item.
+
+---
+
+## D-143: The live VM migrated to Janus, and swap doubled ahead of judging (2026-08-06)
+- Decided by: Claude (for Ahmed Saad), executed directly over SSH with the
+  user's Cloudflare DNS change already in place and a GitHub token supplied
+  for the pull (the repo is currently private; see the note below).
+- Decision: The demo VM (`20.199.72.198`, started by the user for this work)
+  was brought fully onto Janus and given a larger swap margin:
+  1. `modelguard-watch.service` stopped and disabled; its container was
+     already gone (the unit's own `ExecStop` had handled that on the earlier
+     `systemctl stop`).
+  2. The repo moved from `/opt/modelguard/DataHub` to `/opt/janus/DataHub`,
+     matching `cloud-init.yaml`'s own path rather than editing the path back
+     out of the tracked `janus-watch.service` unit. Checked first: nothing
+     else on the VM referenced the old path.
+  3. `git fetch`/`checkout main`/`reset --hard origin/main`, 183 commits, from
+     a branch (`feat/real-project-usability`) confirmed merged into `main`
+     first (`git merge-base --is-ancestor`), so nothing local was discarded.
+  4. `docker compose build janus` against the current `Dockerfile`, using its
+     default `JANUS_EXTRAS=agent,mcp`, same as before.
+  5. `janus-watch.service` (the tracked unit) installed, `daemon-reload`,
+     `enable --now`. Confirmed running, not crash-looping: a real scan logged
+     `dry_run=false findings=1 writes=1`, and the incident write said `reused
+     (already open)`, not a fresh one, which is the idempotency claim actually
+     holding under a real rerun rather than assumed.
+  6. `/etc/caddy/Caddyfile` repointed at `janus.ahmedxsaad.me` (the user had
+     already added the Cloudflare A record) and `caddy reload`d. Confirmed via
+     the Caddy log (`certificate obtained successfully`) and externally
+     (`HTTP/2 200`, real `<title>DataHub</title>` in the response).
+  7. Swap doubled, 4G to 8G (`swapoff`/`fallocate`/`mkswap`/`swapon`, live, no
+     downtime), and `cloud-init.yaml` updated to match so a fresh provision
+     starts at 8G too. Requested proactively (D-065/D-071's OpenSearch OOM
+     history), not in response to a repeat: `free -h` showed 3Gi available and
+     57Mi of the old 4G swap in use at the time, so this is margin for
+     concurrent access during the judging window, not a fix for an observed
+     shortfall this time.
+- Options considered, swap size: (a) leave it at 4G, since nothing was
+  currently under pressure; (b) double it to 8G; (c) resize the VM to a
+  larger SKU instead. (b) over (a) because the ask was explicitly
+  precautionary and the cost is free (31G disk still free after the image
+  rebuild); over (c) because a SKU change means downtime and a budget
+  conversation neither of which this warranted for a problem that has not
+  recurred since D-071's fix.
+- A live finding, unrelated to the plan but blocking either way: `gh repo
+  view` shows the repository is **private**. The hackathon's submission
+  requirements need it public with the Apache 2.0 license visible in the
+  About section; a private repo fails that regardless of anything in this
+  entry. Left unchanged here because making a repository public is a
+  one-way, visible action this session did not have standing to take
+  unprompted; flagged directly to the user instead.
+- Result: `https://janus.ahmedxsaad.me` is the live, correct demo URL, TLS
+  included. `https://modelguard.ahmedxsaad.me`'s DNS record and the VM's
+  public IP are untouched; Caddy simply has no site block for it anymore, so
+  it stops answering rather than serving anything stale, and nothing in this
+  repo depended on it once `janus` resolved. `docs/deploy/azure-vm.md`'s two
+  D-142 "pending" callouts are updated in place to say what actually happened
+  rather than left to rot the way the paragraphs D-142 itself was about
+  already had once. The one item still open from that entry, the `az`
+  resource-group/NSG names, stays open: this round of work never touched NSG
+  rules (80/443 were already allowed from the original setup), so it
+  confirms nothing about whether those literal values match the real Azure
+  resource names.
+
+---
+
+## D-142: The Janus rename left the live domain and two historical claims behind (2026-08-06)
+- Decided by: Claude (for Ahmed Saad).
+- Decision: An audit prompted by "modelguard was renamed, check everywhere,
+  including Cloudflare and Azure" found the in-repo rename (D-136) is
+  complete: `git grep -i modelguard` over tracked files returns zero hits, and
+  the PyPI distribution name (`janus-datahub`), GHCR image path (then
+  `ghcr.io/ahmedxsaad/datahub/janus`; see D-144, this repository's own name
+  changed hours later), and Helm chart (`charts/janus-watch`) are all
+  consistent. What D-136 did not and could not reach is the two things
+  outside the repository:
+  1. **Cloudflare DNS was never repointed.** Checked directly: `dig
+     janus.ahmedxsaad.me` returns `NXDOMAIN`; `dig modelguard.ahmedxsaad.me`
+     still resolves. README's live-demo link, changed to
+     `https://janus.ahmedxsaad.me` by D-136, points at a domain that does not
+     exist. This is the highest-priority open item from this audit: as filed,
+     the submission's live-demo link is broken.
+  2. **D-136's find-and-replace ran over dated, historical "verified live"
+     claims**, not only present-tense prose. D-064 and the two "Verified live"
+     lines in `docs/deploy/azure-vm.md` recorded, factually, what was tested
+     on 2026-07-29/30, under the domain that existed that day
+     (`modelguard.ahmedxsaad.me`; `janus` was not chosen until D-135/D-136 on
+     2026-08-05). The rename rewrote those records to name a domain that had
+     never been tested, which both docs/CLAUDE.md's "never let the plan
+     silently rot" rule and this log's own "Running log" framing argue against
+     doing to a past entry: a decision log is a record of what happened, and
+     D-064 as D-136 left it no longer was one.
+- Options considered: (a) leave the corrupted claims as D-136 left them and
+  note the gap only here; (b) revert the domain in the historical entries to
+  what was actually verified, and say so; (c) additionally chase down and fix
+  the live DNS and Azure state directly.
+- Why (b): a decision log entry that quietly stopped being true is worse than
+  one that was always wrong, because nothing about reading it signals the
+  drift. Restoring the historical domain name in D-064 and in
+  `docs/deploy/azure-vm.md`'s two claims, each with a pointer to this entry,
+  keeps every dated claim in this file meaning what it said the day it was
+  written. (c) is not this session's to do: Cloudflare and the Azure VM are
+  account-bound, the same distinction D-041 draws for the OSS PR forks, and no
+  `az`/`wrangler` credential is available in this environment to act on them
+  even if it were.
+- Result: `docs/deploy/azure-vm.md` gains a pending-migration callout in the
+  custom-domain section with the exact three steps left (Cloudflare A record
+  for `janus`, edit `/etc/caddy/Caddyfile` on the VM and reload, then confirm
+  before trusting README's link) and a warning that the `RG=janus-demo` /
+  `--nsg-name janus-demo-nsg` values in the provisioning walkthrough were
+  renamed in the doc alongside the code and have not been confirmed against
+  whatever the already-provisioned resource group is actually named on Azure;
+  `az group list` first. Also checked and found clean: no container image was
+  ever published under the old name (the publish workflow, like PyPI's, has
+  never fired, gated on a version tag that has not been cut), and the
+  GitHub repository's own description/topics carry no product name to have
+  gone stale. Local build artifacts (`.venv`, `argos/target/`, a stray
+  `__pycache__`-only `modelguard/` directory left behind by `git mv` not
+  touching untracked files) were cleaned; none were tracked or shipped.
+
+---
+
 ## D-141: The page explains mechanisms with diagrams, not paragraphs (2026-08-06)
 - Decided by: Ghassen Naouar.
 - Decision: Five diagrams land beside the one the page already had, each
@@ -3228,23 +3382,24 @@ Entry template:
 ## D-064: Custom domain and HTTPS via Caddy, added after the demo verified live (2026-07-29)
 - Decided by: Ahmed Saad (wanted the URL to not be a raw IP)
 - Decision: Reverse-proxy the DataHub frontend behind Caddy on
-  `https://janus.ahmedxsaad.me`, with Caddy handling automatic Let's
-  Encrypt certificate issuance and renewal. Documented as a new, optional,
-  manual post-provision section in `docs/deploy/azure-vm.md`; not folded into
-  `cloud-init.yaml` since the domain does not exist at provisioning time.
-  Also fixed the frontend password-change instructions in the same guide:
-  the in-app "Reset password" flow does not work on a bare Quickstart at
-  all (confirmed live, `Failed to generate password reset token for user`),
-  because it needs `DATAHUB_TOKEN_SERVICE_SIGNING_KEY`, which Quickstart
-  never sets. The real credential is a flat `user.props` file baked into the
-  frontend container, edited directly and the container restarted to reload
-  it.
+  `https://modelguard.ahmedxsaad.me` (the product's name at the time; see
+  D-142, the domain was not migrated when the product was renamed to Janus),
+  with Caddy handling automatic Let's Encrypt certificate issuance and
+  renewal. Documented as a new, optional, manual post-provision section in
+  `docs/deploy/azure-vm.md`; not folded into `cloud-init.yaml` since the
+  domain does not exist at provisioning time. Also fixed the frontend
+  password-change instructions in the same guide: the in-app "Reset password"
+  flow does not work on a bare Quickstart at all (confirmed live, `Failed to
+  generate password reset token for user`), because it needs
+  `DATAHUB_TOKEN_SERVICE_SIGNING_KEY`, which Quickstart never sets. The real
+  credential is a flat `user.props` file baked into the frontend container,
+  edited directly and the container restarted to reload it.
 - Options considered: (a) Azure's own DNS name label on the public IP (still
   not the user's domain), (b) nginx + certbot, (c) Caddy.
 - Why Caddy over nginx+certbot: one binary, one config block, automatic
   certificate acquisition and renewal built in, no separate certbot
   cron/timer to maintain. Verified live: `tls-alpn-01` challenge succeeded
-  and `https://janus.ahmedxsaad.me` returned `HTTP/2 200` with a real
+  and `https://modelguard.ahmedxsaad.me` returned `HTTP/2 200` with a real
   issued certificate within seconds of DNS, the two new NSG rules, and Caddy
   all being in place together.
 - Why DNS had to be "DNS only" not proxied: Cloudflare's proxy (orange

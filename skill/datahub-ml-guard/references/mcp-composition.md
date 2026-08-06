@@ -105,7 +105,7 @@ unattended by design and says so.
 
 There is one intentional gap on the other server, and Janus's OSS
 contribution aims at it: `mcp-server-datahub` has no tool for writing an
-incident. [`mcp_ext/raise_incident_tool.py`](https://github.com/Ahmedxsaad/DataHub/blob/main/mcp_ext/raise_incident_tool.py)
+incident. [`mcp_ext/raise_incident_tool.py`](https://github.com/Ahmedxsaad/janus/blob/main/mcp_ext/raise_incident_tool.py)
 is a thin, parameterised `raise_incident` for it, and
-[`mcp_ext/RFC-ml-incidents.md`](https://github.com/Ahmedxsaad/DataHub/blob/main/mcp_ext/RFC-ml-incidents.md)
+[`mcp_ext/RFC-ml-incidents.md`](https://github.com/Ahmedxsaad/janus/blob/main/mcp_ext/RFC-ml-incidents.md)
 argues for first-class ML incidents underneath it.

@@ -379,7 +379,7 @@ on the criterion judges see first, and it is no longer free:
 - The PyPI Trusted Publisher is registered against `Repository name: DataHub`.
   It must be edited on PyPI in the same sitting, or the first release fails
   OIDC verification.
-- `action.yml` consumers (`uses: Ahmedxsaad/DataHub@main`) survive on GitHub's
+- `action.yml` consumers (`uses: Ahmedxsaad/janus@main`) survive on GitHub's
   redirect, but the README example should be updated in the same commit.
 - The Helm chart's default image repository and `publish-image.yml`'s GHCR path
   both contain the repo name.

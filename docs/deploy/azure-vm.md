@@ -12,10 +12,27 @@ Judging Period ends" (`docs/hackathon-specs/03-submission-requirements.md`).
 provisioning, seeding, the watch service finding real incidents, the NSG and
 `ufw` layers, the frontend password change and an actual login, a real GMS
 search query returning real data, and a custom domain over HTTPS
-(`https://janus.ahmedxsaad.me`) all confirmed working end to end, each
-checked directly over SSH rather than assumed from the UI loading. Two real
-bugs were found and fixed this way that no amount of syntax-checking would
-have caught:
+(`https://modelguard.ahmedxsaad.me`, the product's domain at the time) all
+confirmed working end to end, each checked directly over SSH rather than
+assumed from the UI loading. The paragraph above is left describing what was
+actually verified that day rather than rewritten to name a domain that had
+not been chosen yet.
+
+**The migration to Janus is done** (D-143, 2026-08-06): the domain was not
+repointed when the product was renamed (D-142 records the gap this left, and
+should be read alongside this entry), and is now. On the live VM: the repo
+moved from `/opt/modelguard/DataHub` to `/opt/janus/DataHub` to match
+`cloud-init.yaml`'s own path, `janus:local` was rebuilt from the current
+`Dockerfile`, `modelguard-watch.service` was replaced with
+`janus-watch.service` and confirmed writing real, idempotent findings
+(`incident reused (already open)`, not a fresh duplicate), and
+`/etc/caddy/Caddyfile` was repointed at `janus.ahmedxsaad.me` and reloaded:
+`certificate obtained successfully` in the Caddy log, `HTTP/2 200` externally,
+real DataHub HTML in the response, all checked directly rather than assumed.
+`modelguard.ahmedxsaad.me`'s DNS record and the VM's public IP are unchanged;
+Caddy simply no longer has a site block for it, so it stops answering rather
+than serving anything stale. Two real bugs were found and fixed this way that
+no amount of syntax-checking would have caught:
 
 - D-063: `write_files` racing `azureuser`'s own creation, cascading into a
   failed `git clone`.
@@ -286,10 +303,33 @@ locally.
 
 ## Add a custom domain and HTTPS (optional)
 
-Verified live: `https://janus.ahmedxsaad.me`, real Let's Encrypt
-certificate, no port in the URL. Not part of `cloud-init.yaml` since it needs
-a domain name that does not exist at provisioning time; done manually, once,
-after the bare-IP demo already works.
+Verified live, 2026-07-29: `https://modelguard.ahmedxsaad.me`, real Let's
+Encrypt certificate, no port in the URL. Not part of `cloud-init.yaml` since it
+needs a domain name that does not exist at provisioning time; done manually,
+once, after the bare-IP demo already works.
+
+**Migrated to the `janus` domain** (D-143, 2026-08-06): the product was
+renamed after this was verified (D-142 records the gap that briefly left),
+and the domain has since been repointed. What that took, on the *existing*
+VM rather than a fresh provision: a Cloudflare A record for `janus` (DNS
+only, not proxied), same IP the `modelguard` record already carried; then
+`/etc/caddy/Caddyfile` edited to the new hostname and `sudo systemctl reload
+caddy`. Nothing else, because `ufw status` on the live VM already showed
+80/tcp and 443/tcp open from the original setup below, so no NSG or firewall
+step was needed a second time. Confirmed both from the Caddy log
+(`certificate obtained successfully`, `identifier: janus.ahmedxsaad.me`) and
+externally (`HTTP/2 200`, real DataHub HTML, checked from outside the VM).
+`modelguard.ahmedxsaad.me`'s DNS record and the VM's IP were left as they
+were; Caddy has no site block for it anymore, so it stops answering rather
+than serving anything stale.
+
+The rest of this section documents the original setup steps, which remain
+correct for a fresh provision. The `RG=janus-demo` / `--nsg-name
+janus-demo-nsg` values below are what a *new* provision should use; they were
+renamed in this doc alongside the code and were **not** confirmed against the
+actually-provisioned resource group and NSG names on Azure, because this
+round of work never needed to touch NSG rules at all (see above). Check
+`az group list` / `az network nsg list` first if a future change does.
 
 1. **DNS**: an A record for the chosen (sub)domain pointing at the VM's
    public IP, **DNS-only, not proxied** (Cloudflare's orange-cloud proxying
@@ -311,6 +351,9 @@ after the bare-IP demo already works.
      --source-address-prefixes "*" --destination-port-ranges 443 \
      --access Allow --protocol Tcp
    ```
+
+   Substitute the resource group and NSG name actually in use if this is the
+   existing VM rather than a fresh provision (see the callout above).
 
    No exception to the GMS rule: 8080 still gets no rule, at any layer.
 3. **Install Caddy and point it at the frontend.** Caddy requests and renews

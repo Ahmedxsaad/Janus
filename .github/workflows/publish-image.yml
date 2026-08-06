@@ -37,7 +37,7 @@ jobs:
       - name: Compute the image name
         id: image
         # GHCR requires a lowercase path; github.repository preserves the
-        # repo's actual case (Ahmedxsaad/DataHub), so it is lowercased here
+        # repo's actual case (Ahmedxsaad/janus), so it is lowercased here
         # rather than assumed. /janus is appended so the package sits
         # under this repo's own GHCR namespace as a named sub-image, not as
         # the repo-level package (which docker-compose.yml and charts'

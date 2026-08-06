@@ -70,12 +70,12 @@ Checked mechanically on 2026-08-02 against the built wheel, except where noted.
       enforces it (`tests/test_api.py`), because a wheel whose two versions
       disagree is one nobody can report a bug against: the user reads one, the
       resolver reads the other.
-- [ ] **Decide the repository rename** (P1-1), and if it goes ahead, edit the
-      PyPI pending publisher *first*. The publisher matches on
-      `Repository name: DataHub`, and GitHub's redirect does not help, because
-      the OIDC claim carries the new name. Renaming after publishing is strictly
-      worse than before, so this is a decision that has to be made now rather
-      than deferred again (D-076).
+- [x] **Repository rename decided and done** (P1-1, D-144): `Ahmedxsaad/DataHub`
+      is now `Ahmedxsaad/janus`. No pending publisher existed yet to edit (the
+      one referenced by the 2026-08-01 status line further up was itself a
+      casualty of the product rename, D-142), so create it fresh, once, with
+      `Repository name: janus` matching what the OIDC claim will actually
+      carry. Do this before cutting the first release, not after.
 
 The install check above must be done in a **throwaway** virtualenv, never the
 development one: installing the published package over an editable install of

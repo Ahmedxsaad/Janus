@@ -13,7 +13,7 @@ is the only one with a chart.
 
 ```bash
 helm install my-watch . \
-  --set image.repository=ghcr.io/ahmedxsaad/datahub/janus \
+  --set image.repository=ghcr.io/ahmedxsaad/janus/janus \
   --set image.tag=0.1.0 \
   --set datahub.gmsUrl=http://datahub-gms.datahub.svc.cluster.local:8080 \
   --set watch.table=loans_raw \
