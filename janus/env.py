@@ -36,8 +36,15 @@ control: text that came back from somebody else's SDK.
 from __future__ import annotations
 
 import os
+from typing import TypeVar
 
+from datahub.metadata.urns import Urn
+from datahub.utilities.urns.error import InvalidUrnError
 from dotenv import find_dotenv, load_dotenv
+
+#: Any SDK URN class. The helpers below only ever call ``from_string`` and read
+#: ``ENTITY_TYPE`` on it, both of which every subclass carries.
+_UrnT = TypeVar("_UrnT", bound=Urn)
 
 #: Set once ``.env`` has been loaded, so repeated reads do not re-parse the file
 #: and, more importantly, so load order can never change what a caller sees.
@@ -121,6 +128,58 @@ def optional_list(name: str) -> tuple[str, ...]:
     if raw is None:
         return ()
     return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
+def optional_urn_list(name: str, urn_type: type[_UrnT]) -> tuple[str, ...]:
+    """Return a comma-separated list of URNs of one type, or empty when unset.
+
+    The same parsing as :func:`optional_list`, plus the check that every entry is
+    actually a URN of the expected kind.
+
+    That check is not pedantry, it is the difference between a configured check
+    and a check that cannot fire. These variables switch on the classification
+    detectors by naming the glossary terms or tags an organization already marks
+    columns with. A value that is not a URN at all (``PII`` rather than
+    ``urn:li:glossaryTerm:PII``, the obvious thing to type) matches no column in
+    any catalog, so the detector runs, compares against nothing, and reports
+    clean forever. Worse, coverage counts it as configured: a catalog went from
+    33% to 93% guarded by setting one variable to the string ``not-a-urn``,
+    which is exactly the silent pass this project exists to catch (D-154).
+
+    A URN of the wrong entity type is rejected for the same reason and is the
+    likelier typo of the two, since the term and tag variables sit next to each
+    other in ``.env.example``.
+
+    Args:
+        name: The environment variable.
+        urn_type: The SDK URN class every entry must parse as.
+
+    Returns:
+        The entries, in the order they were written, unparsed. Callers compare
+        these as strings against what the graph holds, so what is stored stays
+        the user's own text.
+
+    Raises:
+        ConfigError: An entry is not a URN, or is a URN of another type. The
+            message quotes the offending entry: these are public identifiers,
+            never credentials (root CLAUDE.md rule 6d).
+    """
+    # ENTITY_TYPE is declared on the concrete URN classes, not on the Urn base
+    # the TypeVar is bound to, so it is read defensively rather than typed.
+    kind = getattr(urn_type, "ENTITY_TYPE", urn_type.__name__)
+    values = optional_list(name)
+    for value in values:
+        try:
+            urn_type.from_string(value)
+        except InvalidUrnError as exc:
+            raise ConfigError(
+                # rstrip: the SDK's own message ends in a period, and two in a
+                # row in the middle of a sentence reads like a typo.
+                f"{name}={value!r} is not a {kind} URN: {str(exc).rstrip('.')}. A value that is "
+                "not one matches no column, so the check would run against "
+                "nothing and report clean."
+            ) from exc
+    return values
 
 
 def optional_float(name: str, default: float) -> float:

@@ -22,11 +22,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from datahub.metadata.urns import GlossaryTermUrn, TagUrn
+
 from janus.env import (
     ConfigError,
     optional_float,
     optional_int,
     optional_list,
+    optional_urn_list,
     optional_value,
 )
 
@@ -340,10 +343,18 @@ class ScanConfig:
             # A guessed classification URN is either dead config or a false
             # compliance incident, so unset stays unset and the detector reports
             # itself as not evaluated.
-            sensitive_term_urns=optional_list(ENV_SENSITIVE_TERM_URNS),
-            sensitive_tag_urns=optional_list(ENV_SENSITIVE_TAG_URNS),
-            protected_attribute_term_urns=optional_list(ENV_PROTECTED_ATTRIBUTE_TERM_URNS),
-            protected_attribute_tag_urns=optional_list(ENV_PROTECTED_ATTRIBUTE_TAG_URNS),
+            # Read through optional_urn_list, not optional_list: a value that is
+            # not a URN of the right type switches the detector on and matches
+            # nothing, which reads as a clean catalog rather than as a typo
+            # (D-154).
+            sensitive_term_urns=optional_urn_list(ENV_SENSITIVE_TERM_URNS, GlossaryTermUrn),
+            sensitive_tag_urns=optional_urn_list(ENV_SENSITIVE_TAG_URNS, TagUrn),
+            protected_attribute_term_urns=optional_urn_list(
+                ENV_PROTECTED_ATTRIBUTE_TERM_URNS, GlossaryTermUrn
+            ),
+            protected_attribute_tag_urns=optional_urn_list(
+                ENV_PROTECTED_ATTRIBUTE_TAG_URNS, TagUrn
+            ),
             proxy_max_hops=optional_int(ENV_PROXY_MAX_HOPS, defaults.proxy_max_hops),
             label_column_names=optional_list(ENV_LABEL_COLUMN_NAMES) or defaults.label_column_names,
             companion_entity_cap=optional_int(
