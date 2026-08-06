@@ -47,7 +47,7 @@
   "bundle": {
     "active": true,
     "targets": ["deb", "appimage", "dmg", "msi"],
-    "icon": ["icons/icon.png"],
+    "icon": ["icons/icon.png", "icons/icon.ico"],
     "category": "DeveloperTool",
     "shortDescription": "The DataHub watchdog",
     "longDescription": "Argos renders the state of your data-to-model supply chain as a desktop pet, driven by a JSON event stream from Janus or any other producer."
