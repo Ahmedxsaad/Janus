@@ -16,6 +16,29 @@ Entry template:
 
 ---
 
+## D-157: Every install hint names the distribution, and survives rich (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing every optional extra as a user
+- Decision: The two remaining unescaped hints are escaped (`cli.py`'s `--events`
+  message and `argos/producer.py`'s missing-window line), and the two that told a
+  wheel user to run `pip install -e ".[...]"` now name the distribution
+  (`agent/graph.py`, `llm.py`). Two tests walk the whole class rather than the
+  reported instance: one prints a hint for every extra in `pyproject.toml` and
+  asserts the brackets survive, the other greps `janus/` for `pip install -e`.
+- Options considered: (a) fix the two reported lines; (b) fix them and pin the
+  class with tests derived from `pyproject.toml` and a source scan.
+- Why: D-151 escaped the sites interpolating an *exception*, which is how the
+  feast hint reached the terminal intact. Two sites build the advice inline
+  instead, so `--events` still printed `pip install "janus-datahub"` with the
+  `[kafka]` deleted by rich, and `--pet` would have done the same off Linux.
+  Separately, `scan --review` and an unconfigured LLM provider told the reader to
+  run an editable install of a directory they do not have, since they installed a
+  wheel. Both are the same defect in the end: advice that cannot be followed, in
+  the one line whose whole job is to be followed. (b) because fixing instance by
+  instance is what let the second and third survive the first pass; the source
+  scan immediately found a fourth in `llm.py` that manual review had missed.
+- Result: All ten extras print an installable command. Verified from the wheel
+  for `[kafka]`, `[agent]` and the three provider bindings. 982 unit tests pass.
+
 ## D-156: The Action's outputs keep exit 2 out of "blocked" (2026-08-06)
 - Decided by: Claude (for Ghassen Naouar), from testing the shipped artifacts as a user
 - Decision: `action.yml` sets `blocked=false` when the gate exits 2, and adds an

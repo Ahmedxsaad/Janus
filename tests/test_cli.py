@@ -706,3 +706,48 @@ def test_a_model_with_no_metadata_at_all_still_says_nothing_was_evaluated(capsys
     _print_clean(ScanReport(run_id="r", dry_run=True, model_urn=model_urn, not_evaluated=gaps))
 
     assert "Nothing was evaluated" in capsys.readouterr().out
+
+
+def test_every_install_hint_survives_being_printed():
+    """The extra's name is the only actionable token in these lines (D-157).
+
+    Rich reads a bare `[kafka]` as a style tag and deletes it, turning
+    `pip install "janus-datahub[kafka]"` into the command the reader has
+    already run. D-151 escaped the sites that interpolate an *exception*; two
+    sites building the advice inline were missed, which is why this test walks
+    every extra rather than the one that was reported.
+
+    Sourced from pyproject so a new extra with a new hint cannot be added
+    without either escaping it or failing here.
+    """
+    import tomllib
+
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    extras = tomllib.loads(pyproject.read_text())["project"]["optional-dependencies"]
+    assert extras, "no extras found: this test cannot check anything"
+
+    console = Console(soft_wrap=True, width=200)
+    for extra in extras:
+        hint = f'pip install "janus-datahub[{extra}]"'
+        with console.capture() as captured:
+            console.print(f"[red]{escape(hint)}[/red]")
+
+        assert f"[{extra}]" in captured.get(), extra
+
+
+def test_no_install_hint_tells_a_pypi_user_to_install_from_a_clone():
+    """`pip install -e '.[agent]'` only works in a clone of this repository.
+
+    The reader of these messages installed a wheel. Telling them to run an
+    editable install of a directory they do not have is advice that cannot be
+    followed, and it was shipped on the `--review` path (D-157).
+    """
+    package = Path(__file__).resolve().parents[1] / "janus"
+    offenders = [
+        f"{path.relative_to(package.parent)}:{number}"
+        for path in package.rglob("*.py")
+        for number, line in enumerate(path.read_text().splitlines(), start=1)
+        if "pip install -e" in line and not line.lstrip().startswith("#")
+    ]
+
+    assert offenders == [], f"clone-only install advice: {offenders}"

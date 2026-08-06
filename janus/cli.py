@@ -1323,7 +1323,10 @@ def watch(
                 f"[red]--events needs the change log configured.[/red] Set "
                 f"{ENV_KAFKA_BOOTSTRAP}, {ENV_SCHEMA_REGISTRY_URL} and "
                 f"{ENV_KAFKA_GROUP_ID}, and install the client: "
-                'pip install "janus-datahub[kafka]"'
+                # escape: the extra's name is the actionable half of this line,
+                # and rich reads a bare [kafka] as a style tag and deletes it,
+                # leaving `pip install "janus-datahub"` (D-151, D-157).
+                + escape('pip install "janus-datahub[kafka]"')
             )
             raise typer.Exit(code=2)
         try:

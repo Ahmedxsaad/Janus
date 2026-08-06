@@ -26,6 +26,7 @@ from pathlib import Path
 from types import TracebackType
 
 from rich.console import Console
+from rich.markup import escape
 
 from janus.argos.handler import ArgosHandler
 from janus.argos.protocol import Command, Event
@@ -87,7 +88,9 @@ class ArgosProducer:
         if window:
             surface = ArgosWindow.open(sink)
             if surface is None:
-                console.print(f"[dim]argos: no window binary found. {install_hint()}[/dim]")
+                # escape: the non-Linux hint ends in "janus-datahub[pet]", and
+                # rich would read [pet] as a style tag and drop it (D-151).
+                console.print(f"[dim]argos: no window binary found. {escape(install_hint())}[/dim]")
         if surface is None:
             surface = TerminalArgos(console)
         producer = cls(surface, console=console)

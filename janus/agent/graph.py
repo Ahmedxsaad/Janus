@@ -153,7 +153,10 @@ def build_scan_graph(
         from langgraph.types import interrupt
     except ImportError as exc:  # pragma: no cover - exercised via the CLI's lazy import
         raise AgentUnavailableError(
-            "the human-approval agent needs LangGraph: pip install -e '.[agent]'"
+            # Names the distribution, not `-e .`: that form only works from a
+            # clone, and the reader here installed a wheel from PyPI (D-157).
+            "the human-approval agent needs LangGraph, which is an optional "
+            'extra: pip install "janus-datahub[agent]"'
         ) from exc
 
     artifacts = _RunArtifacts()
