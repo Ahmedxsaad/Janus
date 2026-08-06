@@ -42,7 +42,7 @@ schema still matches training.
 
 - A DataHub instance (a local OSS Quickstart is enough: `datahub docker quickstart`).
 - The `janus` CLI. Until the first PyPI release is cut, install it from a
-  clone: `git clone https://github.com/Ahmedxsaad/DataHub && pip install -e DataHub`.
+  clone: `git clone https://github.com/Ahmedxsaad/janus && pip install -e DataHub`.
   From the release on it is `pip install janus-datahub` (the distribution
   is named `-datahub` because the exact name `janus` is taken on PyPI by an
   unrelated package). Either way the installed commands are `janus`,

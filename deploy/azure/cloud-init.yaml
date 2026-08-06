@@ -98,7 +98,7 @@ runcmd:
   - chown azureuser:azureuser /opt/janus
   - >-
     sudo -u azureuser git clone --depth 1
-    https://__GITHUB_CLONE_TOKEN__@github.com/Ahmedxsaad/DataHub.git
+    https://__GITHUB_CLONE_TOKEN__@github.com/Ahmedxsaad/janus.git
     /opt/janus/DataHub
 
   # The .env write used to live in write_files, which cloud-init runs in an

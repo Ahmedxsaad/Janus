@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Argos, the DataHub watchdog: a desktop window driven by a JSON event stream on stdin"
 license = "Apache-2.0"
-repository = "https://github.com/Ahmedxsaad/DataHub"
+repository = "https://github.com/Ahmedxsaad/janus"
 
 [[bin]]
 name = "janus-argos"

@@ -21,7 +21,7 @@
     <a href="#quickstart">Quickstart</a>
     <a href="#detectors">Checks</a>
     <a href="#counterfactuals">Fixes</a>
-    <a href="https://github.com/Ahmedxsaad/DataHub">GitHub</a>
+    <a href="https://github.com/Ahmedxsaad/janus">GitHub</a>
   </nav>
 </header>
 
@@ -43,7 +43,7 @@
   </div>
   <div class="cta">
     <a class="go" href="#quickstart">Run the quickstart</a>
-    <a class="quiet" href="https://github.com/Ahmedxsaad/DataHub">Source on GitHub</a>
+    <a class="quiet" href="https://github.com/Ahmedxsaad/janus">Source on GitHub</a>
     <a class="quiet" href="#measured">Read the benchmark</a>
   </div>
 </div>
@@ -289,7 +289,7 @@
   </p>
   <p>
     Method, ground truth and what is still not measured:
-    <a href="https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md">benchmarks/RESULTS.md</a>.
+    <a href="https://github.com/Ahmedxsaad/janus/blob/main/benchmarks/RESULTS.md">benchmarks/RESULTS.md</a>.
   </p>
 </section>
 
@@ -319,7 +319,7 @@ pip install "janus-datahub[openai]"    # or [anthropic], or [google]
     <code>janus-scenario</code> and <code>janus-mcp</code>.
   </div>
   <p>Developing on Janus itself, or before the first release is cut:</p>
-<pre><code>git clone https://github.com/Ahmedxsaad/DataHub
+<pre><code>git clone https://github.com/Ahmedxsaad/janus
 cd DataHub
 pip install -e ".[dev]"
 cp .env.example .env     # DATAHUB_GMS_URL=http://localhost:8080
@@ -865,7 +865,7 @@ janus gate --model credit_risk_v3 --min-trust 80             # exit 1 if trust &
     which judges the findings themselves.
   </p>
   <h3>In a workflow</h3>
-<pre><code class="language-yaml">- uses: Ahmedxsaad/DataHub@main
+<pre><code class="language-yaml">- uses: Ahmedxsaad/janus@main
   with:
     model: credit_risk_v3
     block-at-or-above: high
@@ -889,7 +889,7 @@ janus gate --model credit_risk_v3 --min-trust 80             # exit 1 if trust &
     <code>watch</code> is the long-running entry point: it polls, scans on
     change, and auto-approves its writes because it is unattended by definition.
     It is what the
-    <a href="https://github.com/Ahmedxsaad/DataHub/tree/main/charts/janus-watch">janus-watch Helm chart</a>
+    <a href="https://github.com/Ahmedxsaad/janus/tree/main/charts/janus-watch">janus-watch Helm chart</a>
     runs, alongside an optional <code>link --all</code> CronJob for the models
     that are not retrained nightly.
   </p>
@@ -1057,7 +1057,7 @@ janus companion                       # everything wrong with the assets you own
   <p>
     With no window binary installed, both commands report one line per change in
     the terminal instead, which is also what runs over SSH. Design and protocol:
-    <a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/08-watchdog-mascot.md">docs/plan/08-watchdog-mascot.md</a>.
+    <a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/08-watchdog-mascot.md">docs/plan/08-watchdog-mascot.md</a>.
   </p>
   <div class="note">
     <strong>The dog walking this page is the dog in the window.</strong> Every
@@ -1514,15 +1514,15 @@ janus feature-card  --model credit_risk_v3   # one Data Card per feature
   <table>
     <tr><th>Where</th><th>What it answers</th></tr>
     <tr><td><a href="https://janus.ahmedxsaad.me">Live demo</a></td><td>A real DataHub instance with the failure planted and <code>watch</code> running against it</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub">GitHub</a></td><td>Source, issues, releases</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/architecture.md">architecture.md</a></td><td>How it works: layers, flows, diagrams</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md">RESULTS.md</a></td><td>The benchmark, its method, and what it does not measure</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/09-depth-axes.md">09-depth-axes.md</a></td><td>Where the product goes deeper, and what it deliberately will not build</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/07-weaknesses-and-remedies.md">07-weaknesses-and-remedies.md</a></td><td>An adversarial audit: known weaknesses, each with a fix</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/tree/main/skill/datahub-ml-guard">datahub-ml-guard</a></td><td>The skill, offered back to the DataHub ecosystem</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/mcp_ext/RFC-ml-incidents.md">RFC-ml-incidents.md</a></td><td>The second contribution: an incident-raising tool for DataHub's own MCP server, which has no incident, assertion or lineage-write tool today</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/tree/main/charts/janus-watch">charts/janus-watch</a></td><td>The Helm chart: <code>watch</code> as a deployment, with an optional <code>link --all</code> CronJob</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/DataHub/blob/main/docs/most-valuable-feedback.md">most-valuable-feedback.md</a></td><td>Sixteen reproducible bugs and doc gaps found while building</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus">GitHub</a></td><td>Source, issues, releases</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/architecture.md">architecture.md</a></td><td>How it works: layers, flows, diagrams</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/benchmarks/RESULTS.md">RESULTS.md</a></td><td>The benchmark, its method, and what it does not measure</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/09-depth-axes.md">09-depth-axes.md</a></td><td>Where the product goes deeper, and what it deliberately will not build</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/07-weaknesses-and-remedies.md">07-weaknesses-and-remedies.md</a></td><td>An adversarial audit: known weaknesses, each with a fix</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/tree/main/skill/datahub-ml-guard">datahub-ml-guard</a></td><td>The skill, offered back to the DataHub ecosystem</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/mcp_ext/RFC-ml-incidents.md">RFC-ml-incidents.md</a></td><td>The second contribution: an incident-raising tool for DataHub's own MCP server, which has no incident, assertion or lineage-write tool today</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/tree/main/charts/janus-watch">charts/janus-watch</a></td><td>The Helm chart: <code>watch</code> as a deployment, with an optional <code>link --all</code> CronJob</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/most-valuable-feedback.md">most-valuable-feedback.md</a></td><td>Sixteen reproducible bugs and doc gaps found while building</td></tr>
   </table>
   </div>
 </section>

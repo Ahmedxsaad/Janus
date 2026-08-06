@@ -16,6 +16,41 @@ Entry template:
 
 ---
 
+## D-144: The GitHub repository is renamed to janus (2026-08-06)
+- Decided by: Ahmed Saad (name); executed by Ahmed Saad via the GitHub UI
+  (`Ahmedxsaad/DataHub` -> `Ahmedxsaad/Janus`, case-insensitive in GitHub's
+  own routing; every reference in this repo uses lowercase `janus`, matching
+  the PyPI distribution and CLI name).
+- Options considered, name: `janus`, `janus-datahub`, or defer. Checked
+  availability first (`gh api repos/Ahmedxsaad/<name>`, all three free, since
+  GitHub repo names are scoped per-owner and do not compete with PyPI's global
+  namespace the way `modelguard`/`janus` bare did there).
+- Why now rather than deferred again (P1-1 had been open since D-076): almost
+  nothing breaks that GitHub's redirect does not already cover for git and
+  API operations (checked live: `gh repo view Ahmedxsaad/DataHub` resolved
+  through to the new name without error). The one thing that does not
+  redirect, PyPI Trusted Publishing's repository-name match, was going to
+  need a fresh pending publisher regardless (D-142 found the existing status
+  claim for one was itself a rename casualty), so renaming first means
+  setting that up once with the right name instead of twice.
+- Result: local sandbox and the live VM's git remotes updated
+  (`git remote set-url origin https://github.com/Ahmedxsaad/janus.git`),
+  confirmed fetching. Every hardcoded `Ahmedxsaad/DataHub` reference this
+  repo's own `git grep` could find (61 occurrences across README.md,
+  `site/index.html`, `pyproject.toml`, `charts/janus-watch/`, both skill
+  docs, `cloud-init.yaml`, `argos/Cargo.toml`, `argos/pyproject.toml`, one
+  workflow comment) is now `Ahmedxsaad/janus`, including the two places that
+  needed the *derived* GHCR path fixed rather than the literal string
+  (`README.md` and `charts/janus-watch/README.md`'s `--set
+  image.repository=` examples: `publish-image.yml` computes this from
+  `github.repository` at build time, so it will actually push to
+  `ghcr.io/ahmedxsaad/janus/janus` on the next tag, not the
+  `.../datahub/janus` the examples showed). `docs/deploy/pypi-release.md`'s
+  P1-1 checklist item closes here. The repository is still private; that is
+  a separate, not-yet-actioned item.
+
+---
+
 ## D-143: The live VM migrated to Janus, and swap doubled ahead of judging (2026-08-06)
 - Decided by: Claude (for Ahmed Saad), executed directly over SSH with the
   user's Cloudflare DNS change already in place and a GitHub token supplied
@@ -84,9 +119,10 @@ Entry template:
 - Decision: An audit prompted by "modelguard was renamed, check everywhere,
   including Cloudflare and Azure" found the in-repo rename (D-136) is
   complete: `git grep -i modelguard` over tracked files returns zero hits, and
-  the PyPI distribution name (`janus-datahub`), GHCR image path
-  (`ghcr.io/ahmedxsaad/datahub/janus`), and Helm chart (`charts/janus-watch`)
-  are all consistent. What D-136 did not and could not reach is the two things
+  the PyPI distribution name (`janus-datahub`), GHCR image path (then
+  `ghcr.io/ahmedxsaad/datahub/janus`; see D-144, this repository's own name
+  changed hours later), and Helm chart (`charts/janus-watch`) are all
+  consistent. What D-136 did not and could not reach is the two things
   outside the repository:
   1. **Cloudflare DNS was never repointed.** Checked directly: `dig
      janus.ahmedxsaad.me` returns `NXDOMAIN`; `dig modelguard.ahmedxsaad.me`

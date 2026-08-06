@@ -72,7 +72,7 @@ last column is what gets a reliability tool switched off.
 
 These are implementations of an *approach*, handed Janus's own label index so
 nothing is won by starting better informed; no Great Expectations or Evidently process
-was run. [RESULTS.md](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md) says so, and states what is still not
+was run. [RESULTS.md](https://github.com/Ahmedxsaad/janus/blob/main/benchmarks/RESULTS.md) says so, and states what is still not
 measured, alongside a scale table for a whole-catalog sweep.
 
 ## Documentation
@@ -91,15 +91,15 @@ The plan and the reasoning behind the product live here:
 
 | Doc | What it answers |
 |---|---|
-| [docs/plan/01-strategy-janus.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/01-strategy-janus.md) | Why this project, what it solves |
-| [docs/plan/architecture.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/architecture.md) | How it works: layers, flows, diagrams |
-| [docs/plan/02-implementation-plan.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/02-implementation-plan.md) | The build: phases, APIs, schedule |
-| [docs/plan/03-production-hardening.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/03-production-hardening.md) | Benchmark, scaling, security model |
-| [docs/plan/04-improvements.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/04-improvements.md) | Proposed improvements, pending decisions |
-| [docs/plan/06-judge-review-and-improvements.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/06-judge-review-and-improvements.md) | Review against the judging criteria, and what to land before the PyPI tag |
-| [docs/plan/07-weaknesses-and-remedies.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/07-weaknesses-and-remedies.md) | An adversarial audit: 18 known weaknesses, each with a proposed fix |
-| [docs/decision-log.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/decision-log.md) | Decisions made, options, why, results |
-| [docs/hackathon-specs/](https://github.com/Ahmedxsaad/DataHub/tree/main/docs/hackathon-specs) | Official hackathon rules and requirements |
+| [docs/plan/01-strategy-janus.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/01-strategy-janus.md) | Why this project, what it solves |
+| [docs/plan/architecture.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/architecture.md) | How it works: layers, flows, diagrams |
+| [docs/plan/02-implementation-plan.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/02-implementation-plan.md) | The build: phases, APIs, schedule |
+| [docs/plan/03-production-hardening.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/03-production-hardening.md) | Benchmark, scaling, security model |
+| [docs/plan/04-improvements.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/04-improvements.md) | Proposed improvements, pending decisions |
+| [docs/plan/06-judge-review-and-improvements.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/06-judge-review-and-improvements.md) | Review against the judging criteria, and what to land before the PyPI tag |
+| [docs/plan/07-weaknesses-and-remedies.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/07-weaknesses-and-remedies.md) | An adversarial audit: 18 known weaknesses, each with a proposed fix |
+| [docs/decision-log.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/decision-log.md) | Decisions made, options, why, results |
+| [docs/hackathon-specs/](https://github.com/Ahmedxsaad/janus/tree/main/docs/hackathon-specs) | Official hackathon rules and requirements |
 
 ## Repository layout
 
@@ -205,7 +205,7 @@ run; its dbt, Spark and warehouse sources record excellent column-level lineage
 between tables. **Nothing joins the two**, so out of the box a model is not
 connected to a single column, and a detector that walks from a feature to its
 source column has nowhere to start. Verified on a real stack, not assumed: see
-[examples/real-project/](https://github.com/Ahmedxsaad/DataHub/tree/main/examples/real-project).
+[examples/real-project/](https://github.com/Ahmedxsaad/janus/tree/main/examples/real-project).
 
 `janus link` is that join. Before typing it out, ask Janus to work it
 out for you:
@@ -336,7 +336,7 @@ demo does, on your data.
 
 Run `link` again after each ingestion of the model. DataHub's mlflow source
 upserts the whole `mlModelProperties` aspect and drops the features (reported as
-[feedback #14](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/most-valuable-feedback.md)); the arguments are recorded on the
+[feedback #14](https://github.com/Ahmedxsaad/janus/blob/main/docs/most-valuable-feedback.md)); the arguments are recorded on the
 model in an aspect ingestion does not touch, so the replay needs no arguments at
 all, and one command covers every model at once:
 
@@ -383,7 +383,7 @@ finding, and it says out loud what it cannot see:
 > answer instead.
 
 That 0.25 is measured, not asserted: it is the table-level baseline scored in
-[benchmarks/RESULTS.md](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md),
+[benchmarks/RESULTS.md](https://github.com/Ahmedxsaad/janus/blob/main/benchmarks/RESULTS.md),
 and the benchmark checks the figure the tool quotes against the one it measures
 on every run.
 
@@ -459,7 +459,7 @@ would fill the graph with findings about branches that never merged.
 In a workflow, via the bundled action:
 
 ```yaml
-- uses: Ahmedxsaad/DataHub@main
+- uses: Ahmedxsaad/janus@main
   with:
     model: credit_risk_v3
     block-at-or-above: high
@@ -551,7 +551,7 @@ answers the three that have to be reproducible, with the column chain as evidenc
 and no LLM anywhere in the decision. Configuring both, and the argument for keeping
 detection deterministic rather than asking a capable model to eyeball a lineage
 graph, is in
-[skill/datahub-ml-guard/references/mcp-composition.md](https://github.com/Ahmedxsaad/DataHub/blob/main/skill/datahub-ml-guard/references/mcp-composition.md).
+[skill/datahub-ml-guard/references/mcp-composition.md](https://github.com/Ahmedxsaad/janus/blob/main/skill/datahub-ml-guard/references/mcp-composition.md).
 
 ## Watch it from the corner of your eye
 
@@ -577,7 +577,7 @@ traversal the benchmark above measures, rendered as motion instead of a paragrap
 detector, and sweeps the assets one owner owns for open incidents, failing assertion
 runs and deprecations. DataHub has no desktop presence today, and that is the gap it
 fills. Design and protocol:
-[docs/plan/08-watchdog-mascot.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/08-watchdog-mascot.md).
+[docs/plan/08-watchdog-mascot.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/08-watchdog-mascot.md).
 
 With no window binary installed, both commands report one line per change in the
 terminal instead, which is also what runs over SSH.
@@ -592,7 +592,7 @@ docker compose run --rm janus gate --model credit_risk_v3 --block-at-or-above hi
 docker compose up janus-mcp       # long-running, stdio
 ```
 
-[`docker-compose.yml`](https://github.com/Ahmedxsaad/DataHub/blob/main/docker-compose.yml) adds Janus to the Docker network
+[`docker-compose.yml`](https://github.com/Ahmedxsaad/janus/blob/main/docker-compose.yml) adds Janus to the Docker network
 `datahub docker quickstart` already creates, rather than reimplementing DataHub's own
 multi-container stack (GMS, MySQL, Kafka, OpenSearch, frontend) inside this repo:
 composing what is already shipped, not rebuilding it. `docker compose up` with no
@@ -604,7 +604,7 @@ The project is named `janus` explicitly in that file, not left to compose's
 directory-name default: DataHub's own Quickstart compose defaults to the same
 project name (`datahub`), and sharing it would make an ordinary `docker compose
 down --remove-orphans` here treat the entire Quickstart as orphaned containers of
-this project and stop it. [`Dockerfile`](https://github.com/Ahmedxsaad/DataHub/blob/main/Dockerfile) builds a non-root image (pinned
+this project and stop it. [`Dockerfile`](https://github.com/Ahmedxsaad/janus/blob/main/Dockerfile) builds a non-root image (pinned
 to the exact patch version this project develops against, `python:3.11.14-slim`)
 with all four console scripts installed; `docker build --build-arg
 JANUS_EXTRAS=agent,mcp,anthropic` (or `openai`/`google`) bakes an LLM provider
@@ -618,14 +618,14 @@ with a Helm chart:
 
 ```bash
 helm install my-watch charts/janus-watch \
-  --set image.repository=ghcr.io/ahmedxsaad/datahub/janus \
+  --set image.repository=ghcr.io/ahmedxsaad/janus/janus \
   --set datahub.gmsUrl=http://datahub-gms.datahub.svc.cluster.local:8080 \
   --set watch.table=loans_raw
 ```
 
 `.github/workflows/publish-image.yml` builds and pushes that image to GHCR on
 every version tag, so the chart has somewhere real to pull from rather than a
-placeholder. See [`charts/janus-watch/README.md`](https://github.com/Ahmedxsaad/DataHub/blob/main/charts/janus-watch/README.md)
+placeholder. See [`charts/janus-watch/README.md`](https://github.com/Ahmedxsaad/janus/blob/main/charts/janus-watch/README.md)
 for secret handling (`existingSecret` is the path meant for real use) and what
 the chart deliberately leaves out (autoscaling, probes that would check nothing
 real, an Ingress nothing needs).
@@ -676,12 +676,12 @@ Polling remains the default and needs no broker.
 
 ## More sample output
 
-Sample outputs, generated by a real run, are in [examples/](https://github.com/Ahmedxsaad/DataHub/tree/main/examples).
+Sample outputs, generated by a real run, are in [examples/](https://github.com/Ahmedxsaad/janus/tree/main/examples).
 To verify the whole loop against a live DataHub: `pytest -m integration`.
 
 ## Is it any good?
 
-Measured, not asserted. [Janus-Bench](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md) scores the detectors
+Measured, not asserted. [Janus-Bench](https://github.com/Ahmedxsaad/janus/blob/main/benchmarks/RESULTS.md) scores the detectors
 against a live DataHub (never against fixtures, which would only measure the fixtures):
 
 ```bash
@@ -695,7 +695,7 @@ one comparison from `>` to `>=` is caught by the trial sitting exactly on the SL
 scores a clean 1.00 under the demo scenario alone.
 
 It also scores the detectors on a graph this project did not build. Stand up
-[examples/real-project/](https://github.com/Ahmedxsaad/DataHub/tree/main/examples/real-project)
+[examples/real-project/](https://github.com/Ahmedxsaad/janus/tree/main/examples/real-project)
 (a postgres warehouse, a dbt project, a scikit-learn script, an MLflow registry,
 ingested by DataHub's own sources) and the same command adds a section for it:
 the leak lives in the dbt model rather than in a seeding call, and the derivation
@@ -704,7 +704,7 @@ there, one of them leaking.
 
 The per-feature comparison against table-level lineage is
 [above](#the-one-thing-nothing-else-does-measured); the full numbers, and what is
-still not measured, are in [RESULTS.md](https://github.com/Ahmedxsaad/DataHub/blob/main/benchmarks/RESULTS.md).
+still not measured, are in [RESULTS.md](https://github.com/Ahmedxsaad/janus/blob/main/benchmarks/RESULTS.md).
 
 ## Security and privacy
 
@@ -769,7 +769,7 @@ result rather than a heuristic somebody liked:
 | The prompt-injection and sensitive-disclosure threat model | OWASP Top 10 for LLM Applications (2025), LLM01 and LLM06 |
 
 Full reading list with what each one changed here:
-[docs/plan/resources.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/plan/resources.md).
+[docs/plan/resources.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/resources.md).
 
 ## Show a governance function where this fits
 
@@ -841,12 +841,12 @@ Built alongside Janus and offered back to the DataHub ecosystem:
 
 | Contribution | What it is |
 |---|---|
-| [skill/datahub-ml-guard/](https://github.com/Ahmedxsaad/DataHub/tree/main/skill/datahub-ml-guard) | The `datahub-ml-guard` skill: traces model features back to source columns to catch leakage, drift, and blast radius, and guides the write-back. Unlike the several ML-reliability skills already submitted to the registry, it is a thin wrapper around a real, tested, deterministic detection engine (this repo), not an LLM asked to eyeball a lineage graph. Destined for [datahub-project/datahub-skills](https://github.com/datahub-project/datahub-skills). |
-| [mcp_ext/raise_incident_tool.py](https://github.com/Ahmedxsaad/DataHub/blob/main/mcp_ext/raise_incident_tool.py) | A thin `raise_incident` mutation tool for [acryldata/mcp-server-datahub](https://github.com/acryldata/mcp-server-datahub), which today has no incident-write tool. Ships with [an RFC](https://github.com/Ahmedxsaad/DataHub/blob/main/mcp_ext/RFC-ml-incidents.md) for first-class ML incidents. |
-| [docs/most-valuable-feedback.md](https://github.com/Ahmedxsaad/DataHub/blob/main/docs/most-valuable-feedback.md) | Sixteen concrete, reproducible bugs and doc gaps found while building, each with a repro and a workaround. |
+| [skill/datahub-ml-guard/](https://github.com/Ahmedxsaad/janus/tree/main/skill/datahub-ml-guard) | The `datahub-ml-guard` skill: traces model features back to source columns to catch leakage, drift, and blast radius, and guides the write-back. Unlike the several ML-reliability skills already submitted to the registry, it is a thin wrapper around a real, tested, deterministic detection engine (this repo), not an LLM asked to eyeball a lineage graph. Destined for [datahub-project/datahub-skills](https://github.com/datahub-project/datahub-skills). |
+| [mcp_ext/raise_incident_tool.py](https://github.com/Ahmedxsaad/janus/blob/main/mcp_ext/raise_incident_tool.py) | A thin `raise_incident` mutation tool for [acryldata/mcp-server-datahub](https://github.com/acryldata/mcp-server-datahub), which today has no incident-write tool. Ships with [an RFC](https://github.com/Ahmedxsaad/janus/blob/main/mcp_ext/RFC-ml-incidents.md) for first-class ML incidents. |
+| [docs/most-valuable-feedback.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/most-valuable-feedback.md) | Sixteen concrete, reproducible bugs and doc gaps found while building, each with a repro and a workaround. |
 
 ## Contributing
 
 Team conventions (commit format, code rules, formatting rules) live in
-[CLAUDE.md](https://github.com/Ahmedxsaad/DataHub/blob/main/CLAUDE.md). Each directory has its own CLAUDE.md with local rules.
-License: [Apache 2.0](https://github.com/Ahmedxsaad/DataHub/blob/main/LICENSE).
+[CLAUDE.md](https://github.com/Ahmedxsaad/janus/blob/main/CLAUDE.md). Each directory has its own CLAUDE.md with local rules.
+License: [Apache 2.0](https://github.com/Ahmedxsaad/janus/blob/main/LICENSE).

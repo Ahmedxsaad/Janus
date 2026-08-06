@@ -199,9 +199,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Ahmedxsaad/DataHub"
-Repository = "https://github.com/Ahmedxsaad/DataHub"
-Issues = "https://github.com/Ahmedxsaad/DataHub/issues"
+Homepage = "https://github.com/Ahmedxsaad/janus"
+Repository = "https://github.com/Ahmedxsaad/janus"
+Issues = "https://github.com/Ahmedxsaad/janus/issues"
 
 [project.scripts]
 # The CLI exposes the batch scan, polling watch, and CI gate commands.

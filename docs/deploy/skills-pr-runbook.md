@@ -31,7 +31,7 @@ Options, in order of preference:
    this PR unchanged.
 2. **Submit with a git install instruction.** Change the prerequisite line in
    `SKILL.md` and `README.md` to
-   `pip install "git+https://github.com/Ahmedxsaad/DataHub.git"` and say the
+   `pip install "git+https://github.com/Ahmedxsaad/janus.git"` and say the
    PyPI name is coming. Honest, and it works today, but it reads as unfinished
    to a reviewer.
 
