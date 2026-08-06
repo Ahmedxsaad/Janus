@@ -12,10 +12,14 @@ Judging Period ends" (`docs/hackathon-specs/03-submission-requirements.md`).
 provisioning, seeding, the watch service finding real incidents, the NSG and
 `ufw` layers, the frontend password change and an actual login, a real GMS
 search query returning real data, and a custom domain over HTTPS
-(`https://janus.ahmedxsaad.me`) all confirmed working end to end, each
-checked directly over SSH rather than assumed from the UI loading. Two real
-bugs were found and fixed this way that no amount of syntax-checking would
-have caught:
+(`https://modelguard.ahmedxsaad.me`, the product's domain at the time) all
+confirmed working end to end, each checked directly over SSH rather than
+assumed from the UI loading. **The domain was not migrated when the product
+was renamed to Janus** (D-142): `janus.ahmedxsaad.me` does not exist in DNS as
+of this writing, and the paragraph above is left describing what was actually
+verified rather than rewritten to name a domain that was never tested. Two
+real bugs were found and fixed this way that no amount of syntax-checking
+would have caught:
 
 - D-063: `write_files` racing `azureuser`'s own creation, cascading into a
   failed `git clone`.
@@ -286,10 +290,38 @@ locally.
 
 ## Add a custom domain and HTTPS (optional)
 
-Verified live: `https://janus.ahmedxsaad.me`, real Let's Encrypt
-certificate, no port in the URL. Not part of `cloud-init.yaml` since it needs
-a domain name that does not exist at provisioning time; done manually, once,
-after the bare-IP demo already works.
+Verified live, 2026-07-29: `https://modelguard.ahmedxsaad.me`, real Let's
+Encrypt certificate, no port in the URL. Not part of `cloud-init.yaml` since it
+needs a domain name that does not exist at provisioning time; done manually,
+once, after the bare-IP demo already works.
+
+**Migration to the `janus` domain is pending** (D-142, 2026-08-06): the
+product was renamed after this was verified, and the steps below were never
+re-run under the new name. Checked directly from outside the VM:
+`janus.ahmedxsaad.me` returns `NXDOMAIN` (no DNS record exists at all), while
+`modelguard.ahmedxsaad.me` still resolves to the VM's last known public IP.
+Whoever holds the Cloudflare and Azure account (D-041's account-bound
+distinction applies here too) needs to, once the VM is running:
+
+1. Add a Cloudflare A record for `janus` pointing at the VM's current public
+   IP (`DNS only`, not proxied, for the same `tls-alpn-01` reason step 1 below
+   already explains). The `modelguard` record can stay as a secondary alias or
+   be removed; nothing in this repo depends on it once `janus` resolves.
+2. SSH in and edit `/etc/caddy/Caddyfile` (state lives only on the VM, never
+   in this repo) to serve `janus.ahmedxsaad.me` instead of, or in addition to,
+   the old domain, then `sudo systemctl reload caddy` so Caddy requests a
+   fresh certificate for the new name.
+3. Update `README.md`'s live-demo link only after step 2 returns `HTTP/2 200`
+   for the new domain (the link already reads `janus.ahmedxsaad.me`; that is
+   correct for where this is going, not for where it is today).
+
+The rest of this section documents the original setup steps, which remain
+correct for a fresh provision. The `RG=janus-demo` / `--nsg-name
+janus-demo-nsg` values below are what a *new* provision should use; they were
+renamed in this doc alongside the code and have **not** been confirmed against
+whatever the actually-provisioned resource group and NSG are named on Azure
+today. Check `az group list` / `az network nsg list` before running any
+command below against the existing VM rather than a fresh one.
 
 1. **DNS**: an A record for the chosen (sub)domain pointing at the VM's
    public IP, **DNS-only, not proxied** (Cloudflare's orange-cloud proxying
@@ -311,6 +343,9 @@ after the bare-IP demo already works.
      --source-address-prefixes "*" --destination-port-ranges 443 \
      --access Allow --protocol Tcp
    ```
+
+   Substitute the resource group and NSG name actually in use if this is the
+   existing VM rather than a fresh provision (see the callout above).
 
    No exception to the GMS rule: 8080 still gets no rule, at any layer.
 3. **Install Caddy and point it at the frontend.** Caddy requests and renews
