@@ -497,10 +497,12 @@ its wheel is never published.
 3. nothing found: one message naming this platform's install command, then the
    terminal sprite. It never silently degrades anything else.
 
-**CI.** A `build-argos.yml` matrix (macos-14 for arm64, macos-13 for x86_64,
-windows-latest, ubuntu-22.04) publishes wheels and bundles to the GitHub
-release. `publish-pypi.yml` keeps publishing the pure-Python wheel and does not
-learn about Rust.
+**CI.** A `build-argos.yml` matrix (macos-14 for arm64, macos-15-intel for
+x86_64, windows-latest, ubuntu-22.04) publishes the wheels to PyPI as the
+separate `janus-argos` distribution, and attaches the bundles to the GitHub
+release. Linux is bundles only: no manylinux tag permits linking the system
+webkit2gtk. `publish-pypi.yml` keeps publishing the pure-Python wheel and does
+not learn about Rust.
 
 **Code signing, and which path actually needs it.** macOS quarantine and Windows
 mark-of-the-web are applied by browsers and download tools, not by pip, so a
