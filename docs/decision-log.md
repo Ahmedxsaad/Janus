@@ -16,6 +16,34 @@ Entry template:
 
 ---
 
+## D-155: janus-mcp names the extra instead of dying with a traceback (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: `mcp_server.py` imports `FastMCP` and `ToolAnnotations` inside
+  `create_server()` rather than at module level, and `main` turns the resulting
+  `ImportError` into a one-line `SystemExit` naming the extra. The module-level
+  `_READ_ONLY` constant becomes a local, since it was the only reason
+  `mcp.types` had to be imported at module scope.
+- Options considered: (a) leave it, since the README says to install `[mcp]`;
+  (b) defer the import into `create_server` and report it from `main`;
+  (c) stop registering the `janus-mcp` console script unless the extra is present
+  (not possible: entry points are static metadata).
+- Why: `pip install janus-datahub` registers `janus-mcp` unconditionally, so
+  typing it on a plain install printed an ImportError traceback quoting a
+  site-packages path. Every other optional extra here (feast, kafka, pet) names
+  itself and the command that installs it. This is also the entry point most
+  likely to be reached by accident, because an MCP client launches it rather
+  than a person, so the traceback lands in that client's log where it reads as
+  a broken server rather than a missing package.
+- Result: `janus-mcp` on a plain install prints
+  `serving over MCP needs the mcp package, which is an optional extra: pip
+  install "janus-datahub[mcp]"`. With the extra installed, a real MCP client
+  over stdio lists the three tools, each annotated `readOnlyHint: true`, and all
+  three return correct results. `tests/test_mcp_server.py` covers it, confirmed
+  red against the pre-fix code per tests/CLAUDE.md rule 6. The test that only
+  inspected the `_READ_ONLY` constant's own value was deleted rather than
+  rewritten: its sibling already checks the property at real registration, which
+  its own docstring names as the stronger check.
+
 ## D-154: A classification URN that cannot match anything is refused (2026-08-06)
 - Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
 - Decision: The four classification variables are read through a new

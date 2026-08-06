@@ -31,8 +31,7 @@ be set in the environment the client launches it with, exactly as for the CLI.
 
 from __future__ import annotations
 
-from mcp.server.fastmcp import FastMCP
-from mcp.types import ToolAnnotations
+from typing import TYPE_CHECKING
 
 from janus.agent.pipeline import run_scan
 from janus.cli import (
@@ -53,9 +52,18 @@ from janus.models import (
     Severity,
 )
 
-#: Every tool below carries this. A client that surfaces the hint shows the tool
-#: as safe before it is ever invoked, not only after reading its description.
-_READ_ONLY = ToolAnnotations(readOnlyHint=True)
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from mcp.server.fastmcp import FastMCP
+
+#: What `janus-mcp` says when the [mcp] extra is not installed. The import is
+#: deliberately not at module level: the console script would then die with an
+#: ImportError traceback quoting a site-packages path, where every other
+#: optional extra in this project (feast, kafka, pet) names itself and the
+#: command that installs it (D-155).
+_MCP_EXTRA = (
+    "serving over MCP needs the mcp package, which is an optional extra: "
+    'pip install "janus-datahub[mcp]"'
+)
 
 
 def _render_finding(finding: Finding) -> str:
@@ -197,7 +205,20 @@ def check_gate(
 
 
 def create_server() -> FastMCP:
-    """Build the server and register every tool. Called once, by ``main``."""
+    """Build the server and register every tool. Called once, by ``main``.
+
+    Raises:
+        ImportError: The ``[mcp]`` extra is not installed. ``main`` turns this
+            into the one-line message a user can act on.
+    """
+    from mcp.server.fastmcp import FastMCP
+    from mcp.types import ToolAnnotations
+
+    # Every tool below carries this. A client that surfaces the hint shows the
+    # tool as safe before it is ever invoked, not only after reading its
+    # description.
+    read_only = ToolAnnotations(readOnlyHint=True)
+
     mcp = FastMCP(
         name="janus",
         instructions=(
@@ -212,19 +233,19 @@ def create_server() -> FastMCP:
     mcp.tool(
         name="check_leakage",
         description=check_leakage.__doc__,
-        annotations=_READ_ONLY,
+        annotations=read_only,
     )(check_leakage)
 
     mcp.tool(
         name="check_freshness",
         description=check_freshness.__doc__,
-        annotations=_READ_ONLY,
+        annotations=read_only,
     )(check_freshness)
 
     mcp.tool(
         name="check_gate",
         description=check_gate.__doc__,
-        annotations=_READ_ONLY,
+        annotations=read_only,
     )(check_gate)
 
     return mcp
@@ -241,12 +262,17 @@ def main() -> None:
     question a user happens to ask it.
     """
     try:
+        server = create_server()
+    except ImportError as exc:
+        raise SystemExit(_MCP_EXTRA) from exc
+
+    try:
         ScanConfig.from_env()
         connect()
     except (ConfigError, DataHubConnectionError) as exc:
         raise SystemExit(f"{exc}") from exc
 
-    create_server().run()
+    server.run()
 
 
 if __name__ == "__main__":
