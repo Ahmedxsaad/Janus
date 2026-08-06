@@ -277,7 +277,7 @@ addopts = "-m 'not integration'"
 # having no tests: a 0.00 score with nothing to say what went wrong (D-125).
 source_paths = ["janus"]
 only_mutate = ["janus/detect/*"]
-also_copy = ["examples/", "argos/", "site/", "benchmarks/", "README.md"]
+also_copy = ["examples/", "argos/", "site/", "benchmarks/", "README.md", "action.yml"]
 # type_check_command (mutmut's mypy-assisted filter, verified against 3.7.0):
 # tried and reverted. It crashes on this codebase --
 # "Could not find mutant for type error ...trust_score.py:7345 (Unused

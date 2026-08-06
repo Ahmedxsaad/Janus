@@ -16,6 +16,29 @@ Entry template:
 
 ---
 
+## D-156: The Action's outputs keep exit 2 out of "blocked" (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the shipped artifacts as a user
+- Decision: `action.yml` sets `blocked=false` when the gate exits 2, and adds an
+  `outcome` output carrying `clean`, `blocked` or `error`. The step still fails
+  the build on both 1 and 2, unchanged.
+- Options considered: (a) leave it, since the step fails either way and the log
+  says which; (b) set `blocked=false` on exit 2 only; (c) (b) plus a three-valued
+  `outcome`, so a workflow can still tell "clean" from "could not tell".
+- Why: `blocked` is documented as "true when the policy was violated", and the
+  script set it true for exit 2 as well, where nothing was violated because
+  nothing was measured. janus/CLAUDE.md rule 2 states this exact rule for the
+  exit codes, and the reason it gives applies harder to an output a workflow
+  consumes than to log text: a step gated on
+  `steps.gate.outputs.blocked == 'true'` would comment "this model is unsafe" on
+  a pull request because DataHub was unreachable, which is how a team learns to
+  ignore the message. (b) alone was rejected because it would leave a workflow
+  unable to distinguish a passing gate from a broken one at all.
+- Result: The three states verified against a live instance (violation, clean,
+  unreachable server) produce exit 1/0/2 with `blocked=true/false/false` and
+  `outcome=blocked/clean/error`. `tests/test_action.py` pins it, confirmed red
+  against the pre-fix file per tests/CLAUDE.md rule 6, and `action.yml` joins
+  `[tool.mutmut] also_copy` because that suite now reads it (D-125).
+
 ## D-155: janus-mcp names the extra instead of dying with a traceback (2026-08-06)
 - Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
 - Decision: `mcp_server.py` imports `FastMCP` and `ToolAnnotations` inside

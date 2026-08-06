@@ -467,6 +467,13 @@ In a workflow, via the bundled action:
     gms-token: ${{ secrets.DATAHUB_GMS_TOKEN }}
 ```
 
+The action reports the same three states to the rest of the workflow, as
+`outcome` (`clean`, `blocked`, `error`) alongside the boolean `blocked`. The
+distinction is the same one the exit codes make and it matters more here: a step
+gated on `blocked == 'true'` must not comment "this model is unsafe" on a pull
+request because DataHub happened to be unreachable, so `blocked` stays false when
+the gate could not tell, and `outcome` is how you catch that case.
+
 The verdict lands on the run's own summary page, not just in the log: findings,
 severities, trust scores, and the checks that could not run, as a table the
 reviewer sees without opening anything. That needs no input and no token, because
