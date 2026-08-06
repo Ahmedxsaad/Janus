@@ -16,6 +16,27 @@ Entry template:
 
 ---
 
+## D-158: The skill fork is a pure copy of skill/, checked by upstream's hooks (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: The datahub-skills fork carries no edits of its own. Its
+  `feat/datahub-ml-guard` branch is one commit on top of `upstream/main`, built
+  by copying `skill/datahub-ml-guard/` verbatim and then running upstream's own
+  `pre-commit` hooks (prettier, markdownlint) over the result. Anything a hook
+  or a reviewer would change is fixed in `skill/` and copied down again, never
+  patched on the fork. Two such fixes landed with this entry: the clone hint
+  installed a directory that does not exist (`pip install -e DataHub` after
+  cloning `janus`), and two adjacent blockquotes in
+  `references/mcp-composition.md` tripped MD028.
+- Options considered: (a) let the fork diverge and reconcile before each push;
+  (b) keep the fork a pure copy and fix everything upstream in `skill/`.
+- Why: Two editable copies of the same skill drift, and the drift is invisible
+  until a judge reads one and a reviewer reads the other. One source removes
+  the question. Running upstream's hooks locally is what keeps their
+  prettier-enforcing CI (their PR #25) from bouncing the contribution on
+  formatting.
+- Result: Branch pushed, all hooks pass. The PR is opened by hand: `gh` is not
+  installed on this machine.
+
 ## D-157: Every install hint names the distribution, and survives rich (2026-08-06)
 - Decided by: Claude (for Ghassen Naouar), from testing every optional extra as a user
 - Decision: The two remaining unescaped hints are escaped (`cli.py`'s `--events`
