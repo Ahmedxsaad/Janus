@@ -390,6 +390,7 @@ def seed_ml_graph(conn: DataHubConnection) -> SeedResult:
 def main() -> None:
     """Entry point for the ``janus-seed`` command."""
     from rich.console import Console
+    from rich.markup import escape
 
     from janus.client import DataHubConnectionError, connect
 
@@ -402,7 +403,7 @@ def main() -> None:
         # token is missing, GMS rejects the write and the error says so.
         conn = connect()
     except DataHubConnectionError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise SystemExit(1) from exc
 
     console.print(f"Seeding the ML graph into [bold]{conn.gms_url}[/bold]")

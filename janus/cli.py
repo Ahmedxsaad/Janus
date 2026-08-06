@@ -26,6 +26,7 @@ from datahub.metadata.schema_classes import MLModelPropertiesClass
 from datahub.metadata.urns import DatasetUrn, MlFeatureUrn, MlModelUrn, SchemaFieldUrn, Urn
 from datahub.sdk.search_filters import FilterDsl as F
 from rich.console import Console
+from rich.markup import escape
 
 from janus import companion as companion_module
 from janus.adapters import ADAPTERS, AdapterError, DeclaredLink, read_declaration
@@ -40,6 +41,7 @@ from janus.client import (
     is_local_gms,
 )
 from janus.config import SCORE_PROVENANCE, SCORING_VERSION, ScanConfig
+from janus.detect.coverage import MODEL_CHECKS
 from janus.detect.guard_coverage import CatalogCoverage, ModelCoverage, aggregate
 from janus.discovery import search_model_urns
 from janus.env import ConfigError, scrub
@@ -413,10 +415,16 @@ def _print_not_evaluated(report: ScanReport) -> None:
 def _print_clean(report: ScanReport) -> None:
     """Render a scan that found nothing: what passed, what never ran, any warnings."""
     targets = [urn for urn in (report.table_urn, report.model_urn) if urn is not None]
-    # A table target buys one check (freshness); a model target buys two (target
-    # leakage, schema drift). Every gap is one of those checks that never ran, so
-    # the difference is how many actually measured something.
-    asked = (1 if report.table_urn else 0) + (2 if report.model_urn else 0)
+    # A table target buys the one check asked of a table (freshness); a model
+    # target buys every check in MODEL_CHECKS. Counted from that tuple and never
+    # from a literal here: this read `2` for target leakage and schema drift,
+    # which was right until three more model detectors landed, and a scan of a
+    # model whose two gaps were the unconfigured classification checks then
+    # computed ran == 0 and announced "Nothing was evaluated" over a leakage and
+    # a drift check that had both just run clean. MODEL_CHECKS is pinned by a
+    # test against what a bare model actually produces, so a new detector cannot
+    # make this stale again (D-152).
+    asked = (1 if report.table_urn else 0) + (len(MODEL_CHECKS) if report.model_urn else 0)
     ran = asked - len(report.not_evaluated)
 
     if ran == asked:
@@ -553,7 +561,7 @@ def _prepare(
     except ConfigError as exc:
         # A half-configured LLM, or an unusable threshold. Both are mistakes the
         # operator wants to hear about now, not after a bland report lands.
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
 
     try:
@@ -562,14 +570,14 @@ def _prepare(
         # would break the judge's out-of-the-box path.
         conn = connect()
     except DataHubConnectionError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=1) from exc
 
     try:
         table_urn = resolve_table(conn, table) if table is not None else None
         model_urn = resolve_model(conn, model) if model is not None else None
     except (TableResolutionError, ModelResolutionError) as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
 
     if writes and not conn.has_token:
@@ -904,7 +912,7 @@ def _run_review(
             conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm, approve=_approve
         )
     except AgentUnavailableError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=1) from exc
 
     if report.clean:
@@ -949,10 +957,10 @@ def _scan_all_models(
         llm = _resolve_llm(no_llm=no_llm, provider=llm_provider, model=llm_model)
         conn = connect()
     except ConfigError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
     except DataHubConnectionError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=1) from exc
 
     model_urns = _model_urns(conn)
@@ -1262,7 +1270,7 @@ def watch(
     try:
         log_format = configure_logging(level=logging.INFO, stream=sys.stderr)
     except ConfigError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
     console.print(f"[dim]logging: {log_format}[/dim]")
 
@@ -1274,7 +1282,7 @@ def watch(
     try:
         metrics = start_exporter()
     except ConfigError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
     if metrics is not None:
         console.print("[dim]exporting scan metrics over OTLP[/dim]")
@@ -1308,7 +1316,7 @@ def watch(
         try:
             mcl = mcl_config_from_env()
         except ConfigError as exc:
-            console.print(f"[red]{exc}[/red]")
+            console.print(f"[red]{escape(str(exc))}[/red]")
             raise typer.Exit(code=2) from exc
         if mcl is None:
             console.print(
@@ -1329,7 +1337,7 @@ def watch(
                 argos=argos,
             )
         except ConfigError as exc:
-            console.print(f"[red]{exc}[/red]")
+            console.print(f"[red]{escape(str(exc))}[/red]")
             raise typer.Exit(code=2) from exc
         except KeyboardInterrupt:
             console.print("\n[dim]watch stopped.[/dim]")
@@ -1447,7 +1455,7 @@ def companion(
         configure_logging(level=logging.INFO, stream=sys.stderr)
         watched_owner = owner or companion_module.owner_urn()
     except ConfigError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
 
     conn = connect(require_token=False)
@@ -1618,7 +1626,7 @@ def gate(
         )
         verdict = evaluate(report, policy)
     except Exception as exc:
-        console.print(f"[red]{safe_error(exc)}[/red]")
+        console.print(f"[red]{escape(safe_error(exc))}[/red]")
         raise typer.Exit(code=EXIT_ERROR) from exc
 
     # The verdict on the run's own summary page, where the reviewer already is,
@@ -1673,10 +1681,10 @@ def inventory(
         config = ScanConfig.from_env()
         conn = connect()
     except ConfigError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
     except DataHubConnectionError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=1) from exc
 
     model_urns = _model_urns(conn, limit=limit)
@@ -1738,7 +1746,7 @@ def finops(
         typer.Option("--days", help="Idle window before a model counts as unused."),
     ] = None,
 ) -> None:
-    """List the tables that exist only to feed models nothing uses (T-18).
+    """List the tables that exist only to feed models nothing uses.
 
     The one command here whose reader is a budget holder rather than an engineer.
     Nothing is broken, so nothing is written and no incident is raised: a model
@@ -1756,10 +1764,10 @@ def finops(
             config = replace(config, unused_model_days=days)
         conn = connect()
     except ConfigError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
     except DataHubConnectionError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=1) from exc
 
     model_urns = _model_urns(conn, limit=limit)
@@ -1830,7 +1838,7 @@ def coverage(
         ),
     ] = False,
 ) -> None:
-    """Report what fraction of this catalog's models each check can run against (T-15).
+    """Report what fraction of this catalog's models each check can run against.
 
     `inventory` answers the question one model at a time. This is the same sweep
     folded into the figure a platform lead reports upward: how observable is this
@@ -1849,10 +1857,10 @@ def coverage(
         config = ScanConfig.from_env()
         conn = connect()
     except ConfigError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
     except DataHubConnectionError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=1) from exc
 
     model_urns = _model_urns(conn, limit=limit)
@@ -1921,6 +1929,80 @@ def _print_proposal(proposal: LinkProposal) -> None:
             console.print(f"  {index}. {DatasetUrn.from_string(urn).name}")
     console.print("\n[bold]Proposed:[/bold]")
     console.print(proposal.command())
+
+
+def _with_typed_flags(
+    conn: DataHubConnection,
+    proposal: LinkProposal,
+    *,
+    feature_urn: str | None,
+    label_column: str | None,
+    label_table: str | None,
+    exclude: list[str] | None,
+) -> LinkProposal:
+    """Fold the flags the user typed into an inferred proposal.
+
+    A typed flag always wins over an inference, and the link that gets written
+    already respects that. This makes what is *printed* respect it too. Without
+    it, somebody who ran ``--infer --label-column churned`` is shown a proposal
+    still reporting the label as NOT FOUND, with no ``--label-column`` in the
+    rendered command, and is then asked to confirm it: they would be approving
+    one command and writing a different one, which is exactly the trust the
+    reasons block exists to earn.
+
+    Args:
+        conn: An open connection, used only to resolve ``--label-table``.
+        proposal: What the graph or a declaration inferred.
+        feature_urn: The already-resolved ``--features``, or None.
+        label_column: The typed ``--label-column``, or None.
+        label_table: The typed ``--label-table``, or None.
+        exclude: The typed ``--exclude`` values, or None.
+
+    Returns:
+        The proposal with every typed field overridden, and one reason line per
+        override recording that it came from the command line rather than the
+        graph.
+
+    Raises:
+        TableResolutionError: ``--label-table`` names a table not in the catalog.
+    """
+    reasons = list(proposal.reasons)
+    changes: dict[str, object] = {}
+
+    if feature_urn is not None and feature_urn != proposal.feature_dataset_urn:
+        changes["feature_dataset_urn"] = feature_urn
+        name = DatasetUrn.from_string(feature_urn).name
+        reasons.append(f"feature table: {name}, from --features")
+
+    if label_column is not None:
+        # The label lives on --label-table when given, otherwise on whichever
+        # feature table is in force after the override above.
+        parent = (
+            resolve_table(conn, label_table)
+            if label_table is not None
+            else changes.get("feature_dataset_urn", proposal.feature_dataset_urn)
+        )
+        if parent is not None:
+            changes["label_column_urn"] = str(SchemaFieldUrn(str(parent), label_column))
+            reasons.append(f"label column: {label_column}, from --label-column")
+
+    if exclude:
+        changes["exclude"] = frozenset(exclude)
+        reasons.append(f"excluded columns: {', '.join(sorted(exclude))}, from --exclude")
+
+    if not changes:
+        return proposal
+
+    # Drop the inference's own line for a field the user overrode, so the block
+    # does not report a column NOT FOUND two lines above the column they typed.
+    overridden = {
+        "feature_dataset_urn": "feature table:",
+        "label_column_urn": "label column:",
+        "exclude": "excluded columns:",
+    }
+    stale = tuple(overridden[key] for key in changes)
+    kept = [reason for reason in reasons[: len(proposal.reasons)] if not reason.startswith(stale)]
+    return replace(proposal, reasons=tuple(kept + reasons[len(proposal.reasons) :]), **changes)  # type: ignore[arg-type]
 
 
 def _print_declaration(declaration: DeclaredLink) -> None:
@@ -2023,10 +2105,10 @@ def _link_all(*, dry_run: bool, named: tuple[object, ...]) -> None:
         config = ScanConfig.from_env()
         conn = connect()
     except ConfigError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
     except DataHubConnectionError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=1) from exc
 
     recorded = models_with_recorded_link(conn)
@@ -2056,7 +2138,7 @@ def _link_all(*, dry_run: bool, named: tuple[object, ...]) -> None:
         except LinkError as exc:
             # One model whose feature table was dropped must not stop the rest:
             # the whole point of the sweep is that everything else stays checked.
-            console.print(f"[red]{name}[/red]  {exc}")
+            console.print(f"[red]{name}[/red]  {escape(str(exc))}")
             continue
         console.print(
             f"[green]{name}[/green]  {len(result.feature_urns)} feature(s), "
@@ -2264,19 +2346,33 @@ def link(
                 label_table=label_table,
             )
         except (AdapterError, TableResolutionError, LinkError) as exc:
-            console.print(f"[red]{exc}[/red]")
+            console.print(f"[red]{escape(str(exc))}[/red]")
             raise typer.Exit(code=2) from exc
     elif infer:
         try:
             proposal = infer_link(conn, config, model_urn)
         except LinkError as exc:
-            console.print(f"[red]{exc}[/red]")
+            console.print(f"[red]{escape(str(exc))}[/red]")
             raise typer.Exit(code=2) from exc
 
     if proposal is not None:
-        _print_proposal(proposal)
         # An explicitly typed flag always wins: a proposal proposes, it never
-        # overrules somebody who already knows the answer.
+        # overrules somebody who already knows the answer. Fold those flags in
+        # before printing, so the command shown for confirmation is the command
+        # that will run (D-150).
+        try:
+            proposal = _with_typed_flags(
+                conn,
+                proposal,
+                feature_urn=feature_urn,
+                label_column=label_column,
+                label_table=label_table,
+                exclude=exclude,
+            )
+        except TableResolutionError as exc:
+            console.print(f"[red]{escape(str(exc))}[/red]")
+            raise typer.Exit(code=2) from exc
+        _print_proposal(proposal)
         features = features or proposal.feature_dataset_urn
         feature_urn = feature_urn or proposal.feature_dataset_urn
         if not exclude and proposal.exclude:
@@ -2312,7 +2408,7 @@ def link(
                 resolve_table(conn, label_table) if label_table is not None else feature_urn
             )
         except TableResolutionError as exc:
-            console.print(f"[red]{exc}[/red]")
+            console.print(f"[red]{escape(str(exc))}[/red]")
             raise typer.Exit(code=2) from exc
         if label_dataset_urn is None:
             console.print("[red]--label-column needs --label-table, or --features.[/red]")
@@ -2352,7 +2448,7 @@ def link(
             dry_run=dry_run,
         )
     except LinkError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
 
     console.print(f"features    {len(result.feature_urns)} declared on {result.model_urn}")
@@ -2410,7 +2506,7 @@ def model_card(
         typer.Option("--write/--dry-run", help="Publish to DataHub, or print and write nothing."),
     ] = False,
 ) -> None:
-    """Generate a model card for one model, from what the catalog records (T-12).
+    """Generate a model card for one model, from what the catalog records.
 
     Intended use where somebody declared it, where the training data came from,
     the trust score with its waterfall, the findings open against it, and the
@@ -2436,7 +2532,7 @@ def evidence_pack(
         typer.Option("--write/--dry-run", help="Publish to DataHub, or print and write nothing."),
     ] = False,
 ) -> None:
-    """Assemble the EU AI Act Article 10 evidence pack for one model (T-13).
+    """Assemble the EU AI Act Article 10 evidence pack for one model.
 
     Training-data provenance, the input schema at training time, governance
     findings, record-keeping, and ownership, mapped to Article 10 and Article 12
@@ -2465,7 +2561,7 @@ def feature_card(
         typer.Option("--write/--dry-run", help="Publish to DataHub, or print and write nothing."),
     ] = False,
 ) -> None:
-    """Generate a Data Card for each of a model's features (T-19).
+    """Generate a Data Card for each of a model's features.
 
     Where the feature is computed from, hop by hop; every table that derivation
     crosses and how current each one is; whether it reaches a column classified
