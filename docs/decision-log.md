@@ -16,6 +16,59 @@ Entry template:
 
 ---
 
+## D-145: The rename silently broke leakage detection on the live graph (2026-08-06)
+- Decided by: Claude (for Ahmed Saad), found during a post-merge end-to-end
+  pass on the live VM (PR #65 merged, `janus-watch` restarted onto the
+  rebuilt image, then every read path exercised: `inventory`, `gate`, the
+  frontend).
+- Decision: `janus inventory` reported `credit_risk_v3` as `not checked:
+  target leakage, schema drift, sensitive source, proxy candidate` -
+  everything except freshness, which is why `janus-watch`'s continuous
+  scanning had not surfaced this: the freshness/blast-radius path never
+  reads the label term, so it kept finding and writing normally the whole
+  time and gave no signal anything else was wrong.
+  The cause: `config.py`'s default `label_term_urn` moved from
+  `urn:li:glossaryTerm:modelguard.label` to `...janus.label` as part of
+  D-136's rename, which is correct for a fresh graph. This graph is not
+  fresh - it was seeded before the rename - so the `schemaField` it depends
+  on carries the term at the *old* URN, and the code now looks for a term
+  that, on this specific graph, does not exist. Confirmed directly:
+  `search(type: GLOSSARY_TERM, query: "label")` returned only
+  `modelguard.label` before the fix. This is the same class of bug as
+  D-142/D-143's domain gap and D-142's own GHCR-path staleness: a rename
+  changes what the code expects, and nothing updates data that already
+  exists under the old expectation.
+- Options considered: (a) set `JANUS_LABEL_TERM_URN` in `.env` to the old
+  URN, leaving the graph as-is; (b) rerun `janus-seed`, which is documented
+  idempotent and declares the term under whatever the current code expects;
+  (c) hand-write a new `glossaryTermInfo` at the new URN and reattach it.
+- Why (b): checked first, not assumed - `seed_ml_graph.py` never touches the
+  `operation` aspect, so rerunning it could not disturb the freshness lag
+  `janus-watch` has been continuously detecting and re-raising, which is the
+  actual demo state a judge is meant to see stay open. `add_term`'s own
+  docstring says it "preserves every term already on it," so the fix is
+  additive: the stale `modelguard.label`/`modelguard.leakage-risk` terms are
+  left in place as inert leftovers (same call as D-143 made for the retired
+  domain - harmless, nothing depends on them, not worth a special deletion
+  step) while `janus.label` is newly attached alongside them. (a) would have
+  worked too but leaves the mismatch latent for the next fresh-graph reader;
+  (c) duplicates what seed already does correctly.
+- Result: `janus-seed` rerun against the live graph. `janus.label` now
+  exists and is attached to `loans_raw.default_status`. `janus gate --model
+  credit_risk_v3 --block-at-or-above high` immediately went from four
+  `not evaluated` lines to the real finding
+  (`prior_default_flag derives from label default_status`, severity
+  critical, exit 1, BLOCKED) with its counterfactuals intact - the same
+  finding this project's README leads with. Schema drift's baseline came
+  back at the same time (its own `not evaluated` reason, a missing
+  `janus.training_schema` snapshot, is gone too), which `seed_training_run`
+  apparently also (re)writes; not traced further since the fix already
+  covers it. Sensitive source and proxy candidate remain `not evaluated`
+  correctly - those need `JANUS_SENSITIVE_*`/`JANUS_PROTECTED_ATTRIBUTE_*`
+  set, which was never configured on this VM and is unrelated to the rename.
+
+---
+
 ## D-144: The GitHub repository is renamed to janus (2026-08-06)
 - Decided by: Ahmed Saad (name); executed by Ahmed Saad via the GitHub UI
   (`Ahmedxsaad/DataHub` -> `Ahmedxsaad/Janus`, case-insensitive in GitHub's
