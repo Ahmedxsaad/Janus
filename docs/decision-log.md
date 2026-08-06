@@ -16,6 +16,69 @@ Entry template:
 
 ---
 
+## D-143: The live VM migrated to Janus, and swap doubled ahead of judging (2026-08-06)
+- Decided by: Claude (for Ahmed Saad), executed directly over SSH with the
+  user's Cloudflare DNS change already in place and a GitHub token supplied
+  for the pull (the repo is currently private; see the note below).
+- Decision: The demo VM (`20.199.72.198`, started by the user for this work)
+  was brought fully onto Janus and given a larger swap margin:
+  1. `modelguard-watch.service` stopped and disabled; its container was
+     already gone (the unit's own `ExecStop` had handled that on the earlier
+     `systemctl stop`).
+  2. The repo moved from `/opt/modelguard/DataHub` to `/opt/janus/DataHub`,
+     matching `cloud-init.yaml`'s own path rather than editing the path back
+     out of the tracked `janus-watch.service` unit. Checked first: nothing
+     else on the VM referenced the old path.
+  3. `git fetch`/`checkout main`/`reset --hard origin/main`, 183 commits, from
+     a branch (`feat/real-project-usability`) confirmed merged into `main`
+     first (`git merge-base --is-ancestor`), so nothing local was discarded.
+  4. `docker compose build janus` against the current `Dockerfile`, using its
+     default `JANUS_EXTRAS=agent,mcp`, same as before.
+  5. `janus-watch.service` (the tracked unit) installed, `daemon-reload`,
+     `enable --now`. Confirmed running, not crash-looping: a real scan logged
+     `dry_run=false findings=1 writes=1`, and the incident write said `reused
+     (already open)`, not a fresh one, which is the idempotency claim actually
+     holding under a real rerun rather than assumed.
+  6. `/etc/caddy/Caddyfile` repointed at `janus.ahmedxsaad.me` (the user had
+     already added the Cloudflare A record) and `caddy reload`d. Confirmed via
+     the Caddy log (`certificate obtained successfully`) and externally
+     (`HTTP/2 200`, real `<title>DataHub</title>` in the response).
+  7. Swap doubled, 4G to 8G (`swapoff`/`fallocate`/`mkswap`/`swapon`, live, no
+     downtime), and `cloud-init.yaml` updated to match so a fresh provision
+     starts at 8G too. Requested proactively (D-065/D-071's OpenSearch OOM
+     history), not in response to a repeat: `free -h` showed 3Gi available and
+     57Mi of the old 4G swap in use at the time, so this is margin for
+     concurrent access during the judging window, not a fix for an observed
+     shortfall this time.
+- Options considered, swap size: (a) leave it at 4G, since nothing was
+  currently under pressure; (b) double it to 8G; (c) resize the VM to a
+  larger SKU instead. (b) over (a) because the ask was explicitly
+  precautionary and the cost is free (31G disk still free after the image
+  rebuild); over (c) because a SKU change means downtime and a budget
+  conversation neither of which this warranted for a problem that has not
+  recurred since D-071's fix.
+- A live finding, unrelated to the plan but blocking either way: `gh repo
+  view` shows the repository is **private**. The hackathon's submission
+  requirements need it public with the Apache 2.0 license visible in the
+  About section; a private repo fails that regardless of anything in this
+  entry. Left unchanged here because making a repository public is a
+  one-way, visible action this session did not have standing to take
+  unprompted; flagged directly to the user instead.
+- Result: `https://janus.ahmedxsaad.me` is the live, correct demo URL, TLS
+  included. `https://modelguard.ahmedxsaad.me`'s DNS record and the VM's
+  public IP are untouched; Caddy simply has no site block for it anymore, so
+  it stops answering rather than serving anything stale, and nothing in this
+  repo depended on it once `janus` resolved. `docs/deploy/azure-vm.md`'s two
+  D-142 "pending" callouts are updated in place to say what actually happened
+  rather than left to rot the way the paragraphs D-142 itself was about
+  already had once. The one item still open from that entry, the `az`
+  resource-group/NSG names, stays open: this round of work never touched NSG
+  rules (80/443 were already allowed from the original setup), so it
+  confirms nothing about whether those literal values match the real Azure
+  resource names.
+
+---
+
 ## D-142: The Janus rename left the live domain and two historical claims behind (2026-08-06)
 - Decided by: Claude (for Ahmed Saad).
 - Decision: An audit prompted by "modelguard was renamed, check everywhere,
