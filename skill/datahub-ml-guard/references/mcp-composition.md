@@ -87,6 +87,8 @@ question, Janus answers the part that has to be right.
 > 4. `janus` `check_gate` gives the same verdict as a policy: pass, block,
 >    or "could not tell", which is what the CI job will return.
 
+And a second one, starting from the table rather than the model:
+
 > **"Which of our models are affected by `loans_raw` being stale?"**
 >
 > 1. `janus` `check_freshness` measures the staleness and traverses the
