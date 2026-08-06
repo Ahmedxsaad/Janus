@@ -16,6 +16,37 @@ Entry template:
 
 ---
 
+## D-147: janus-argos publishes itself, on its own tag namespace (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), with Ghassen Naouar choosing to
+  publish rather than withdraw the extra
+- Decision: build-argos.yml gains a `publish` job (PyPI Trusted Publishing,
+  environment `pypi`, `skip-existing`) and a `release` job that attaches the
+  Linux bundles, and it triggers on a new `argos-v*.*.*` tag as well as on the
+  product's `v*.*.*`.
+- Options considered: (a) publish janus-argos on its own `argos-v` tag,
+  (b) publish it on the shared `v*.*.*` tag only, bumping janus-datahub to
+  0.1.1 to get a tag that PyPI would accept, (c) drop the `pet` extra and ship
+  the window as a download only.
+- Why: janus-datahub 0.1.0 is published and its `pet` extra pins
+  `janus-argos==0.1.0`, but janus-argos was never published anywhere:
+  build-argos.yml only called upload-artifact, which puts a wheel in a 90-day
+  Actions artifact nobody can install from. So `pip install
+  "janus-datahub[pet]"` fails to resolve on macOS and Windows today, and the
+  Linux `.deb`/`.AppImage` route the README points at has nothing behind it.
+  (b) would burn a janus-datahub version number to ship a change that touches
+  no Python, and would couple the two versions forever; with (a) the already
+  published 0.1.0 becomes correct the moment janus-argos 0.1.0 lands, with no
+  republish and no change to the pin. (c) was the honest alternative to a
+  broken promise and is what to fall back to if the publisher setup cannot be
+  done before the deadline.
+- Result: The two distributions version independently. A product tag still
+  builds and publishes the window, and finds its version already on PyPI in
+  the ordinary case, which is why the publish step runs with `skip-existing`
+  rather than a tag-equals-version guard; that guard applies to `argos-v` tags,
+  where the tag really does name the crate's version. Requires one one-time
+  pending publisher on PyPI (docs/deploy/pypi-release.md), which is the only
+  step that cannot be done from this repository.
+
 ## D-146: Argos CI, never run before the tag, failed on all four platforms (2026-08-06)
 - Decided by: Claude (for Ghassen Naouar), after the v0.1.0 tag push
 - Decision: Give the Linux smoke step a virtual display (xvfb-run), and give

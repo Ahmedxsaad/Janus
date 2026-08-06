@@ -5,12 +5,13 @@ on a `v*.*.*` tag. It authenticates with **Trusted Publishing** (OIDC), so
 there is no API token stored in this repository. That means one piece of
 setup has to happen on PyPI's side, once, before the first release.
 
-**Status, 2026-08-01:** the pending publisher has been created on PyPI, so the
-one-time setup below is done. Nothing is published yet: the authoritative
-check, `https://pypi.org/simple/janus-datahub/`, still returns 404. The
-first release is deliberately deferred until closer to submission, so the
-published version matches the final submitted state rather than an
-intermediate one. Skip to [Cutting a release](#cutting-a-release).
+**Status, 2026-08-06:** janus-datahub 0.1.0 is published;
+`https://pypi.org/simple/janus-datahub/` returns 200. The one-time setup below
+is done for it and does not need repeating. `janus-argos` is a second, separate
+project and is **not** published: its `/simple/` index still returns 404, which
+is what makes `pip install "janus-datahub[pet]"` fail to resolve on macOS and
+Windows. Its own one-time setup is in
+[The second distribution](#the-second-distribution-janus-argos).
 
 Do not check whether a project exists by loading `pypi.org/project/<name>/` in
 a script: PyPI answers automated requests with a bot-challenge page that
@@ -99,12 +100,70 @@ git push origin v0.1.0
 Pushing the tag fires both publish workflows: this one, and
 `publish-image.yml`, which pushes the container image to GHCR.
 
+## The second distribution: janus-argos
+
+`janus-datahub[pet]` depends on `janus-argos`, a **separate PyPI project**
+built by `.github/workflows/build-argos.yml`. It has to be separate: the
+window is a Rust binary, so it is one platform wheel per OS, while
+janus-datahub is a single pure wheel for all of them
+(`argos/pyproject.toml`). Two distributions means two pending publishers and
+two release routes.
+
+Linux is not on PyPI at all. The binary links the system webkit2gtk, which no
+manylinux tag permits, so the `.deb` and the `.AppImage` are attached to the
+GitHub release instead and the extra carries a
+`platform_system != 'Linux'` marker.
+
+### One-time setup, on PyPI
+
+Same pending-publisher flow as above, with different values:
+
+- PyPI project name: `janus-argos`
+- Owner: `Ahmedxsaad`
+- Repository name: `janus`
+- Workflow name: `build-argos.yml`
+- Environment name: `pypi`
+
+The environment is deliberately the same one janus-datahub publishes from, so
+a reviewer requirement configured once covers both. PyPI still treats these as
+two distinct publishers, because the workflow filename differs.
+
+### Cutting an Argos release
+
+The crate versions independently, so it has its own tag namespace and a
+`v0.2.0` product release never has to move `argos/Cargo.toml`:
+
+```bash
+# 1. bump `version` in argos/Cargo.toml, commit, PR, merge to main
+git checkout main && git pull origin main
+
+# 2. tag the merge commit and push the tag
+git tag argos-v0.1.0
+git push origin argos-v0.1.0
+```
+
+A product `v*.*.*` tag builds and publishes the window too, so the wheel exists
+on the day the Python package goes out. In that case the crate version is
+usually already on PyPI, which is the normal case and not a failure: the
+publish step runs with `skip-existing`, uploads nothing, and passes.
+
 ## Verifying a release
 
 ```bash
 pip install janus-datahub==0.1.0
 janus --help
 ```
+
+On macOS or Windows, the window is its own check:
+
+```bash
+pip install "janus-datahub[pet]"
+python -c "import shutil; print(shutil.which('janus-argos'))"
+```
+
+Do not reach for `janus-argos --help`: it takes no arguments and opens a
+window. What the wheel has to prove is that the binary landed on PATH, which
+is what `janus watch --pet` looks for.
 
 Install into a throwaway virtualenv, not the development one: installing the
 published package over an editable install of the same project silently
