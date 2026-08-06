@@ -21,6 +21,14 @@ name: Build Argos
 on:
   push:
     tags:
+      # janus-argos versions independently of janus-datahub, so it has its own
+      # tag namespace. Publishing the window must not burn a version number on
+      # the Python distribution, and a Python-only fix must not force the crate
+      # to move: they are two distributions on purpose (argos/pyproject.toml).
+      - "argos-v*.*.*"
+      # A product release still builds and publishes the window it ships with,
+      # which is what makes `janus-datahub[pet]` installable on the day the
+      # Python package goes out.
       - "v*.*.*"
   # Buildable on demand as well: the compile is the slow part of reviewing a
   # change to the crate, and nobody should have to cut a tag to find out.
@@ -104,10 +112,89 @@ jobs:
           cargo install tauri-cli --version "^2" --locked
           cargo tauri build
 
+      # Wheels and bundles go to separate artifacts because they have separate
+      # destinations: the wheels are merged into one directory and uploaded to
+      # PyPI, the bundles are attached to the GitHub release. Merging them from
+      # a single per-OS artifact would mean unpicking the two apart again.
+      - uses: actions/upload-artifact@v4
+        if: matrix.wheel
+        with:
+          name: argos-wheel-${{ matrix.os }}
+          if-no-files-found: error
+          path: argos/dist/*.whl
+
       - uses: actions/upload-artifact@v4
         with:
-          name: argos-${{ matrix.os }}
+          name: argos-bundle-${{ matrix.os }}
           if-no-files-found: warn
-          path: |
-            argos/dist/*.whl
-            argos/target/release/bundle/**/*
+          path: argos/target/release/bundle/**/*
+
+  # Only the wheels, and only on a tag. PyPI will not take the Linux binary at
+  # all (it links the system webkit2gtk, which no manylinux tag permits), so
+  # Linux reaches users through the release attachment below instead.
+  publish:
+    name: publish janus-argos to PyPI
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/janus-argos
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: argos-wheel-*
+          merge-multiple: true
+          path: dist/
+
+      # An `argos-v` tag names a version of the crate, so a tag that disagrees
+      # with Cargo.toml is a mistake rather than something to publish anyway.
+      # The check is skipped for a `v` product tag, which names the Python
+      # distribution's version and says nothing about the crate's.
+      - name: The tag matches the version in Cargo.toml
+        if: startsWith(github.ref_name, 'argos-v')
+        run: |
+          tag="${GITHUB_REF_NAME#argos-v}"
+          cargo="$(python3 -c 'import tomllib,pathlib; print(tomllib.loads(pathlib.Path("argos/Cargo.toml").read_text())["package"]["version"])')"
+          if [ "$tag" != "$cargo" ]; then
+            echo "::error::tag $GITHUB_REF_NAME implies version $tag, but argos/Cargo.toml declares $cargo"
+            exit 1
+          fi
+          echo "tag and Cargo.toml agree on $cargo"
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # The crate's version moves on its own schedule, so a product tag
+          # will usually carry a janus-argos that is already on PyPI. That is
+          # the normal case here, not a failure: skip it and publish nothing.
+          skip-existing: true
+
+  # The Linux install route. Unsigned, which matters only for a download: pip
+  # sets neither the macOS quarantine attribute nor the Windows mark of the
+  # web, so a wheel-installed binary starts without a Gatekeeper or SmartScreen
+  # prompt and a downloaded bundle does not.
+  release:
+    name: attach the bundles to the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: argos-bundle-*
+          path: bundles/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bundles/**/*.deb
+            bundles/**/*.AppImage
+            bundles/**/*.dmg
+            bundles/**/*.msi
