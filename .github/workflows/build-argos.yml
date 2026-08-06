@@ -66,7 +66,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev patchelf
+            libayatana-appindicator3-dev librsvg2-dev patchelf xvfb
 
       - name: the stdin parser
         working-directory: argos
@@ -79,8 +79,13 @@ jobs:
       # The transport, checked on the platform rather than assumed. One event
       # in, and the process must still be alive: a binary that cannot read its
       # own stdin is a window that will never show anything.
+      #
+      # Linux runs under a virtual display. GTK is initialised before the stdin
+      # thread starts, so with no DISPLAY the process aborts on
+      # "Failed to initialize GTK" and never reaches the transport this step
+      # exists to check. macOS and Windows runners have a real window server.
       - name: smoke the stdio transport
-        run: python .github/scripts/smoke_argos.py
+        run: ${{ startsWith(matrix.os, 'ubuntu') && 'xvfb-run -a' || '' }} python .github/scripts/smoke_argos.py
 
       - name: build the wheel
         if: matrix.wheel
