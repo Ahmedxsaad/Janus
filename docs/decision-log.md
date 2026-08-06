@@ -16,6 +16,34 @@ Entry template:
 
 ---
 
+## D-146: Argos CI, never run before the tag, failed on all four platforms (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), after the v0.1.0 tag push
+- Decision: Give the Linux smoke step a virtual display (xvfb-run), and give
+  janus-argos its own README.md inside argos/ rather than pointing
+  `project.readme` at docs/plan/08-watchdog-mascot.md.
+- Options considered: for the smoke, (a) xvfb-run on Linux, (b) skip the smoke
+  on Linux, (c) drop the `.expect` in main so a display-less start is not
+  fatal. For the readme, (d) a small argos/README.md, (e) drop the `readme`
+  key entirely, (f) copy the plan doc into argos/ at build time.
+- Why: build-argos.yml triggers only on a `v*.*.*` tag and on demand, so the
+  tag push was its first ever run and both faults shipped unseen. Linux:
+  GTK is initialised before the stdin thread starts, so with no DISPLAY the
+  binary aborts on "Failed to initialize GTK" and never reaches the transport
+  the step exists to check; (b) throws the coverage away and (c) would hide a
+  real startup failure from a user. macOS x2 and Windows: maturin refuses a
+  `project.readme` that resolves outside the metadata root, which is what
+  `../docs/plan/...` does, so all three wheel jobs died at the same step;
+  (e) leaves a published PyPI distribution with a blank page and (f) is a
+  build step to maintain for a file nobody edits.
+- Result: Reproduced both locally before fixing. Headless smoke now confirmed
+  as the Linux fault (exit 101), and `maturin build` gets past the metadata
+  error and produces a wheel whose scripts/ carries the binary.
+  `cargo tauri build` on Linux was checked end to end and is not implicated:
+  it emits the .deb and the .AppImage, and the dmg/msi entries in
+  `bundle.targets` are filtered out per platform as intended. The macOS and
+  Windows jobs are unverifiable from a Linux machine; the tag has to be
+  re-cut, or the workflow dispatched, to confirm they now get past the wheel.
+
 ## D-145: The rename silently broke leakage detection on the live graph (2026-08-06)
 - Decided by: Claude (for Ahmed Saad), found during a post-merge end-to-end
   pass on the live VM (PR #65 merged, `janus-watch` restarted onto the

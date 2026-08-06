@@ -21,7 +21,9 @@ build-backend = "maturin"
 [project]
 name = "janus-argos"
 description = "Argos, the DataHub watchdog: the desktop window for janus-datahub"
-readme = "../docs/plan/08-watchdog-mascot.md"
+# Must resolve inside this directory: maturin refuses a readme that escapes the
+# metadata root, so this cannot point straight at docs/plan/08 and links there.
+readme = "README.md"
 license = "Apache-2.0"
 authors = [{ name = "Janus Contributors" }]
 keywords = ["datahub", "desktop", "mascot", "observability"]
