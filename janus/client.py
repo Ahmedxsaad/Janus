@@ -28,13 +28,25 @@ logged, echoed, or embedded in an exception message.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from datahub.errors import IngestionAttributionWarning
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.sdk.main_client import DataHubClient
 
 from janus.env import optional_value
+
+# The SDK warns on every `entities.upsert` whose entity already exists, quoting
+# the URN and the site-packages path of the calling line. For an ingestion source
+# that is a real signal: it means two sources are fighting over one entity. For
+# Janus it is the designed behaviour. Every write is idempotent read-before-write
+# (root CLAUDE.md rule 5) and re-running a scan is a documented, supported path,
+# so the second run warns on every entity it correctly left alone. Suppressed
+# here, in the one module every writing code path imports to get a connection,
+# rather than at each of the nine upsert call sites.
+warnings.filterwarnings("ignore", category=IngestionAttributionWarning)
 
 ENV_GMS_URL = "DATAHUB_GMS_URL"
 ENV_GMS_TOKEN = "DATAHUB_GMS_TOKEN"
@@ -77,7 +89,8 @@ def _gms_url() -> str:
     url = optional_value(ENV_GMS_URL)
     if url is None:
         raise DataHubConnectionError(
-            f"{ENV_GMS_URL} is not set. Copy .env.example to .env and fill it in. "
+            f"{ENV_GMS_URL} is not set. Export it, or put it in a .env file in "
+            "the directory you run from (a clone has .env.example to copy). "
             "For a local Quickstart the value is http://localhost:8080"
         )
     return url.rstrip("/")
