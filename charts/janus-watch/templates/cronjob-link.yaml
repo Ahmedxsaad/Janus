@@ -4,7 +4,7 @@
 # Why a chart that is named after `watch` also ships this: the join `link`
 # writes is not durable. DataHub's mlflow source upserts the whole
 # `mlModelProperties` aspect on every ingest and drops the features `link`
-# attached (D-074), so on any real ingestion schedule every model silently
+# attached, so on any real ingestion schedule every model silently
 # reverts to "not checked" and the watcher next door keeps running against a
 # graph that no longer says anything about them. A scan reports that honestly
 # rather than calling the model healthy, but somebody still has to notice and
@@ -22,7 +22,7 @@ metadata:
 spec:
   schedule: {{ .Values.link.schedule | quote }}
   # Forbid, not Allow: two replays overlapping is the two-writers case the
-  # replica guard in the Deployment refuses for the same reason (F3).
+  # replica guard in the Deployment refuses for the same reason.
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 3

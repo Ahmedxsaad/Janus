@@ -7,7 +7,7 @@ replicaCount: 1
 # the whole `structuredProperties` aspect, DataHub offers no conditional write,
 # and so the second writer rewrites the aspect from a read taken before the
 # first one landed. The trust score or risk flag it overwrites is gone with no
-# error anywhere (F3). Watch a second target with a second release of this
+# error anywhere. Watch a second target with a second release of this
 # chart, each with its own watch.table/watch.model.
 
 image:
@@ -43,7 +43,7 @@ watch:
 # a graph where nobody has run `link` yet has nothing to replay.
 #
 # Turn it on wherever an ingestion pipeline runs. DataHub's mlflow source drops
-# the features `link` attached every time it ingests the model (D-074), and
+# the features `link` attached every time it ingests the model, and
 # without a replay every model quietly goes back to "not checked" some night
 # nobody was watching.
 link:

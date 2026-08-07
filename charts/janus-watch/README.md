@@ -60,8 +60,8 @@ any cluster with an ingestion pipeline it is the difference between a watcher
 that keeps working and one that quietly has nothing left to check.
 
 The reason it is needed at all: DataHub's mlflow source upserts the whole
-`mlModelProperties` aspect and drops the features `janus link` attached
-(D-074). Every ingest therefore un-links every model, `scan` starts reporting
+`mlModelProperties` aspect and drops the features `janus link` attached.
+Every ingest therefore un-links every model, `scan` starts reporting
 "not evaluated: this model carries a recorded janus link but declares no
 features", and somebody has to notice. `link --all` replays only what each
 model already records, and skips any model nobody has linked, so it writes
