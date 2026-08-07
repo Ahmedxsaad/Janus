@@ -11,6 +11,9 @@ Everything outside `site/` is unreachable once deployed, because the deployment
 is served with this directory as its root. That is not a preference, it is the
 constraint the whole file layout here answers to (D-139).
 
+Deployed at <https://docs.ahmedxsaad.me> (Cloudflare Pages, project
+`janus-docs`; D-160).
+
 ## Local rules
 
 1. **Nothing here may load anything from outside this directory, ever.** Not
@@ -50,6 +53,14 @@ constraint the whole file layout here answers to (D-139).
 8. This page documents the shipped product, so what it claims has to be true of
    the released package. When a command, a flag or an extra changes, this page
    changes in the same commit as the README.
+9. **The three script tags at the foot of the page carry `data-cfasync="false"`,
+   and stay that way.** Cloudflare's Rocket Loader (on by default on the
+   deploying zone) otherwise rewrites a `<script>` tag's `type` attribute to
+   one the browser will not execute, then re-runs it asynchronously through its
+   own loader, out of document order. `pixels.js` defines `window.ArgosSprites`
+   before `argos-guide.js` reads it; reordered, the page renders with no dog
+   and no console error, the same silent-absence failure rule 1 already
+   guards against, from a different cause (D-160).
 
 ## Change Log
 
@@ -70,3 +81,4 @@ constraint the whole file layout here answers to (D-139).
 | 2026-08-05 | Claude (for Ghassen Naouar) | The dog was missing in production and broken everywhere: the page fetched `../argos/`, which the `site/`-rooted deployment cannot reach, and `<canvas id="argos">` collided with `<section id="argos">` so querySelector returned the section. Art is now generated into `pixels.js` and rule 1 forbids reaching outside this directory at all. The bottom strip's translucent wash is gone, replaced by a drawn masonry course, and the page is decorated with pixel Roman ornaments placed where no content reaches (D-139) |
 | 2026-08-05 | Claude (for Ghassen Naouar) | Argos is parked in the bottom right instead of walking a strip across the window, because a walking dog puts an opaque speech bubble wherever he stops and it covered the documentation behind it. The page reserves that corner so the bubble has somewhere to be that is not on top of a paragraph, and the full-width masonry course shrinks to a short ledge under his feet. He still changes pose and line with the section being read (D-140) |
 | 2026-08-06 | Claude (for Ghassen Naouar) | Five explanatory diagrams join the one the page had, each replacing the prose that was describing a mechanism rather than arguing something: what a scan does and where the LLM is not, why a column edge beats a table edge, why cutting one derivation of two does not clear a finding, the ingest that silently drops a link, and the agent's own run entities. All six are drawn by `art/make_diagrams.py` now, including the original, and two tests hold them: the page matches the generator, and every diagram's alt text is a sentence (D-141) |
+| 2026-08-07 | Claude (for Ahmed Saad) | The page deploys to docs.ahmedxsaad.me (Cloudflare Pages). Cloudflare's Rocket Loader silently broke Argos there the same way D-139 did locally, by reordering the three script tags past their dependency on each other; `data-cfasync="false"` opts them out, added as rule 9 (D-160) |
