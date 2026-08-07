@@ -313,7 +313,14 @@
       // three pixels of tail hanging under it, clears his head. The smallest
       // size is a floor rather than a failure: more lines is always better than
       // a sentence cut off at the top of the canvas.
-      for (let scale = this.scale - 1; scale >= 1; scale -= 1) {
+      //
+      // The starting size is fixed at 3, not derived from this.scale (the
+      // sprite's own scale): on the narrow-screen corner box this.scale is 3
+      // (measure()'s width < 240 step), and this.scale - 1 capped every
+      // mobile bubble at 2, a 6px-wide letter, regardless of how much vertical
+      // room layout() actually had to work with. Desktop is unaffected: there
+      // this.scale is 4, so this.scale - 1 was already 3.
+      for (let scale = 3; scale >= 1; scale -= 1) {
         const columns = Math.max(18, Math.floor(room / scale) - 6);
         const lines = wrap(this.message, columns);
         const longest = lines.reduce((most, line) => Math.max(most, textWidth(line)), 0);

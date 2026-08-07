@@ -41,6 +41,12 @@
     <canvas data-piece="temple"></canvas>
     <canvas data-piece="arch"></canvas>
   </div>
+  <p class="caption">
+    Named for the Roman god who stands in every doorway facing both ways at
+    once, the past behind him and the future ahead. That is the seam this
+    tool stands in too: the warehouse's history on one side, a model already
+    serving on the other, and nothing before this project joined the two.
+  </p>
   <div class="cta">
     <a class="go" href="#quickstart">Run the quickstart</a>
     <a class="quiet" href="https://github.com/Ahmedxsaad/janus">Source on GitHub</a>
@@ -54,7 +60,7 @@
     <span>precision naming which feature leaks</span>
   </div>
   <div class="figure">
-    <b>Six</b>
+    <b>Seven</b>
     <span>checks, each with the column chain as proof</span>
   </div>
   <div class="figure">
@@ -117,7 +123,7 @@
   <a href="#inventory">inventory</a>
   <a href="#link">link</a>
   <a href="#scan">scan</a>
-  <a href="#detectors">The six checks</a>
+  <a href="#detectors">The seven checks</a>
   <a href="#counterfactuals">The fix, not just the fault</a>
   <a href="#gate">gate</a>
   <a href="#watch">watch</a>
@@ -173,7 +179,7 @@
     <code>contract_renewed_flag &lt;- churn</code> rather than "something
     upstream of this model looks wrong".
   </p>
-  <div class="viz"><svg viewBox="0 0 720 224" role="img" aria-label="A scan reads column lineage, schemas, timestamps and tags from the graph, decides with six deterministic checks and no language model, and writes back an incident, a model-at-risk tag, a trust score, a guarding assertion, an impact report and a process run. A language model is attached only to the wording of what is written, never to the decision."><defs><marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2b1d13"></path></marker><marker id="wp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9a5d21"></path></marker><marker id="bp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6e1f26"></path></marker></defs><text x="102" y="18" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="11">1  READ THE GRAPH</text><text x="299" y="18" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="11">2  DECIDE</text><text x="558" y="18" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="11">3  WRITE BACK</text><rect x="6" y="26" width="192" height="122" rx="12" fill="#f2ead9" stroke="#e2d5bf"></rect><rect x="20" y="38" width="164" height="22" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="102.0" y="53.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">column lineage</text><rect x="20" y="65" width="164" height="22" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="102.0" y="80.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">schemas</text><rect x="20" y="92" width="164" height="22" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="102.0" y="107.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">timestamps</text><rect x="20" y="119" width="164" height="22" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="102.0" y="134.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">tags and terms</text><rect x="216" y="26" width="166" height="122" rx="12" fill="#f2ead9" stroke="#e2d5bf"></rect><text x="299" y="66" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="14">six checks</text><text x="299" y="86" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="10">deterministic Python</text><path d="M240,102 L358,102" fill="none" stroke="#e2d5bf" stroke-width="1"></path><text x="299" y="124" text-anchor="middle" fill="#9a5d21" font-family="ui-monospace,monospace" font-size="10">no model runs here</text><rect x="400" y="26" width="314" height="122" rx="12" fill="#f2ead9" stroke="#e2d5bf"></rect><rect x="412" y="38" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="483.0" y="56.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">incident</text><rect x="562" y="38" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="633.0" y="56.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">model-at-risk tag</text><rect x="412" y="75" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="483.0" y="93.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">trust score</text><rect x="562" y="75" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="633.0" y="93.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">guarding assertion</text><rect x="412" y="112" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="483.0" y="130.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">impact report</text><rect x="562" y="112" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="633.0" y="130.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">process run</text><path d="M198,87 L212,87" fill="none" stroke="#2b1d13" stroke-width="1.5" marker-end="url(#ap)"></path><path d="M382,87 L396,87" fill="none" stroke="#2b1d13" stroke-width="1.5" marker-end="url(#ap)"></path><rect x="216" y="178" width="166" height="34" rx="8" fill="#f2ead9" stroke="#d8c8ad"></rect><text x="299.0" y="199.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="11">language model</text><path d="M382,192 L470,192 L470,152" fill="none" stroke="#9a5d21" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#wp)"></path><text x="478" y="186" text-anchor="start" fill="#9a5d21" font-family="ui-monospace,monospace" font-size="10">wording only</text></svg><div class="legend"><span><i></i>What a scan does</span><span><i class="dashed"></i>What a language model touches</span></div><p class="note-line">Without an LLM key the wording comes from a template instead, and every verdict is identical.</p></div>
+  <div class="viz"><svg viewBox="0 0 720 224" role="img" aria-label="A scan reads column lineage, schemas, timestamps and tags from the graph, decides with seven deterministic checks and no language model, and writes back an incident, a model-at-risk tag, a trust score, a guarding assertion, an impact report and a process run. A language model is attached only to the wording of what is written, never to the decision."><defs><marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2b1d13"></path></marker><marker id="wp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9a5d21"></path></marker><marker id="bp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6e1f26"></path></marker></defs><text x="102" y="18" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="11">1  READ THE GRAPH</text><text x="299" y="18" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="11">2  DECIDE</text><text x="558" y="18" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="11">3  WRITE BACK</text><rect x="6" y="26" width="192" height="122" rx="12" fill="#f2ead9" stroke="#e2d5bf"></rect><rect x="20" y="38" width="164" height="22" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="102.0" y="53.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">column lineage</text><rect x="20" y="65" width="164" height="22" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="102.0" y="80.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">schemas</text><rect x="20" y="92" width="164" height="22" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="102.0" y="107.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">timestamps</text><rect x="20" y="119" width="164" height="22" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="102.0" y="134.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">tags and terms</text><rect x="216" y="26" width="166" height="122" rx="12" fill="#f2ead9" stroke="#e2d5bf"></rect><text x="299" y="66" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="14">seven checks</text><text x="299" y="86" text-anchor="middle" fill="#a08b76" font-family="ui-monospace,monospace" font-size="10">deterministic Python</text><path d="M240,102 L358,102" fill="none" stroke="#e2d5bf" stroke-width="1"></path><text x="299" y="124" text-anchor="middle" fill="#9a5d21" font-family="ui-monospace,monospace" font-size="10">no model runs here</text><rect x="400" y="26" width="314" height="122" rx="12" fill="#f2ead9" stroke="#e2d5bf"></rect><rect x="412" y="38" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="483.0" y="56.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">incident</text><rect x="562" y="38" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="633.0" y="56.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">model-at-risk tag</text><rect x="412" y="75" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="483.0" y="93.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">trust score</text><rect x="562" y="75" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="633.0" y="93.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">guarding assertion</text><rect x="412" y="112" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="483.0" y="130.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">impact report</text><rect x="562" y="112" width="142" height="28" rx="8" fill="#faf5ea" stroke="#d8c8ad"></rect><text x="633.0" y="130.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="10">process run</text><path d="M198,87 L212,87" fill="none" stroke="#2b1d13" stroke-width="1.5" marker-end="url(#ap)"></path><path d="M382,87 L396,87" fill="none" stroke="#2b1d13" stroke-width="1.5" marker-end="url(#ap)"></path><rect x="216" y="178" width="166" height="34" rx="8" fill="#f2ead9" stroke="#d8c8ad"></rect><text x="299.0" y="199.0" text-anchor="middle" fill="#2b1d13" font-family="ui-monospace,monospace" font-size="11">language model</text><path d="M382,192 L470,192 L470,152" fill="none" stroke="#9a5d21" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#wp)"></path><text x="478" y="186" text-anchor="start" fill="#9a5d21" font-family="ui-monospace,monospace" font-size="10">wording only</text></svg><div class="legend"><span><i></i>What a scan does</span><span><i class="dashed"></i>What a language model touches</span></div><p class="note-line">Without an LLM key the wording comes from a template instead, and every verdict is identical.</p></div>
 </section>
 
 <section id="measured" data-relic="laurel" data-pose="search"
@@ -636,8 +642,8 @@ janus scan --model churn_model --review    # pause, show, write only what you ap
 </section>
 
 <section id="detectors" data-relic="tripod" data-pose="search"
-         data-say="SIX QUESTIONS. EACH ONE SAYS WHAT IT NEEDED WHEN IT COULD NOT ANSWER.">
-  <h2>The six checks, and what each one needs</h2>
+         data-say="SEVEN QUESTIONS. EACH ONE SAYS WHAT IT NEEDED WHEN IT COULD NOT ANSWER.">
+  <h2>The seven checks, and what each one needs</h2>
   <p>
     A scan never reports something healthy that it could not measure. It names
     the check, the missing metadata, and how to supply it.
@@ -691,13 +697,28 @@ janus scan --model churn_model --review    # pause, show, write only what you ap
         <div class="needs">Needs <code>JANUS_PROTECTED_ATTRIBUTE_TAG_URNS</code>, your own taxonomy.</div>
       </div>
     </div>
+    <div class="check">
+      <h4>Table-level risk (degraded mode)</h4>
+      <div>
+        <p>No <code>janus link</code> exists yet, so there is no column to walk
+          and the six checks above correctly stay silent rather than guess.
+          This is the weaker answer in the meantime: the same three facts,
+          read off the model's <em>tables</em> instead of its features, at
+          the measured precision of a table-level read rather than claimed as
+          equivalent to the checks above.</p>
+        <div class="needs">Needs nothing extra: runs in place of the checks above only when a model has no declared features.</div>
+      </div>
+    </div>
   </div>
 
   <h3>The three that read the governance graph</h3>
   <p>
     The first three checks ask whether a model's data is <em>correct</em>. The
     last three ask something the organization has already answered elsewhere in
-    DataHub, and that nothing today joins back to the model.
+    DataHub, and that nothing today joins back to the model. The seventh, table-level
+    risk, is neither: it is what runs in place of all six when there is no
+    column-level link to walk yet, covered on its own card above rather than
+    here.
   </p>
   <p>
     <strong>Sensitive source.</strong> Somebody classified a column as PII, PHI
@@ -1025,7 +1046,7 @@ janus-mcp   # serves check_leakage, check_freshness, check_gate over stdio
   </p>
 </section>
 
-<section id="argos" data-relic="helmet" data-pose="wag"
+<section id="argos" data-relic="temple" data-pose="wag"
          data-say="DOUBLE CLICK A FINDING AND I WALK THE BLAST RADIUS, ONE HOP PER GRAPH HOP.">
   <h2>Argos, the pet on your desktop</h2>
 <pre><code>pip install "janus-datahub[pet]"      # macOS and Windows; Linux: the .deb or
@@ -1202,7 +1223,7 @@ janus-mcp          # the read-only MCP server, over stdio
 </code></pre>
 </section>
 
-<section id="config" data-relic="column" data-pose="scribble"
+<section id="config" data-relic="aqueduct" data-pose="scribble"
          data-say="MISSING MEANS MISSING. I WILL NOT GUESS AT A SERVER, A KEY OR A TAXONOMY.">
   <h2>Configuration</h2>
   <p>
@@ -1303,6 +1324,15 @@ JANUS_COMPANION_OWNER=           # whose assets janus companion sweeps
     on the finding instead of opening a browser at a guess. The Kafka three are
     a group, so setting one of them and not the others fails loudly rather than
     quietly falling back to polling.
+  </p>
+  <p>
+    One key lives outside this: <code>TOOLS_IS_MUTATION_ENABLED</code>, read
+    directly by <code>mcp_ext/raise_incident_tool.py</code> rather than
+    <code>janus/env.py</code>, because it gates the separate OSS contribution
+    to DataHub's own MCP server (<code>janus-mcp</code> above is Janus's own,
+    read-only regardless of this variable). Set it <code>true</code> only to
+    exercise that contribution; nothing in the <code>janus</code> package
+    reads it.
   </p>
 </section>
 
