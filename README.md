@@ -174,7 +174,8 @@ site/          The documentation page published at docs.ahmedxsaad.me
 
 ## Prerequisites
 
-- Linux, Python 3.11 exactly, Docker (about 2 CPUs / 8 GB free for the Quickstart)
+- Linux, Python 3.11-3.13 (development targets 3.11 exactly; 3.12 is verified to
+  behave identically), Docker (about 2 CPUs / 8 GB free for the Quickstart)
 - No credentials are required for a local Quickstart: it ships with metadata
   service authentication disabled. See .env.example for when you need a token.
 - No LLM key is required either, and no particular vendor. Janus uses a
@@ -417,6 +418,7 @@ check, the missing metadata, and how to supply it:
 | Schema drift | a training-time schema snapshot on the training run | `janus link` |
 | Sensitive source | features with source columns, plus `JANUS_SENSITIVE_TAG_URNS` or `..._TERM_URNS` | your classifier, or a human in the UI |
 | Deprecated input | the model's training run, and the `deprecation` aspect | the table's own owners |
+| Proxy candidate | features with source columns, plus `JANUS_PROTECTED_ATTRIBUTE_TAG_URNS` or `..._TERM_URNS` | your classifier |
 
 Already have a glossary term for labels? Point `JANUS_LABEL_TERM_URN` at it
 in `.env` and the detector honors yours instead of creating one.
@@ -447,9 +449,9 @@ That 0.25 is measured, not asserted: it is the table-level baseline scored in
 and the benchmark checks the figure the tool quotes against the one it measures
 on every run.
 
-### The two checks that read the governance graph
+### The three checks that read the governance graph
 
-The first three checks ask whether a model's data is *correct*. The last two ask
+The first three checks ask whether a model's data is *correct*. The last three ask
 something the organization has already answered elsewhere in DataHub, and that
 nothing today joins back to the model.
 
@@ -483,7 +485,20 @@ configuration: `deprecation` is DataHub's own aspect with one meaning everywhere
 It is never more than `medium` severity, because it is a deadline rather than a
 defect.
 
-Both are reversible scenarios, so you can watch them fire and clear:
+**Proxy candidate.** Does a feature share an ancestor with a column classified as
+a protected attribute, without either descending from the other? This looks for a
+fork rather than a chain, which is why it is a separate detector from leakage
+rather than a variant of it. Severity is capped at `medium`, it never escalates
+for a live model, and it contributes nothing to the trust score: it raises a
+question a human has to settle, and a positive-evidence rule cannot settle one.
+
+```bash
+JANUS_PROTECTED_ATTRIBUTE_TAG_URNS=urn:li:tag:ProtectedAttribute
+JANUS_PROTECTED_ATTRIBUTE_TERM_URNS=urn:li:glossaryTerm:Protected.Ethnicity
+```
+
+Sensitive source and deprecated input are reversible scenarios, so you can watch
+them fire and clear:
 
 ```bash
 janus-scenario --scenario sensitive-source

@@ -153,6 +153,3 @@ should not have to hunt for:
 - **Only the providers a given run could reach.** With no API key configured that
   is the template narrator alone, which is the path every offline test and every
   CI run takes.
-
-The wider set of known gaps, including the ones the benchmark cannot see, is in
-[08-evaluation.md](08-evaluation.md).

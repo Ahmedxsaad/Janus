@@ -36,7 +36,7 @@ pytest -m "not integration"
 ```
 
 The layout mirrors the package, so `tests/detect/test_leakage.py` tests
-`janus/detect/leakage.py`. Ninety test modules across `detect/`, `writeback/`,
+`janus/detect/leakage.py`. Eighty test modules across `detect/`, `writeback/`,
 `agent/`, `adapters/`, `seed/`, `benchmarks/` and the cross-cutting modules.
 
 ### Integration: 71 tests

@@ -1,11 +1,12 @@
 # The checks
 
-Six detectors, plus one degraded mode for models nothing has linked yet. Each one
-uses a different slice of the graph, maps to a different write-back, and rests on
-a published result rather than a heuristic somebody liked.
+Seven checks: six detectors that need a column-level link, plus one degraded
+mode that runs in their place for a model that has none yet. Each one uses a
+different slice of the graph, maps to a different write-back, and rests on a
+published result rather than a heuristic somebody liked.
 
 They share one engine, the cross-boundary lineage walk, so they compose one
-product rather than six taped-together features.
+product rather than seven taped-together features.
 
 This page explains what each check looks for and what it needs. How they are
 scored is [08-evaluation.md](08-evaluation.md); how to invoke them is

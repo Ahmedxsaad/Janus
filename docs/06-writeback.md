@@ -251,7 +251,7 @@ Nothing hardcodes a URN string, and a test asserts the spec is self-consistent.
 
 ## Scenarios: the failures, planted and reverted
 
-`janus/seed/scenarios.py`. Nine of them, each writing one fact a deterministic
+`janus/seed/scenarios.py`. Ten of them, each writing one fact a deterministic
 detector will find, and **each reversible**, so a run can prove both directions:
 planted produces a finding, reverted produces none.
 
@@ -266,6 +266,7 @@ planted produces a finding, reverted produces none.
 | Label lookalike | A column named like a label but carrying no term (a confusable negative) |
 | Sensitive source | Classifies a column three joins upstream of a feature |
 | Deprecated input | Marks a training input deprecated |
+| De-linked model | Strips the model's features, the way the next MLflow ingest will |
 
 Every scenario stamps `janus.scenario` into the aspect's custom properties, so a
 reader can tell a planted failure from a real one. Scenarios take the current

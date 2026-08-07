@@ -1,7 +1,7 @@
 """How long Janus's findings stay open, read back out of the graph.
 
-Janus raises incidents and resolves them when the problem goes away
-. It has never measured the gap between the two, which is the one
+Janus raises incidents and resolves them when the problem goes away. It has
+never measured the gap between the two, which is the one
 number that says whether the tool changed anything: a leak caught in eleven
 minutes and a leak caught in eleven days are the same detection and completely
 different outcomes. Mean time to resolution per finding type closes the SRE loop

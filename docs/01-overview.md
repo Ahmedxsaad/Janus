@@ -77,7 +77,7 @@ three ways, scored per feature.
 
 ## What it checks
 
-Six checks, described in full in [04-detectors.md](04-detectors.md):
+Seven checks, described in full in [04-detectors.md](04-detectors.md):
 
 | Check | The question it answers |
 |---|---|
@@ -87,10 +87,13 @@ Six checks, described in full in [04-detectors.md](04-detectors.md):
 | Sensitive source | Which feature descends from a column somebody classified as restricted? |
 | Deprecated input | Is this model trained on a table its owners have marked for removal? |
 | Proxy candidate | Does a feature share an ancestor with a protected attribute? |
+| Table-level risk (degraded mode) | No feature is declared yet. What can the model's *tables* alone say, before anybody runs `janus link`? |
 
-Two of them ask about correctness. The other four ask about something the
+Three of them ask about correctness. Three ask about something the
 organization already decided elsewhere in DataHub and that nothing today joins
-back to a model.
+back to a model. The seventh is not a fourth category: it runs in place of all
+six above, at a lower and honestly measured precision, for the common
+out-of-the-box case where a model has no declared features yet.
 
 ## What it writes
 

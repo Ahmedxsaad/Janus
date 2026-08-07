@@ -282,7 +282,11 @@ claim on somebody's PATH.
 **Dependencies moved off exact `==` pins.** Exact pins fought the resolver and made
 the published package effectively uninstallable alongside anything else.
 
-**Python is pinned to 3.11 exactly.**
+**Python's floor is 3.11, and the ceiling is verified rather than assumed.** A
+`<3.12` ceiling based only on a CLI warning made the package uninstallable on
+every current distro Python; widened after 3.12 was verified to behave
+identically. Development and CI still target 3.11 exactly. See
+[12-operations.md](12-operations.md).
 
 ## The desktop watchdog
 

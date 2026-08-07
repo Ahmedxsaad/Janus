@@ -201,8 +201,10 @@ column itself has nowhere else to live.
 
 ## What Janus generates
 
-Four document types and two machine-readable artifacts, all read entirely out of
-the catalog. Explained in [07-reports.md](07-reports.md).
+Nine artifacts, all read entirely out of the catalog rather than hand-maintained:
+four document types (the first four rows), three portable standards-based
+formats, and two machine-readable output formats for a pipeline that is not
+Janus. Explained in [07-reports.md](07-reports.md).
 
 | Artifact | Command | Standard it follows |
 |---|---|---|

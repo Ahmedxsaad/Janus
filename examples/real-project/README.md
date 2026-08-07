@@ -8,8 +8,8 @@ nothing about it, and a record of what that found (2026-08-01).
 
 It is also a benchmark target now, not only a validation exercise: Janus-Bench
 scores the detectors against the graph **this** stack's ingestion produced, in its
-own section of `benchmarks/RESULTS.md`, never merged with the seeded numbers
-. Stand the stack up as below and `python -m benchmarks.run_bench`
+own section of `benchmarks/RESULTS.md`, never merged with the seeded numbers.
+Stand the stack up as below and `python -m benchmarks.run_bench`
 fills that section in; leave it down and the section says it was not run.
 
 Nothing here is a fixture. It is a public dataset, four dbt models, one

@@ -205,8 +205,8 @@ could not be silenced at all would score identically on the line above.
 
 **These are not production MTTRs, and the distinction matters.** Every number
 below is read straight out of the graph, from `incidentInfo.created` and the
-resolution stamp GMS wrote, for incidents carrying Janus's own run footer
-. But the graph they are read from is the benchmark's: a trial plants a
+resolution stamp GMS wrote, for incidents carrying Janus's own run footer.
+But the graph they are read from is the benchmark's: a trial plants a
 failure, the detector raises, and the next trial reverts the cause, so most of
 these durations are the seconds between a plant and its restore. What they do
 measure is that the raise-and-resolve loop closes at all, per detector, and

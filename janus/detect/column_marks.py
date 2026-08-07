@@ -86,8 +86,8 @@ class WalkResult:
     flag means the walk may not have *seen* everything (raise
     ``JANUS_LINEAGE_RESULT_CAP``); this one means it *saw* an ancestor and
     declined it on distance alone (raise ``JANUS_LEAKAGE_MAX_HOPS``), which
-    is a different knob and a different sentence for a coverage gap to print
-."""
+    is a different knob and a different sentence for a coverage gap to print.
+    """
 
     @property
     def hit(self) -> Match | None:
