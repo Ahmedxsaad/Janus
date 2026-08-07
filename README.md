@@ -77,14 +77,14 @@ measured, alongside a scale table for a whole-catalog sweep.
 
 ## Documentation
 
-Everything a user of the package needs is also a page: `site/` is a static
-documentation and landing page covering install, every command, the Python API,
-the MCP server and Argos, with the dog walking the reader down it. It reads the
-same sprite art the window does, so serve the repository root rather than
-opening the file:
+Everything a user of the package needs is also a page: **<https://docs.ahmedxsaad.me>**
+is a static documentation and landing page covering install, every command,
+the Python API, the MCP server and Argos, with the dog walking the reader down
+it. It is `site/`, self-contained (no fetch, no build step), so a clone reads
+the identical page by opening the file directly:
 
 ```bash
-python -m http.server        # then open http://localhost:8000/site/
+xdg-open site/index.html      # or just double-click it
 ```
 
 The plan and the reasoning behind the product live here:

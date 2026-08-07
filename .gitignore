@@ -54,3 +54,7 @@ examples/real-project/churn_analytics/.user.yml
 # The ornament generator writes this only for looking at the art while
 # iterating on it; nothing ships it.
 site/art/preview.png
+
+# wrangler's local session cache for the site/ Cloudflare Pages deploy
+# (account id, deployment cache). Machine-specific, not configuration.
+.wrangler/

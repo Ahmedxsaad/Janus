@@ -16,6 +16,46 @@ Entry template:
 
 ---
 
+## D-160: The documentation page deploys to docs.ahmedxsaad.me, and Cloudflare's Rocket Loader silently broke Argos there (2026-08-07)
+- Decided by: Claude (for Ahmed Saad)
+- Decision: `site/` is deployed to Cloudflare Pages (project `janus-docs`,
+  via `wrangler`) with a custom domain, `docs.ahmedxsaad.me`, added through
+  the Pages API and a CNAME record in the `ahmedxsaad.me` zone. The three
+  script tags at the foot of `site/index.html` (`pixels.js`,
+  `argos-guide.js`, `ornaments.js`) each gain `data-cfasync="false"`.
+- Options considered, host: (a) Vercel, what `vercel.json`'s prior history
+  (D-137, deleted at D-139) used; (b) Cloudflare Pages, since the user
+  already holds `ahmedxsaad.me` on Cloudflare and the live demo VM's DNS is
+  already there; (c) GitHub Pages. (b), to keep every subdomain (`janus.` for
+  the demo, now `docs.` for this page) on one DNS provider the user already
+  manages, with `wrangler` already authenticated on this machine.
+- Options considered, the missing dog: (a) ask the user to disable Rocket
+  Loader zone-wide in the Cloudflare dashboard; (b) `data-cfasync="false"` on
+  the three script tags. (b), for the same reason D-139 itself gives for
+  rejecting a dashboard-side fix: a zone setting defending a rule in this
+  repository is invisible here, and the next zone, or a Cloudflare default
+  change, silently breaks it again. The opt-out travels with the file.
+- Why the dog went missing: Rocket Loader (on by default on this zone)
+  rewrites `<script src="pixels.js">`'s `type` attribute to a value the
+  browser will not execute, then re-executes it asynchronously through its
+  own loader, out of the original document order. `pixels.js` defines
+  `window.ArgosSprites`; `argos-guide.js` reads it immediately on load.
+  Reordered, `argos-guide.js` can run first and the page renders with no dog
+  and no console error: the same failure class D-139 already found once
+  (there it was a fetch path outside the deployment root; here it is a zone
+  feature reordering scripts inside it). Confirmed live: `curl` against the
+  deployed page showed the mangled `type` attribute before the fix and the
+  untouched tag after.
+- Result: `https://docs.ahmedxsaad.me` serves `site/`, custom domain fully
+  active (DNS, HTTP validation and certificate all confirmed via the Pages
+  API). `tests/test_site.py` (12 tests) still passes with the
+  `data-cfasync` attributes added. `.wrangler/`, the CLI's local session
+  cache, is gitignored. README.md's Documentation section, which still
+  instructed `python -m http.server` and claimed the page "reads the same
+  sprite art the window does, so serve the repository root rather than
+  opening the file", predates D-139's fix that made `site/` fully
+  self-contained; corrected in the same pass, alongside adding the live URL.
+
 ## D-159: Publishing janus-argos has a manual route, so a lost tag run is not a dead end (2026-08-07)
 - Decided by: Claude (for Ghassen Naouar)
 - Decision: `build-argos.yml`'s `workflow_dispatch` takes a boolean `publish`

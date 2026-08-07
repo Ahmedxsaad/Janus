@@ -1546,8 +1546,13 @@ janus feature-card  --model credit_risk_v3   # one Data Card per feature
   <canvas id="argos-dog"></canvas>
 </div>
 
-<script src="pixels.js"></script>
-<script src="argos-guide.js"></script>
-<script src="ornaments.js"></script>
+<!-- data-cfasync="false" opts these out of Cloudflare's Rocket Loader, which
+     otherwise rewrites the type attribute so the browser will not run them
+     until Rocket Loader's own async loader gets to them, out of order.
+     pixels.js defines window.ArgosSprites; argos-guide.js reads it
+     immediately, so out of order is Argos silently never appearing. -->
+<script src="pixels.js" data-cfasync="false"></script>
+<script src="argos-guide.js" data-cfasync="false"></script>
+<script src="ornaments.js" data-cfasync="false"></script>
 </body>
 </html>
