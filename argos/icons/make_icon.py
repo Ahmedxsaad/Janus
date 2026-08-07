@@ -147,12 +147,10 @@ def ico_bytes(rows: list[str], sizes: tuple[int, ...]) -> bytes:
     directory = struct.pack("<HHH", 0, 1, len(images))
     offset = len(directory) + 16 * len(images)
     entries = bytearray()
-    for size, image in zip(sizes, images):
+    for size, image in zip(sizes, images, strict=True):
         # 256 is written as 0: the width and height fields are single bytes.
         side = 0 if size >= 256 else size
-        entries.extend(
-            struct.pack("<BBBBHHII", side, side, 0, 0, 1, 32, len(image), offset)
-        )
+        entries.extend(struct.pack("<BBBBHHII", side, side, 0, 0, 1, 32, len(image), offset))
         offset += len(image)
     return directory + bytes(entries) + b"".join(images)
 
