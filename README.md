@@ -1,6 +1,13 @@
 # Janus
 
 <p align="center">
+  <a href="https://pypi.org/project/janus-datahub/"><img src="https://img.shields.io/pypi/v/janus-datahub" alt="PyPI"></a>
+  <a href="https://pypi.org/project/janus-datahub/"><img src="https://img.shields.io/pypi/pyversions/janus-datahub" alt="Python versions"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/pypi/l/janus-datahub" alt="License"></a>
+  <a href="https://github.com/Ahmedxsaad/janus/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Ahmedxsaad/janus/ci.yml?branch=main&amp;label=tests" alt="Tests"></a>
+</p>
+
+<p align="center">
   <img src="assets/argos.gif" width="200" height="200"
        alt="Argos, the Janus watchdog: patrolling, walking his beat, sniffing out a lineage traversal, barking with a red collar at a finding, writing it back, wagging when it clears, then asleep." />
 </p>
@@ -34,7 +41,10 @@ landed, as has the human-approval agent (`scan --review`) and a polling `watch`.
 ## Contents
 
 **Start here**
-[The one thing nothing else does, measured](#the-one-thing-nothing-else-does-measured)
+[Live demo](#live-demo)
+· [The one thing nothing else does, measured](#the-one-thing-nothing-else-does-measured)
+· [Repository layout](#repository-layout)
+· [Prerequisites](#prerequisites)
 · [Try it](#try-it)
 · [Documentation](#documentation)
 
@@ -50,10 +60,13 @@ landed, as has the human-approval agent (`scan --review`) and a polling `watch`.
 · [On a cluster](#run-watch-on-a-cluster)
 
 **Trust it**
-[Is it any good?](#is-it-any-good)
+[More sample output](#more-sample-output)
+· [Is it any good?](#is-it-any-good)
 · [Security and privacy](#security-and-privacy)
 · [Governance and paperwork](#show-a-governance-function-where-this-fits)
+· [Generate the paperwork](#generate-the-paperwork-instead-of-maintaining-it)
 · [OSS contributions](#oss-contributions)
+· [Contributing](#contributing)
 
 ## Live demo
 
@@ -83,6 +96,11 @@ them, so a model is not connected to a single column and a data failure cannot
 be traced to the model it breaks. **Janus writes that join** (`janus
 link`) and then reads across it, which is what makes every detector below
 possible.
+
+<p align="center">
+  <img src="assets/join-diagram.svg" width="640"
+       alt="Column-level lineage runs from a raw table through a staging column into a feature table. DataHub's ML graph holds the model and its training run. Nothing joins the two until janus link writes the edge from feature to source column." />
+</p>
 
 That is a claim, so here it is as a number. The same graph, the same ground
 truth, three ways of reading it, scored per **feature**: every approach can tell
