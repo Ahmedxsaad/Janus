@@ -2,7 +2,7 @@
 
 Why a generator rather than SVG typed into the HTML
 ---------------------------------------------------
-The same reason the ornaments have one (site/CLAUDE.md rule 2). A diagram is a
+The same reason the ornaments have one (docs/11-argos.md). A diagram is a
 few dozen coordinates that have to agree with each other, and the failure mode
 of typing them by hand is a label three pixels outside the box it belongs to,
 which nobody notices until it is on the page. Here a box knows how to place its
@@ -21,7 +21,7 @@ changes nothing the second time:
     python site/art/make_diagrams.py
 
 `tests/test_site.py` runs it against the committed page and fails if the two
-disagree, which is the same joint `pixels.js` has (D-141).
+disagree, which is the same joint `pixels.js` has.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def markers(suffix: str) -> str:
 
     One id shared across several SVGs in a document is how the first element on
     the page silently wins every reference to it, which is the same class of bug
-    as the duplicated `argos` id that stopped the character rendering (D-139).
+    as the duplicated `argos` id that stopped the character rendering.
     """
     return (
         "<defs>"

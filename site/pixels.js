@@ -5,7 +5,7 @@
  *
  * Three things are bundled here, and the reason they are bundled rather than
  * fetched is that the deployment's root is `site/`, so anything outside this
- * directory is unreachable from the served page (D-139):
+ * directory is unreachable from the served page:
  *
  *   ArgosSprites            the renderer, verbatim from argos/ui/sprites.js
  *   ArgosSprites.ART        the character, verbatim from argos/ui/sprites/argos.txt

@@ -1057,7 +1057,7 @@ janus companion                       # everything wrong with the assets you own
   <p>
     With no window binary installed, both commands report one line per change in
     the terminal instead, which is also what runs over SSH. Design and protocol:
-    <a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/08-watchdog-mascot.md">docs/plan/08-watchdog-mascot.md</a>.
+    <a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/11-argos.md">docs/11-argos.md</a>.
   </p>
   <div class="note">
     <strong>The dog walking this page is the dog in the window.</strong> Every
@@ -1515,14 +1515,18 @@ janus feature-card  --model credit_risk_v3   # one Data Card per feature
     <tr><th>Where</th><th>What it answers</th></tr>
     <tr><td><a href="https://janus.ahmedxsaad.me">Live demo</a></td><td>A real DataHub instance with the failure planted and <code>watch</code> running against it</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/janus">GitHub</a></td><td>Source, issues, releases</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/architecture.md">architecture.md</a></td><td>How it works: layers, flows, diagrams</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/benchmarks/RESULTS.md">RESULTS.md</a></td><td>The benchmark, its method, and what it does not measure</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/09-depth-axes.md">09-depth-axes.md</a></td><td>Where the product goes deeper, and what it deliberately will not build</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/07-weaknesses-and-remedies.md">07-weaknesses-and-remedies.md</a></td><td>An adversarial audit: known weaknesses, each with a fix</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/tree/main/docs">docs/</a></td><td>The engineering explanation, indexed: overview, architecture, detectors, evaluation, security, limitations, decisions</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/03-components.md">03-components.md</a></td><td>The complete inventory: every module, command and artifact that was built</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/02-architecture.md">02-architecture.md</a></td><td>How it works: the layers, their boundaries, and what it reads and writes</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/05-the-link.md">05-the-link.md</a></td><td>The join no ingestion source writes, and how it survives an ingest</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/06-writeback.md">06-writeback.md</a></td><td>Everything Janus writes into DataHub, and the rules every write obeys</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/benchmarks/RESULTS.md">RESULTS.md</a></td><td>The benchmark's measured numbers</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/08-evaluation.md">08-evaluation.md</a></td><td>How those numbers are produced, and what is deliberately not measured</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/09-testing.md">09-testing.md</a></td><td>1,053 tests, mutation testing, and the eight CI jobs</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/janus/tree/main/skill/datahub-ml-guard">datahub-ml-guard</a></td><td>The skill, offered back to the DataHub ecosystem</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/mcp_ext/RFC-ml-incidents.md">RFC-ml-incidents.md</a></td><td>The second contribution: an incident-raising tool for DataHub's own MCP server, which has no incident, assertion or lineage-write tool today</td></tr>
     <tr><td><a href="https://github.com/Ahmedxsaad/janus/tree/main/charts/janus-watch">charts/janus-watch</a></td><td>The Helm chart: <code>watch</code> as a deployment, with an optional <code>link --all</code> CronJob</td></tr>
-    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/most-valuable-feedback.md">most-valuable-feedback.md</a></td><td>Sixteen reproducible bugs and doc gaps found while building</td></tr>
+    <tr><td><a href="https://github.com/Ahmedxsaad/janus/blob/main/docs/16-most-valuable-feedback.md">16-most-valuable-feedback.md</a></td><td>Sixteen reproducible bugs and doc gaps found while building</td></tr>
   </table>
   </div>
 </section>

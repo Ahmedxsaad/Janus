@@ -17,7 +17,7 @@
  * It is inlined rather than fetched because the deployment is served with
  * `site/` as its root: `../argos/` is outside it, the fetch 404s, and the page
  * renders perfectly with no dog on it, which is how it shipped that way
- * (D-139). Inlining also means the page needs no server at all now, so opening
+ *. Inlining also means the page needs no server at all now, so opening
  * `index.html` from disk works.
  *
  * The bubble text is drawn on the canvas rather than laid out in HTML on
@@ -408,7 +408,7 @@
     // `#argos-dog`, not `#argos`: the section documenting Argos owns that id
     // for the contents to link to, and a duplicate id meant querySelector
     // handed back the section instead of the canvas, so the dog never drew
-    // at all, on any host (D-139).
+    // at all, on any host.
     const canvas = document.querySelector("#argos-dog");
     const stops = Array.from(document.querySelectorAll("[data-say]"));
     if (!canvas || !stops.length || !window.ArgosSprites?.ART) {
