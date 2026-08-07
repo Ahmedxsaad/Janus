@@ -1,10 +1,10 @@
-"""The degraded mode against a live DataHub, including what it writes (T-07).
+"""The degraded mode against a live DataHub, including what it writes.
 
 Two things can only be checked here. Whether a real GMS serves the aspects this
 mode reads for a model whose features have been taken away, which is the state
-every mlflow ingest leaves behind (D-074); and whether the incident it raises on
+every mlflow ingest leaves behind; and whether the incident it raises on
 the training table deduplicates on a rerun the way every other write does
-(tests/CLAUDE.md rule 3).
+(CONTRIBUTING.md).
 
 The scenario is the real one rather than a contrivance: the model's features are
 stripped exactly as an ingestion run strips them, and the table it trains on is
@@ -144,10 +144,10 @@ def test_declaring_the_features_again_silences_the_mode(
 def test_the_scan_raises_one_incident_on_the_training_table_and_reuses_it(
     conn: DataHubConnection, seeded: SeedResult, config: ScanConfig, unlinked: None
 ) -> None:
-    """The write, and its idempotency (tests/CLAUDE.md rule 3).
+    """The write, and its idempotency (CONTRIBUTING.md).
 
     Two scans with different run ids, exactly one incident: the run id is
-    provenance and never part of the dedup key (D-013).
+    provenance and never part of the dedup key.
     """
     table_urn = str(spec.feature_table_dataset_urn())
     report = run_scan(conn, config, model_urn=seeded.model, run_id=new_run_id(), llm=None)

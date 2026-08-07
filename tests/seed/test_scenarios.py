@@ -165,7 +165,7 @@ def _sent_column_lineage(client: FakeClient) -> dict[str, list[str]]:
 
     Reads the built JSON patch rather than any value the scenario handed back, so
     a scenario that returned the right answer while sending the wrong edges would
-    fail here (tests/CLAUDE.md rule 6).
+    fail here (CONTRIBUTING.md).
     """
     assert len(client.entities.updated) == 1, "expected exactly one patch"
     mcps = client.entities.updated[0].build()
@@ -269,7 +269,7 @@ def test_the_leakage_scenario_patches_the_feature_table():
 
 
 # --------------------------------------------------------------------------
-# The multi-path scenario (T-03), the counterfactual's negative control
+# The multi-path scenario, the counterfactual's negative control
 # --------------------------------------------------------------------------
 
 
@@ -351,7 +351,7 @@ def test_reverting_the_second_path_undeclares_the_column_before_dropping_it():
 
 
 def test_reverting_the_second_path_restores_the_seeded_single_path_leak():
-    """The baseline the demo expects to find (D-032), not a cleaned graph."""
+    """The baseline the demo expects to find, not a cleaned graph."""
     client = FakeClient()
     result = revert_second_leak_path(make_connection(FakeGraph(), client))
 
@@ -360,7 +360,7 @@ def test_reverting_the_second_path_restores_the_seeded_single_path_leak():
 
 
 # --------------------------------------------------------------------------
-# The confusable-negative scenarios (T-09, 09 section 2.2)
+# The confusable-negative scenarios
 # --------------------------------------------------------------------------
 
 

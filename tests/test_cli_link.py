@@ -1,4 +1,4 @@
-"""Folding the flags a user typed into an inferred proposal (D-150).
+"""Folding the flags a user typed into an inferred proposal.
 
 The write path always honoured a typed flag; for a while the *printed* proposal
 did not. `link --infer --label-column churned` showed reasons still reporting

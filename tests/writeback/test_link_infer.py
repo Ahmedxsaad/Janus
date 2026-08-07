@@ -181,7 +181,7 @@ class TestFeatureTable:
         assert "declares upstream of this model" in proposal.reasons[0]
 
     def test_a_run_with_no_inputs_explains_itself_instead_of_refusing(self):
-        """The usual state after an mlflow ingest (D-074), and the case F10 is about.
+        """The usual state after an mlflow ingest, and the case F10 is about.
 
         Raising here is what made --infer decline on precisely the stack this
         project validated against. It now returns the incomplete proposal, names

@@ -1,11 +1,11 @@
-"""T-08's rendering of mutmut's own output, offline.
+"""The rendering of mutmut's own output, offline.
 
 ``render_mutation_section`` never calls mutmut itself; it is a pure function
 of the text `mutmut results --all=true` would have printed, so these fixture
 strings stand in for a real run. The behaviour worth pinning is the refusal:
 a survivor mutmut reports that VERDICTS does not cover must stop the render
 rather than publish a report that silently dropped it (10-depth-
-implementation.md T-08).
+implementation).
 """
 
 from __future__ import annotations
@@ -195,7 +195,7 @@ class TestSplice:
         assert "After." in spliced
 
     def test_splicing_the_same_section_twice_changes_nothing(self, tmp_path):
-        """The CI job diffs this output against the committed file (D-124).
+        """The CI job diffs this output against the committed file.
 
         Anything that is not a fixed point reports RESULTS.md stale on every
         run, which is a permanently red advisory job over whitespace.

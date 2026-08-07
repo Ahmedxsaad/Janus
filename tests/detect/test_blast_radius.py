@@ -289,7 +289,7 @@ def test_upstream_datasets_asks_for_this_table_upstream_within_the_cap():
     `FakeLineage` returns its canned list whatever it is asked, so a walk that
     queried the wrong table, ran downstream, or asked for unbounded depth
     returns the same thing here. Two callers outside `detect/` depend on this
-    read being the read it claims to be (T-16's MTTR sweep and T-18's retirement
+    read being the read it claims to be (the lifecycle sweep and the retirement
     list), and the second of those recommends deleting tables.
     """
     config = ScanConfig(max_hops=3)
@@ -311,7 +311,8 @@ def test_upstream_datasets_keeps_a_dataset_exactly_at_the_hop_cap():
     """The boundary `<= max_hops` includes and `< max_hops` would drop.
 
     A table exactly at the cap is inside the traversal by the same rule every
-    other walk here uses, and dropping it would quietly narrow the set T-18
+    other walk here uses, and dropping it would quietly narrow the set the
+    retirement report
     reasons about.
     """
     config = ScanConfig(max_hops=3)

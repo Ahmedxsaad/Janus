@@ -1,4 +1,4 @@
-"""T-12 and T-13: the two per-model artifacts. Offline: renderers are pure.
+"""The two per-model artifacts. Offline: renderers are pure.
 
 Most of these are about what the documents refuse to say. Both land in a
 catalog under an authoritative-looking title, and the evidence pack's title
@@ -65,7 +65,7 @@ def _facts(**overrides: object) -> ModelFacts:
 
 class TestEvidencePackIsNotACertification:
     def test_it_says_so_before_it_says_anything_else(self):
-        """09 section 5.2: a generated document implying conformity would be the.
+        """A generated document implying conformity would be the.
 
         single most damaging thing this project could ship. So the denial is not
         a footnote, it is the first heading a reader meets.

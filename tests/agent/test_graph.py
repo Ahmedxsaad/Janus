@@ -175,7 +175,7 @@ def test_a_clean_scan_prompts_because_it_may_still_have_a_recovery_to_write():
 
     Nothing is stale here and no incident is open, so approving writes nothing.
     The point is that the approval is asked for at all: the same run against a
-    graph that does hold a stale incident is what resolves it (D-070).
+    graph that does hold a stale incident is what resolves it.
     """
     graph, client = _fresh()
     prompted = {"called": False}
@@ -211,7 +211,7 @@ def test_a_declined_clean_scan_resolves_nothing():
 
 
 def test_an_approved_clean_scan_resolves_a_stale_incident_on_the_agent_path():
-    """The agent path reconciles exactly as run_scan does (D-070).
+    """The agent path reconciles exactly as run_scan does.
 
     Before this, ``scan --review``/``--auto-approve`` routed a clean scan
     straight to decline, so a fixed problem's incident stayed ACTIVE forever on

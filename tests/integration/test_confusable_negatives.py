@@ -1,6 +1,6 @@
-"""T-09's confusable negatives, against a live DataHub.
+"""The confusable negatives, against a live DataHub.
 
-09 section 2.2: precision of 1.00 is close to vacuous while the negative trials
+precision of 1.00 is close to vacuous while the negative trials
 are absent positives rather than hard negatives. Three things here can only be
 checked against a real GMS: whether an upstream-only walk genuinely never
 confuses a shared ancestor for a derivation, whether the diamond's shortest

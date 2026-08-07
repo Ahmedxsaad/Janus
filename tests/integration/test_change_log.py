@@ -1,4 +1,4 @@
-"""The change-log consumer against a live Kafka and GMS (T-20).
+"""The change-log consumer against a live Kafka and GMS.
 
 Why a unit test cannot cover this: everything interesting here belongs to
 somebody else's wire format. The topic name, the Confluent framing, the Avro
@@ -7,10 +7,10 @@ that a ``GenericAspect``'s payload is JSON bytes rather than nested Avro, are al
 DataHub's contract and not this project's. A fake would encode whatever this
 module already believes, which is the one thing worth checking.
 
-The second thing measured is the whole of T-20: an ``mlModelProperties`` upsert
+The second thing measured is the whole claim: an ``mlModelProperties`` upsert
 that drops a model's features produces an event this handler acts on, and the
 replay puts the features back. The full end-to-end (DataHub's own mlflow source
-run twice) was performed by hand and is recorded in D-132; what runs here is the
+run twice) was performed by hand once; what runs here is the
 same aspect write, emitted directly, because standing an MLflow tracking server
 up inside a test suite is a stack, not a fixture.
 """
@@ -96,7 +96,7 @@ def seeded(conn: DataHubConnection, config: ScanConfig):
     # scores its trials against this same graph: a module that leaves a wider
     # feature set behind moves numbers in RESULTS.md that have nothing to do
     # with it. The seed is idempotent, so this is a restore and not a second
-    # setup (tests/CLAUDE.md rule 2's shared-graph discipline).
+    # setup (CONTRIBUTING.md's shared-graph discipline).
     seed_ml_graph(conn)
 
 
@@ -112,7 +112,7 @@ def drop_features(
     break the freshness, drift, deprecation and degraded-mode trials the
     benchmark runs against that same graph afterwards.
 
-    Which is precisely writeback/CLAUDE.md rule 9: a whole-list aspect is
+    Which is precisely docs/02-architecture.md: a whole-list aspect is
     read-merge-emit, never a blind write. It is written down for the product and
     it holds for a test that writes to a shared graph just as hard, which is how
     this function came to exist.
@@ -178,11 +178,11 @@ def test_an_aspect_write_arrives_as_an_event_with_a_readable_payload(
 def test_an_ingest_shaped_write_gets_the_recorded_link_replayed(
     conn: DataHubConnection, config: ScanConfig, seeded: SeedResult, change_log: ChangeLog
 ) -> None:
-    """T-20's claim, against a live graph: the join survives with no human action.
+    """The claim, against a live graph: the join survives with no human action.
 
     The write below is exactly what DataHub's mlflow source does, which is upsert
     the whole ``mlModelProperties`` aspect and thereby drop the ``mlFeatures``
-    that `link` attached (D-074, F11). What is asserted is that the features come
+    that `link` attached. What is asserted is that the features come
     back without anybody running `link --all`.
     """
     drop_features(conn, seeded.model)

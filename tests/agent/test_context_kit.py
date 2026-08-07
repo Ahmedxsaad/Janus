@@ -183,7 +183,7 @@ def test_context_joins_the_grounding_set(finding):
     """Context must join the grounding set, not merely the prompt.
 
     A fact the model can see and the faithfulness checker cannot would score as a
-    hallucination every time the narrator used it correctly (T-10).
+    hallucination every time the narrator used it correctly.
     """
     from janus.agent.narrate import grounding_facts
 

@@ -1,4 +1,4 @@
-"""The guard-coverage trend on Janus's own dataFlow (T-15). Offline."""
+"""The guard-coverage trend on Janus's own dataFlow. Offline."""
 
 from __future__ import annotations
 

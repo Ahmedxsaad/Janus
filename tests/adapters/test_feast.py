@@ -87,7 +87,7 @@ class _RelationOnlySource:
     Feast's SQL contrib sources (postgres and the ones built on the same options
     object) are shaped like this: no ``table`` attribute, no ``path``, the
     relation reachable only through that method. Verified against feast 0.65's
-    PostgreSQLSource on the ingested real project (T-14); it is stubbed here
+    PostgreSQLSource on the ingested real project; it is stubbed here
     because the class cannot be imported without a postgres driver, which is not
     a dependency of this project or of its dev extra.
     """

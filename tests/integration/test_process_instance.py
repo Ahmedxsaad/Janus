@@ -1,4 +1,4 @@
-"""A scan's process run against a live DataHub (T-04).
+"""A scan's process run against a live DataHub.
 
 Why a unit test does not cover this: ``dataProcessInstance`` is an entity GMS
 validates and serves, and this project had never written one. ``FakeGraph`` stores
@@ -157,7 +157,7 @@ def test_a_scan_that_wrote_something_names_it_among_its_outputs(
 def test_rerunning_one_scan_updates_its_run_rather_than_minting_a_second(
     conn: DataHubConnection, seeded: SeedResult, config: ScanConfig
 ) -> None:
-    """Idempotency, the contract every write in this package inherits (D-013)."""
+    """Idempotency, the contract every write in this package inherits."""
     run_id = f"dpi-{uuid.uuid4().hex[:8]}"
     run_scan(conn, config, model_urn=seeded.model, run_id=run_id, llm=None)
     first = scan_run_urn(run_id)

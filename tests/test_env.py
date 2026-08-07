@@ -130,11 +130,11 @@ def _package_sources() -> list[pathlib.Path]:
 
 
 def test_only_env_py_reads_the_process_environment():
-    """Root CLAUDE.md: configuration enters through janus/env.py, nowhere else.
+    """CONTRIBUTING.md: configuration enters through janus/env.py, nowhere else.
 
     A module that reads os.environ directly bypasses .env loading, so whether it
     sees a configured value depends on what ran before it. That is how a freshness
-    SLA set in .env came to be silently ignored (D-029).
+    SLA set in .env came to be silently ignored.
     """
     offenders = []
     for path in _package_sources():
@@ -189,7 +189,7 @@ def test_no_module_hardcodes_a_vendor_model_id_or_a_provider_key_name():
     ],
 )
 def test_a_value_that_could_never_match_a_column_is_refused(monkeypatch, value):
-    """These variables switch a detector on. A dead one reads as a clean catalog (D-154).
+    """These variables switch a detector on. A dead one reads as a clean catalog.
 
     Nothing in a catalog carries a term whose URN is "PII", so the detector
     would run, compare against nothing, and report clean forever, while

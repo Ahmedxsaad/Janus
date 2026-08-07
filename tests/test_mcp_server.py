@@ -87,7 +87,7 @@ def test_every_tool_is_read_only():
 
 
 def test_the_missing_extra_is_reported_as_a_command_not_a_traceback(monkeypatch):
-    """`janus-mcp` on a plain install used to die with an ImportError (D-155).
+    """`janus-mcp` on a plain install used to die with an ImportError.
 
     The console script is registered unconditionally, so somebody who ran
     `pip install janus-datahub` and typed `janus-mcp` got a traceback quoting a

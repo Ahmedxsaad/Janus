@@ -1,4 +1,4 @@
-"""How long Janus's findings stay open (T-16). Offline: no DataHub.
+"""How long Janus's findings stay open. Offline: no DataHub.
 
 Two obligations. The classification has to agree with the titles models.py
 actually writes, or an MTTR table silently drops a whole detector. And an
@@ -242,7 +242,7 @@ def test_a_freshness_incident_upstream_of_the_model_is_reached():
 
 
 def test_an_upstream_dataset_beyond_the_hop_cap_is_not_reached():
-    """The cap is honored here for the reason detect/CLAUDE.md rule 3 gives.
+    """The cap is honored here for the reason docs/04-detectors.mdgives.
 
     Above two hops DataHub returns entities past max_hops, so a walk that
     trusted the server would sweep incidents on tables this model has no

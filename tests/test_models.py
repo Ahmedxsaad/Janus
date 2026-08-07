@@ -88,7 +88,7 @@ def test_two_models_drifting_on_one_dataset_do_not_share_a_dedup_key():
     The title is the dedup key, and the incident attaches to the dataset. A title
     naming only the dataset made two models' drift on a shared input one and the
     same incident: the second model's finding was deduplicated into silence, and
-    whichever model recovered first resolved the other's live incident (D-070).
+    whichever model recovered first resolved the other's live incident.
     """
     v3 = make_schema_drift_finding()
     v4 = replace(v3, model=replace(v3.model, urn=f"{MODEL_URN}_v4", name="Credit Risk v4"))
@@ -188,7 +188,7 @@ def test_a_table_inside_its_sla_is_not_stale():
 
 
 # --------------------------------------------------------------------------
-# Counterfactuals (T-03)
+# Counterfactuals
 # --------------------------------------------------------------------------
 
 

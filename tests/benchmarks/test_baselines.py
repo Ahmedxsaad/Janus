@@ -166,7 +166,7 @@ def test_the_no_lineage_baseline_cannot_express_leakage_at_all():
 
 
 def test_the_baseline_honours_the_hop_cap_the_detector_honours():
-    """Fairness: DataHub over-returns past the cap, and Janus filters it (D-020).
+    """Fairness: DataHub over-returns past the cap, and Janus filters it.
 
     Without the same guard the baseline would inherit distant tables Janus
     never sees, and any label sitting in one of them would score as a false

@@ -1,4 +1,4 @@
-"""Replaying a link an ingest dropped (T-20, F11). Offline: no broker, no DataHub.
+"""Replaying a link an ingest dropped. Offline: no broker, no DataHub.
 
 Two things this must get right, and one it must refuse to do. It has to fire on
 the exact aspect write that causes the damage and on nothing else, because a
@@ -88,7 +88,7 @@ def _record_link(graph: FakeGraph) -> None:
 
 
 def test_an_ingest_that_dropped_the_features_gets_the_recorded_link_replayed():
-    """The whole of T-20, and the failure F11 names, in one assertion."""
+    """The whole of the event-driven claim, and the failure it names, in one assertion."""
     conn = make_connection(linked_graph(), FakeClient())
 
     result = consider(conn, CONFIG, event())

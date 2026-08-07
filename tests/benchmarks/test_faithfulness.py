@@ -1,4 +1,4 @@
-"""T-10's faithfulness check, offline.
+"""The faithfulness check, offline.
 
 The whole module is pure, so every case here is real: prose in, verdict out,
 no graph and no provider. The cases that matter are the ones where a figure is
@@ -159,7 +159,7 @@ class TestCheck:
 
 class TestTemplates:
     def test_every_finding_types_template_quotes_only_measured_figures(self):
-        """The stricter half of T-10: template prose is written in this repo, so.
+        """The stricter half: template prose is written in this repo, so.
 
         a violation here is this project quoting a figure it never measured.
         """
@@ -255,7 +255,7 @@ class TestRendering:
 
         rendered = self._rendered(check_template_narratives(findings))
 
-        assert "Narrative faithfulness (T-10)" in rendered
+        assert "Narrative faithfulness" in rendered
         assert "Figures checked:" in rendered
         assert "template (no LLM)" in rendered
 
@@ -268,7 +268,7 @@ class TestRendering:
         assert "47 appears in the assessment" in rendered
 
     def test_the_section_says_quality_is_still_not_scored(self):
-        """The distinction T-10 rests on: this is a property, not a rubric."""
+        """The distinction it rests on: this is a property, not a rubric."""
         rendered = self._rendered(check_template_narratives([make_finding()]))
 
         assert "quality" in rendered.lower()
@@ -280,7 +280,7 @@ class TestMutationSectionSurvivesABenchmarkRun:
     Without this, every benchmark run silently deleted a section written by a
     different command, and that section's own CI job then re-added it and
     reported the file as stale: a job wearing a permanent red X, which ci.yml's
-    own comments warn teaches people to ignore red (D-122).
+    own comments warn teaches people to ignore red.
     """
 
     def test_an_existing_mutation_section_is_carried_across(self, tmp_path):

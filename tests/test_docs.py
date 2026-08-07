@@ -1,9 +1,9 @@
 """The two hand-written documents that claim to cover the whole CLI.
 
-`site/CLAUDE.md` rule 5 says the page changes in the same commit as the README
+`docs/11-argos.md` rule 5 says the page changes in the same commit as the README
 when a command changes, and the README says of `site/` that it covers "every
-command". Both are promises a human keeps by remembering, which is how T-12 and
-T-13 shipped two commands that appeared in neither: nothing failed, the phase
+command". Both are promises a human keeps by remembering, which is how two
+commands once shipped appearing in neither: nothing failed, the phase
 looked done, and the artifact most likely to matter to a governance reader was
 reachable only by reading `--help`.
 
@@ -38,7 +38,7 @@ def _missing_from(document: Path) -> list[str]:
     Read inside the test rather than at import: mutmut runs this suite from a
     copied tree (`[tool.mutmut] also_copy`), and a module-level read of a file
     that was not copied is a collection error, which takes the whole suite down
-    with it instead of these two tests (D-125).
+    with it instead of these two tests.
     """
     text = document.read_text()
     return [name for name in _command_names() if f"janus {name}" not in text]

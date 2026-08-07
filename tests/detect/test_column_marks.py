@@ -1,7 +1,7 @@
 """marked_ancestor's WalkResult.
 
 Whether a mark was found, and whether the walk could have missed one past the
-lineage result cap (F1, docs/plan/07).
+lineage result cap (docs/08-evaluation.md).
 """
 
 from __future__ import annotations
@@ -120,7 +120,7 @@ def test_a_column_that_is_itself_marked_is_never_reported_truncated():
     assert walk.truncated is False
 
 
-# --- hop cap (T-09, F1: distinct from the result-count cap above) ------------
+# --- hop cap (F1: distinct from the result-count cap above) ------------
 
 
 def test_a_mark_exactly_at_the_hop_cap_fires():
@@ -148,7 +148,7 @@ def test_a_mark_exactly_at_the_hop_cap_fires():
 
 
 def test_a_mark_one_hop_beyond_the_cap_does_not_fire_and_is_reported_hop_capped():
-    """GMS answers past the cap (D-020); the walk must decline it, not miss it."""
+    """GMS answers past the cap; the walk must decline it, not miss it."""
     graph = FakeGraph(aspects={(LABEL_COLUMN_URN, GlossaryTermsClass): _terms(LABEL_TERM_URN)})
     client = FakeClient(
         lineage_by_column={
@@ -267,7 +267,7 @@ def _two_flattened_paths() -> FakeClient:
 
 
 def test_the_shortest_chain_is_still_the_one_quoted_as_proof():
-    """T-03's precondition: widening the result must move no existing output.
+    """The precondition: widening the result must move no existing output.
 
     The walk now carries every match, and `hit` still has to answer with the
     shortest, ties broken deterministically, because that chain is what an
@@ -348,7 +348,7 @@ def test_a_path_list_that_does_not_start_at_the_queried_column_is_left_whole():
 
 
 def test_derivation_chains_cuts_a_flattened_list_into_the_paths_it_came_from():
-    """Two derivations must not render as one impossible chain on a card (T-19).
+    """Two derivations must not render as one impossible chain on a card.
 
     The same split `marked_ancestor` needs, asked without a mark: a provenance
     card wants the whole derivation, including the part nobody classified.
@@ -391,7 +391,7 @@ def test_derivation_chains_returns_one_entry_for_a_derivation_reached_twice():
 
 
 def test_derivation_chains_honors_the_hop_cap_rather_than_trusting_the_server():
-    """Above two hops DataHub answers past max_hops (D-020, detect rule 3)."""
+    """Above two hops DataHub answers past max_hops (detect rule 3)."""
     beyond = FakeClient(
         lineage_by_column={
             "prior_default_flag": [
@@ -447,7 +447,7 @@ def test_derivation_chains_asks_the_graph_for_the_columns_own_upstream_cone():
     arguments, so a walk that queried the wrong column, the wrong direction or
     an unbounded depth returns the same list here and every assertion about the
     *answer* passes. The read is the behaviour, so the read is what is pinned
-    (the same correction D-113 forced on the degraded-mode tests).
+    (the same correction the degraded-mode tests needed).
     """
     client = _two_flattened_paths()
     conn = make_connection(FakeGraph(), client)

@@ -1,6 +1,6 @@
 """The Phase 1 gate: the core loop, end to end, against a live DataHub.
 
-docs/plan/02-implementation-plan.md section 4.3 states it in prose: ``janus
+docs/02-architecture.md states it in prose: ``janus
 scan --table loans_raw`` produces an incident, a tag, a guarding assertion, and a
 report, all visible in the UI, with the same result on every run.
 

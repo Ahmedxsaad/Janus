@@ -3,7 +3,7 @@
 A known-drift fixture must flag exactly the drifted columns; a fixture whose
 current schema matches the snapshot must flag nothing (the false-positive
 control). The detector fires only on positive evidence, so a run with no snapshot
-and a dataset with no current schema both yield nothing (tests/CLAUDE.md rule 7).
+and a dataset with no current schema both yield nothing (CONTRIBUTING.md).
 """
 
 from __future__ import annotations

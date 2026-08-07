@@ -36,7 +36,7 @@ def _pose_frames() -> dict[str, list[str]]:
 
     There is no walk cycle here any more: the companion is parked in the corner
     and the sections move past him instead, so the only animation left is the
-    pose he holds while a section is being read (D-140).
+    pose he holds while a section is being read.
     """
     block = re.search(r"const POSES = \{(.*?)\n  \};", GUIDE, re.S)
     assert block, "the pose table moved"
@@ -80,7 +80,7 @@ def test_every_glyph_is_a_rectangle_five_rows_tall():
 
 
 def test_the_bundle_matches_the_art_it_was_generated_from():
-    """The page carries a copy of the art now, and it may not drift (D-139).
+    """The page carries a copy of the art now, and it may not drift.
 
     It used to read `../argos/` directly, which is the right source and an
     unreachable path in production: the deployment is served with `site/` as its
@@ -113,7 +113,7 @@ def test_the_page_loads_nothing_from_outside_its_own_directory():
 
 
 def test_the_diagrams_match_the_generator_that_draws_them():
-    """The page's diagrams are generated, and may not be edited in place (D-141).
+    """The page's diagrams are generated, and may not be edited in place.
 
     Same joint as the sprite bundle above: run the generator against the
     committed page and fail if it moves anything. A coordinate nudged by hand
@@ -151,7 +151,7 @@ def test_every_ornament_the_page_asks_for_is_one_the_art_defines():
 
 
 def test_the_page_carries_a_crosswalk_row_for_every_detector():
-    """A fourth joint: the page names a table the code generates (T-02).
+    """A fourth joint: the page names a table the code generates.
 
     The CLI's copy cannot go stale, because it is rendered from the registry.
     The page's copy is HTML somebody wrote once, so this is what stops a new

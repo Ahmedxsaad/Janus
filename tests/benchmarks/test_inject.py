@@ -120,12 +120,12 @@ def test_the_leakage_boundary_trials_move_the_question_not_the_graph():
 
 
 def test_the_multi_path_trials_name_the_label_columns_they_wait_for():
-    """T-03: with two derivations planted, "a label is reachable" is not the question.
+    """With two derivations planted, "a label is reachable" is not the question.
 
     Both trials leave the feature descending from a declared label, so the plain
     precondition would pass on either graph and on the wrong one. Each therefore
     names the exact set of label columns it expects to be reachable, and that set
-    is what tells the two apart. Filtered to prior_default_flag: T-09's
+    is what tells the two apart. Filtered to prior_default_flag: the
     confusable negatives set leak_upstreams too, about a different column
     entirely, and are not this test's concern.
     """
@@ -147,7 +147,7 @@ def test_the_multi_path_trials_name_the_label_columns_they_wait_for():
 
 
 def test_the_confusable_negative_trials_ask_about_a_different_column():
-    """T-09: neither scenario touches prior_default_flag at all.
+    """Neither scenario touches prior_default_flag at all.
 
     Both plant a shape on applicant_income instead, so a precondition that kept
     asking about the flagship leak's own feature would watch a column neither

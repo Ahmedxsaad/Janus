@@ -198,7 +198,7 @@ class TestWhenItSpeaks:
         Asserted on the read that was issued rather than on the empty result,
         because an index with nothing in it answers "not classified" for every
         column: the result is identical either way and would test nothing
-        (the same reasoning as D-077).
+        (the same reasoning as the other renderings).
         """
         graph = _CountingGraph(_graph(classified="ssn"))
 
@@ -210,7 +210,7 @@ class TestWhenItSpeaks:
         assert configured.schema_reads == 1
 
     def test_a_withdrawn_deprecation_is_not_a_deprecation(self):
-        """``deprecated=false`` is how DataHub records a withdrawal (D-079).
+        """``deprecated=false`` is how DataHub records a withdrawal.
 
         A detector reading the aspect's presence rather than its value would
         report every table anybody has ever un-deprecated.

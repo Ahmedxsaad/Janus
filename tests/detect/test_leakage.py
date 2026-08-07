@@ -1,6 +1,6 @@
 """The leakage detector, against fixture graphs. Offline: no DataHub, no network.
 
-Two obligations, from tests/CLAUDE.md rule 1. A known-leakage fixture must flag
+Two obligations, from CONTRIBUTING.md. A known-leakage fixture must flag
 exactly the seeded feature, and a clean fixture must flag nothing. The second is
 the one that matters most: a detector that fires on everything is worthless, and
 a detector that stays silent on a leaking graph is worse than worthless because it
@@ -9,7 +9,7 @@ grants false confidence.
 The fixtures below put the *dataset* in ``LineageResult.urn`` and the columns only
 in ``LineageResult.paths``, because that is what a live GMS actually returns for a
 column-level query. A fixture that put the label column in ``urn`` would let the
-bug this detector was written to avoid pass the suite (D-031).
+bug this detector was written to avoid pass the suite.
 """
 
 from __future__ import annotations
@@ -141,7 +141,7 @@ def test_the_leaking_feature_is_flagged():
 
 
 def test_the_incident_lands_on_the_leaking_column_not_the_model():
-    """DataHub rejects an incident on an mlModel, so the column is the target (D-017)."""
+    """DataHub rejects an incident on an mlModel, so the column is the target."""
     graph, client = _leaking_graph()
 
     finding = leakage_findings(make_connection(graph, client), MODEL_URN, CONFIG)[0]
@@ -229,7 +229,7 @@ def test_a_clean_model_flags_nothing():
 
 
 def test_a_feature_with_no_recorded_source_column_is_skipped_not_cleared():
-    """Absence of evidence is not evidence of safety (detect/CLAUDE.md rule 5)."""
+    """Absence of evidence is not evidence of safety (docs/04-detectors.md)."""
     graph = FakeGraph(
         aspects={  # type: ignore[arg-type]
             (MODEL_URN, MLModelPropertiesClass): _model(LEAK_FEATURE_URN),
@@ -280,7 +280,7 @@ def test_the_detector_reads_paths_and_not_the_result_urn():
 
 
 def test_results_beyond_the_hop_cap_are_ignored():
-    """DataHub returns entities past max_hops once it exceeds 2 (D-020)."""
+    """DataHub returns entities past max_hops once it exceeds 2."""
     graph, _ = _leaking_graph()
     client = FakeClient(
         lineage_by_column={
@@ -444,7 +444,7 @@ BACKUP_COLUMN_URN = f"urn:li:schemaField:({TABLE_URN},default_status_backup)"
 
 
 def test_a_second_derivation_reaches_the_finding_that_has_to_account_for_it():
-    """T-03: the detector hands the counterfactual every path, not just the proof.
+    """The detector hands the counterfactual every path, not just the proof.
 
     The finding still quotes the shortest chain. What changes is that its remedy
     now names both first edges, so a reader who cuts the quoted one and stops is

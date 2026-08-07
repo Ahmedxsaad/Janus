@@ -91,7 +91,7 @@ def test_a_partly_qualified_name_resolves_too():
     A dbt semantic model's node_relation and a Feast source's table both name a
     relation the way the warehouse does, while DataHub names the dataset for it
     with the database in front. Matching only the full name or the last segment
-    left every imported declaration resolving against nothing (T-14).
+    left every imported declaration resolving against nothing.
     """
     assert resolve_table(_conn([TABLE_URN]), "public.loans_raw") == TABLE_URN
 
@@ -321,7 +321,7 @@ def test_an_exception_printed_to_the_console_carries_no_token(monkeypatch, capsy
 
     Janus's own errors name a variable and never its value, but an exception
     surfacing from someone else's SDK may quote a request or a header we handed
-    the token to (root CLAUDE.md rule 6d).
+    the token to (CONTRIBUTING.md).
     """
     secret = "dh-token-super-secret-value"
     monkeypatch.setenv(ENV_GMS_TOKEN, secret)
@@ -542,7 +542,7 @@ def test_the_crosswalk_prints_without_a_connection():
 class TestLinkFromADeclaration:
     """`link --from`: the arguments read out of a file the team already keeps.
 
-    The claim being tested is the one docs/plan/10 states as done-when: importing
+    The claim being tested is the one docs/13-design-decisions.md states as done-when: importing
     the example Feast repo produces the link a human would have typed. So the
     assertion is on the rendered command, character for character, rather than on
     the fields it was assembled from.
@@ -651,7 +651,7 @@ def test_all_refuses_a_declaration_it_could_only_apply_to_one_model():
 
 
 def test_an_error_message_keeps_the_brackets_it_was_written_with():
-    """The advice in these messages is the bracketed part, and rich ate it (D-151).
+    """The advice in these messages is the bracketed part, and rich ate it.
 
     ``console.print(f"[red]{exc}[/red]")`` hands the exception's own text to
     rich's markup parser, which reads ``[feast]`` as an unknown style tag and
@@ -672,7 +672,7 @@ def test_an_error_message_keeps_the_brackets_it_was_written_with():
 
 
 def test_a_model_scan_credits_the_checks_that_actually_ran(capsys):
-    """The count of checks a model buys comes from MODEL_CHECKS, never a literal (D-152).
+    """The count of checks a model buys comes from MODEL_CHECKS, never a literal.
 
     It used to read 2, for target leakage and schema drift, and stayed 2 after
     three more model detectors landed. A model whose only gaps were the two
@@ -709,11 +709,11 @@ def test_a_model_with_no_metadata_at_all_still_says_nothing_was_evaluated(capsys
 
 
 def test_every_install_hint_survives_being_printed():
-    """The extra's name is the only actionable token in these lines (D-157).
+    """The extra's name is the only actionable token in these lines.
 
     Rich reads a bare `[kafka]` as a style tag and deletes it, turning
     `pip install "janus-datahub[kafka]"` into the command the reader has
-    already run. D-151 escaped the sites that interpolate an *exception*; two
+    already run. An earlier fix escaped the sites that interpolate an *exception*; two
     sites building the advice inline were missed, which is why this test walks
     every extra rather than the one that was reported.
 
@@ -740,7 +740,7 @@ def test_no_install_hint_tells_a_pypi_user_to_install_from_a_clone():
 
     The reader of these messages installed a wheel. Telling them to run an
     editable install of a directory they do not have is advice that cannot be
-    followed, and it was shipped on the `--review` path (D-157).
+    followed, and it was shipped on the `--review` path.
     """
     package = Path(__file__).resolve().parents[1] / "janus"
     offenders = [

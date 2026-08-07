@@ -78,7 +78,7 @@ class TestSurface:
             assert hasattr(janus, name), name
 
     def test_the_error_a_script_hits_first_is_catchable_without_importing_the_cli(self):
-        """`--features analytics.customer_features` is ambiguous on a real catalog (D-153).
+        """`--features analytics.customer_features` is ambiguous on a real catalog.
 
         A relation named the way the warehouse names it generally exists on more
         than one platform (dbt and postgres, in the validation stack), so this is

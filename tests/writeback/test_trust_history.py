@@ -171,7 +171,7 @@ class TestProjection:
 
 
 class TestScoringVersion:
-    """A score is comparable only to one the same function produced (F7, T-01)."""
+    """A score is comparable only to one the same function produced."""
 
     def test_a_new_entry_records_the_scoring_version(self):
         conn = _conn()

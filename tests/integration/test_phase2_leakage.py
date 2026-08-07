@@ -1,6 +1,6 @@
 """The Phase 2 gate: the leakage loop, end to end, against a live DataHub.
 
-docs/plan/02-implementation-plan.md section 5.1 states it: ``janus scan
+docs/02-architecture.md states it: ``janus scan
 --model credit_risk_v3`` traces the model's features back through column-level
 lineage, finds the one derived from the label, and writes back a FIELD incident
 on the leaking column, a leakage-risk term on the feature, and a tag plus risk

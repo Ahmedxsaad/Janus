@@ -190,7 +190,7 @@ class FakeGraph:
         by ``ASPECT_NAME`` rather than a second fixture format, so a test that
         already did ``graph.set_aspect(urn, SomeAspect(...))`` needs no change to
         also be readable through the batched call graph_reads.live_deployments
-        makes (detect/CLAUDE.md rule 3: no N+1 single fetches).
+        makes (docs/04-detectors.md: no N+1 single fetches).
         """
         wanted = set(aspects or [])
         result: dict[str, dict[str, tuple[Any, Any]]] = {}
@@ -306,7 +306,7 @@ def lineage_result(
 
     ``paths`` is what carries column granularity. A live GMS puts the *dataset* in
     ``urn`` even for a column-level query, and the columns only in ``paths``, so a
-    fixture that omitted them would let a broken detector pass (D-031).
+    fixture that omitted them would let a broken detector pass.
     """
     return LineageResult(
         urn=urn,
@@ -425,7 +425,7 @@ def make_leakage_finding(
 
     ``other_paths`` is the multi-path case: the chains the walk found besides the
     one quoted as proof. Empty by default, which is the single-path finding every
-    test before T-03 described.
+    test before the counterfactual work described.
     """
     return LeakageFinding(
         model=ModelRef(
@@ -713,7 +713,7 @@ def make_trust_score(
 
 
 #: URN prefixes of the entities Janus emits about *itself*: the agent's
-#: dataFlow, its scan dataJob, and one dataProcessInstance per run (T-04).
+#: dataFlow, its scan dataJob, and one dataProcessInstance per run.
 OWN_RUN_PREFIXES = ("urn:li:dataFlow:", "urn:li:dataJob:", "urn:li:dataProcessInstance:")
 
 
@@ -736,7 +736,7 @@ def one_of_every_finding() -> tuple[Finding, ...]:
     a report renders, that a title carries the prefix its finding type is
     registered under. Written out by hand each time, that list goes stale the
     moment a detector lands, which is how two governance findings once shipped
-    with no impact report at all (D-096). Here it is asserted against
+    with no impact report at all. Here it is asserted against
     ``Finding.__subclasses__()``, so a new detector with no factory fails this
     rather than quietly leaving a hole in whatever the caller was checking.
     """
