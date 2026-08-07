@@ -16,6 +16,32 @@ Entry template:
 
 ---
 
+## D-159: Publishing janus-argos has a manual route, so a lost tag run is not a dead end (2026-08-07)
+- Decided by: Claude (for Ghassen Naouar)
+- Decision: `build-argos.yml`'s `workflow_dispatch` takes a boolean `publish`
+  input, defaulting to false, and the `publish` job's gate becomes
+  `startsWith(github.ref, 'refs/tags/') || inputs.publish`. The `release` job
+  keeps the tag-only gate: attaching bundles needs a release to attach them to.
+- Options considered: (a) leave the tag as the only route and re-push the tag
+  when a run is lost; (b) a dedicated `release/argos` branch in the push
+  trigger, allowed by the publish gate; (c) the dispatch input.
+- Why: The `argos-v0.1.0` push produced a run that sat Queued for a day without
+  ever being scheduled, and a queued run has no re-run button and refused to
+  cancel from the UI. (a) leaves the recovery path as tag surgery on a
+  published tag, which is the thing a release tag should not need. (b)
+  publishes on every push to that branch, and because the tag/`Cargo.toml`
+  version check keys off an `argos-v` ref name, that check would no longer run
+  on the path that publishes: the one guard against shipping a version nobody
+  named would be off exactly when it is load-bearing. (c) costs six lines,
+  keeps tags as the ordinary route, and cannot fire without someone ticking a
+  box.
+- Result: A lost tag run is recovered by dispatching the workflow with the box
+  ticked. Note that the version check is skipped on this path too, by the same
+  `argos-v` ref-name condition, so a dispatch publish trusts whatever
+  `argos/Cargo.toml` declares. That is acceptable for a hand-driven escape
+  hatch and is not acceptable as the default route, which is why the tag stays
+  the default.
+
 ## D-158: The skill fork is a pure copy of skill/, checked by upstream's hooks (2026-08-06)
 - Decided by: Claude (for Ghassen Naouar)
 - Decision: The datahub-skills fork carries no edits of its own. Its

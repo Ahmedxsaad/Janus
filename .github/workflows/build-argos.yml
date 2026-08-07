@@ -33,6 +33,15 @@ on:
   # Buildable on demand as well: the compile is the slow part of reviewing a
   # change to the crate, and nobody should have to cut a tag to find out.
   workflow_dispatch:
+    inputs:
+      # An escape hatch for the day a tag push does not schedule a run, which
+      # leaves a release with nowhere to go and no way to retry: a queued run
+      # that never starts has no re-run button. Off by default, so the ordinary
+      # dispatch stays a build and only a deliberate tick publishes.
+      publish:
+        description: also publish janus-argos to PyPI
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -142,7 +151,9 @@ jobs:
   publish:
     name: publish janus-argos to PyPI
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    # `inputs` is null outside a dispatch, so a tag push takes the first arm and
+    # a dispatch publishes only when the box was ticked.
+    if: startsWith(github.ref, 'refs/tags/') || inputs.publish
     runs-on: ubuntu-latest
     permissions:
       id-token: write
