@@ -4,7 +4,7 @@ A trial is one graph state plus the findings that state should produce. Ground
 truth is not a judgement call: it is whatever the injector planted, and every
 trial is built from the same reversible scenarios the demo uses
 (``janus.seed.scenarios``), so the benchmark measures the shipped detectors
-rather than a reimplementation of them (benchmarks/CLAUDE.md rule 1).
+rather than a reimplementation of them (docs/08-evaluation.md).
 
 Why the freshness sweep is the interesting part
 -----------------------------------------------
@@ -21,7 +21,7 @@ Determinism
 Every trial is a fixed constant: fixed lags, fixed order, fixed expectations. No
 sampling and no seeded randomness, because there is nothing here worth
 randomising, and a run that cannot be re-derived by reading this file is a run
-whose numbers nobody can check (benchmarks/CLAUDE.md rules 1 and 4).
+whose numbers nobody can check (docs/08-evaluation.md).
 
 The precondition, and why it is not the answer
 ----------------------------------------------
@@ -122,7 +122,7 @@ class Trial:
     A boundary is not always a graph shape. A hop cap and the label term are
     configuration, and moving them is how the *same* graph asks the detector a
     question whose answer could go either way, without seeding a second warehouse
-    to ask it with (F6). Applied with ``dataclasses.replace``, so a typo in a
+    to ask it with. Applied with ``dataclasses.replace``, so a typo in a
     field name fails the run rather than being silently ignored."""
     boundary: bool = False
     """Whether this trial sits somewhere the detector could plausibly go wrong.
@@ -139,13 +139,13 @@ class Trial:
     Set by the multi-path trials, where "is the label reachable" is no longer
     the question: with two derivations planted, the interesting states differ in
     *which* of them survive, and a precondition that only asked whether some label
-    was reachable would pass on the wrong graph. Set by the T-09 confusable
+    was reachable would pass on the wrong graph. Set by the confusable
     negatives too, whose upstream is not a label at all. None means the usual
     question: whether the declared label specifically is reachable."""
     leak_feature_column: str = spec.LEAKAGE_FEATURE
     """Which feature-table column's upstream lineage a leakage trial's
     precondition inspects. Every trial about the flagship leak asks about
-    ``prior_default_flag``, the default; T-09's confusable-negative scenarios
+    ``prior_default_flag``, the default; the confusable-negative scenarios
     never touch that column at all, so they name their own."""
     planted: bool | None = None
     """What is planted in the graph, when that differs from what should be found.
@@ -199,7 +199,7 @@ def _plant_two_leak_paths(conn: DataHubConnection, trial: Trial, now_ms: int) ->
 
 
 def _plant_common_ancestor(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
-    """Plant or revert the common-ancestor scenario (T-09).
+    """Plant or revert the common-ancestor scenario.
 
     Planting also cuts the flagship leak, in the same write the scenario
     itself makes (scenarios.py): prior_default_flag still deriving from
@@ -211,7 +211,7 @@ def _plant_common_ancestor(conn: DataHubConnection, trial: Trial, now_ms: int) -
 
 
 def _plant_label_lookalike(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
-    """Plant or revert the label-lookalike scenario (T-09). See _plant_common_ancestor."""
+    """Plant or revert the label-lookalike scenario. See _plant_common_ancestor."""
     plant_label_lookalike(conn) if trial.graph_state else revert_label_lookalike(conn)
 
 
@@ -282,7 +282,7 @@ def _leakage_trials() -> tuple[Trial, ...]:
 
     The two after it exist because presence-and-absence of one edge is a
     construction proof, not a measurement: neither of those trials can go the
-    wrong way without the detector being broken outright (F6). The boundary
+    wrong way without the detector being broken outright. The boundary
     trials can. Both hold the graph fixed and move the *question*, which is what
     makes them cheap enough to be honest: the seeded leak sits exactly one column
     hop from the label, so a cap of one must find it and a cap of zero must not,
@@ -363,7 +363,7 @@ def _leakage_trials() -> tuple[Trial, ...]:
             overrides=(("label_term_urn", UNUSED_LABEL_TERM),),
             boundary=True,
         ),
-        # T-09 (09 section 2.2): precision of 1.00 is close to vacuous while the
+        # Precision of 1.00 is close to vacuous while the
         # negative trials are absent positives rather than hard negatives. Both
         # below plant a graph shape that could plausibly fool a weaker detector
         # and must not fire. leakage-label-lookalike runs before
@@ -375,7 +375,7 @@ def _leakage_trials() -> tuple[Trial, ...]:
         # makes. Label-lookalike left last would leave applicant_income
         # deriving from target_indicator for every trial after it, which is
         # exactly what broke the sensitive-source trial's own precondition
-        # the first time this ran live (D-116).
+        # the first time this ran live.
         Trial(
             name="leakage-label-lookalike",
             family=FindingType.TARGET_LEAKAGE,
@@ -488,12 +488,12 @@ def _deprecation_trials() -> tuple[Trial, ...]:
 
 
 def _plant_proxy(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
-    """Plant or revert the proxy fork (T-11)."""
+    """Plant or revert the proxy fork."""
     plant_proxy_attribute(conn) if trial.graph_state else revert_proxy_attribute(conn)
 
 
 def _proxy_trials() -> tuple[Trial, ...]:
-    """The fork, and the two ways it is not one (T-11, 09 section 5.1).
+    """The fork, and the two ways it is not one .
 
     The negatives are the whole point of this family. A detector that reported
     every feature sharing any ancestor with any classified column would pass a
@@ -570,7 +570,7 @@ def _plant_degraded(conn: DataHubConnection, trial: Trial, now_ms: int) -> None:
 
 
 def _degraded_trials() -> tuple[Trial, ...]:
-    """The degraded mode, both directions (T-07).
+    """The degraded mode, both directions.
 
     The negative is the one that matters, and it is a boundary rather than a
     comfortable miss: the graph is *identical* apart from the link, and the table
@@ -671,7 +671,7 @@ def _leakage_visible(
     Asks the same column-lineage query the detector asks, but inspects the
     *lineage*, not whether a finding was raised.
 
-    A multi-path trial, and T-09's confusable-negative trials, name the exact
+    A multi-path trial, and the confusable-negative trials, name the exact
     set of columns the queried feature must be seen deriving from, because
     "a label is reachable" (or "the seeded default answers") is true of more
     than one graph and only one of them is the trial. Both ask about
@@ -679,7 +679,7 @@ def _leakage_visible(
     trial about the flagship leak and a different column for the ones that
     never touch it.
 
-    T-09's trials also clear the flagship leak while their own scenario is
+    Those trials also clear the flagship leak while their own scenario is
     planted (and restore it on revert): ``_observe`` asks whether the *model*
     has any leakage finding, so the flagship leak still being present would
     read as a false positive on the scenario's own column rather than what it
@@ -771,7 +771,7 @@ def _proxy_visible(conn: DataHubConnection, trial: Trial, config: ScanConfig, no
     derivation from ``income`` is indexed asynchronously. Waiting on the tag
     alone would let a trial ask the detector its question before the ancestry
     the answer depends on had arrived, which is the bug that broke the
-    sensitive-source precondition (D-116).
+    sensitive-source precondition.
     """
     column_urn = str(spec.feature_column_urn(PROXY_PROTECTED_COLUMN.name))
     tags = conn.graph.get_aspect(column_urn, GlobalTagsClass)
@@ -849,7 +849,8 @@ def restore_baseline(conn: DataHubConnection, *, now_ms: int | None = None) -> N
     # the seeded single-path lineage itself and would otherwise be the last word.
     revert_second_leak_path(conn)
     plant_leakage(conn)
-    # Both T-09 scenarios move applicant_income's own lineage, which nothing
+    # Both confusable-negative scenarios move applicant_income's own lineage,
+    # which nothing
     # above touches, so they revert independently of the leak above.
     revert_common_ancestor_label(conn)
     revert_label_lookalike(conn)
@@ -857,7 +858,7 @@ def restore_baseline(conn: DataHubConnection, *, now_ms: int | None = None) -> N
     revert_schema_drift(conn)
     # The governance declarations are anomalies planted on top of the seed, not
     # part of it, so the baseline is the withdrawn state for both. The leak above
-    # is the exception because it *is* the seeded baseline (D-032).
+    # is the exception because it *is* the seeded baseline.
     revert_sensitive_source(conn)
     revert_deprecated_input(conn)
     # The link is part of the seeded baseline, not an anomaly: a benchmark that
