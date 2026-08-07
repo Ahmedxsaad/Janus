@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import asyncio
 
-from mcp.types import ToolAnnotations
+import pytest
 
-from janus.mcp_server import _READ_ONLY, _render_finding, create_server
+from janus import mcp_server
+from janus.mcp_server import _render_finding, create_server
 from tests.conftest import make_finding, make_leakage_finding, make_schema_drift_finding
 
 
@@ -77,7 +78,7 @@ def test_every_tool_is_read_only():
 
     Checked at the server's actual registration, over the same ``list_tools``
     call a client makes, not by re-reading the constant: a tool registered
-    without passing ``_READ_ONLY`` would pass a check that only inspected the
+    without the read-only annotation would pass a check that only inspected the
     constant's own value.
     """
     for tool in _registered_tools():
@@ -85,9 +86,31 @@ def test_every_tool_is_read_only():
         assert tool.annotations.readOnlyHint is True, f"{tool.name} is not read-only"
 
 
-def test_the_read_only_constant_is_the_shape_fastmcp_expects():
-    assert isinstance(_READ_ONLY, ToolAnnotations)
-    assert _READ_ONLY.readOnlyHint is True
+def test_the_missing_extra_is_reported_as_a_command_not_a_traceback(monkeypatch):
+    """`janus-mcp` on a plain install used to die with an ImportError (D-155).
+
+    The console script is registered unconditionally, so somebody who ran
+    `pip install janus-datahub` and typed `janus-mcp` got a traceback quoting a
+    site-packages path. Every other optional extra here names itself and the
+    command that installs it, and this one is the likeliest to be reached by
+    accident: an MCP client launches it, so the traceback lands in that
+    client's log rather than on a terminal.
+    """
+    import builtins
+
+    real_import = builtins.__import__
+
+    def _no_mcp(name: str, *args: object, **kwargs: object) -> object:
+        if name.startswith("mcp"):
+            raise ImportError(f"No module named {name!r}")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _no_mcp)
+
+    with pytest.raises(SystemExit) as caught:
+        mcp_server.main()
+
+    assert '"janus-datahub[mcp]"' in str(caught.value)
 
 
 def test_the_server_exposes_exactly_the_three_detectors():

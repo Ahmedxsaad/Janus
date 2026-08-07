@@ -944,6 +944,7 @@ def main() -> None:
     import argparse
 
     from rich.console import Console
+    from rich.markup import escape
 
     from janus.client import DataHubConnectionError, connect
 
@@ -971,7 +972,7 @@ def main() -> None:
     try:
         conn = connect()
     except DataHubConnectionError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise SystemExit(1) from exc
 
     if args.scenario == TARGET_LEAKAGE:

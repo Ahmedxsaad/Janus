@@ -56,8 +56,18 @@ inputs:
 
 outputs:
   blocked:
-    description: "true when the policy was violated."
+    description: >-
+      true when the policy was violated. Deliberately false when the gate could
+      not reach a verdict: that is a setup failure, not a finding about the
+      model, and a downstream step that posted "this model is unsafe" because
+      DataHub was unreachable would teach a team to ignore the message. Read
+      `outcome` to tell those two apart.
     value: ${{ steps.gate.outputs.blocked }}
+  outcome:
+    description: >-
+      clean, blocked, or error: the gate's three exit codes, named. `error`
+      means the gate could not tell, and the step failed for that reason.
+    value: ${{ steps.gate.outputs.outcome }}
 
 runs:
   using: composite
@@ -100,11 +110,21 @@ runs:
 
         if [ $code -eq 0 ]; then
           echo "blocked=false" >> "$GITHUB_OUTPUT"
+          echo "outcome=clean" >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
-        echo "blocked=true" >> "$GITHUB_OUTPUT"
+        # blocked stays false on exit 2. The build fails either way, but a
+        # downstream step reading this output must not be told the model was
+        # blocked by policy when the gate never reached a verdict: exit 2 is
+        # never a finding (janus/CLAUDE.md rule 2), and that rule has to hold
+        # where a workflow consumes the answer, not only in the log text.
         if [ $code -eq 2 ]; then
+          echo "blocked=false" >> "$GITHUB_OUTPUT"
+          echo "outcome=error" >> "$GITHUB_OUTPUT"
           echo "::error title=Janus::The gate could not reach a verdict. This is a setup or connectivity failure, not a finding about your model."
+        else
+          echo "blocked=true" >> "$GITHUB_OUTPUT"
+          echo "outcome=blocked" >> "$GITHUB_OUTPUT"
         fi
         exit $code

@@ -67,8 +67,27 @@ def _conn():  # noqa: ANN202 - a DataHubConnection
 class TestSurface:
     def test_the_supported_names_import_from_the_top_level_package(self):
         """What a user's script pins to. Moving one of these breaks them silently."""
-        for name in ("link_model", "scan_model", "ScanReport", "LinkResult", "LinkError"):
+        for name in (
+            "link_model",
+            "scan_model",
+            "ScanReport",
+            "LinkResult",
+            "LinkError",
+            "TableResolutionError",
+        ):
             assert hasattr(janus, name), name
+
+    def test_the_error_a_script_hits_first_is_catchable_without_importing_the_cli(self):
+        """`--features analytics.customer_features` is ambiguous on a real catalog (D-153).
+
+        A relation named the way the warehouse names it generally exists on more
+        than one platform (dbt and postgres, in the validation stack), so this is
+        the first exception a training script meets. It was raised out of
+        `janus.cli`, which meant catching it in a training script required
+        importing the command line.
+        """
+        assert janus.TableResolutionError is not None
+        assert issubclass(janus.TableResolutionError, ValueError)
 
     def test_all_lists_exactly_the_supported_surface(self):
         """`from janus import *` must not hand out anything unsupported."""
@@ -76,6 +95,7 @@ class TestSurface:
             "LinkError",
             "LinkResult",
             "ScanReport",
+            "TableResolutionError",
             "__version__",
             "link_model",
             "scan_model",

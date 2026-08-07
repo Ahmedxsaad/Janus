@@ -16,6 +16,191 @@ Entry template:
 
 ---
 
+## D-157: Every install hint names the distribution, and survives rich (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing every optional extra as a user
+- Decision: The two remaining unescaped hints are escaped (`cli.py`'s `--events`
+  message and `argos/producer.py`'s missing-window line), and the two that told a
+  wheel user to run `pip install -e ".[...]"` now name the distribution
+  (`agent/graph.py`, `llm.py`). Two tests walk the whole class rather than the
+  reported instance: one prints a hint for every extra in `pyproject.toml` and
+  asserts the brackets survive, the other greps `janus/` for `pip install -e`.
+- Options considered: (a) fix the two reported lines; (b) fix them and pin the
+  class with tests derived from `pyproject.toml` and a source scan.
+- Why: D-151 escaped the sites interpolating an *exception*, which is how the
+  feast hint reached the terminal intact. Two sites build the advice inline
+  instead, so `--events` still printed `pip install "janus-datahub"` with the
+  `[kafka]` deleted by rich, and `--pet` would have done the same off Linux.
+  Separately, `scan --review` and an unconfigured LLM provider told the reader to
+  run an editable install of a directory they do not have, since they installed a
+  wheel. Both are the same defect in the end: advice that cannot be followed, in
+  the one line whose whole job is to be followed. (b) because fixing instance by
+  instance is what let the second and third survive the first pass; the source
+  scan immediately found a fourth in `llm.py` that manual review had missed.
+- Result: All ten extras print an installable command. Verified from the wheel
+  for `[kafka]`, `[agent]` and the three provider bindings. 982 unit tests pass.
+
+## D-156: The Action's outputs keep exit 2 out of "blocked" (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the shipped artifacts as a user
+- Decision: `action.yml` sets `blocked=false` when the gate exits 2, and adds an
+  `outcome` output carrying `clean`, `blocked` or `error`. The step still fails
+  the build on both 1 and 2, unchanged.
+- Options considered: (a) leave it, since the step fails either way and the log
+  says which; (b) set `blocked=false` on exit 2 only; (c) (b) plus a three-valued
+  `outcome`, so a workflow can still tell "clean" from "could not tell".
+- Why: `blocked` is documented as "true when the policy was violated", and the
+  script set it true for exit 2 as well, where nothing was violated because
+  nothing was measured. janus/CLAUDE.md rule 2 states this exact rule for the
+  exit codes, and the reason it gives applies harder to an output a workflow
+  consumes than to log text: a step gated on
+  `steps.gate.outputs.blocked == 'true'` would comment "this model is unsafe" on
+  a pull request because DataHub was unreachable, which is how a team learns to
+  ignore the message. (b) alone was rejected because it would leave a workflow
+  unable to distinguish a passing gate from a broken one at all.
+- Result: The three states verified against a live instance (violation, clean,
+  unreachable server) produce exit 1/0/2 with `blocked=true/false/false` and
+  `outcome=blocked/clean/error`. `tests/test_action.py` pins it, confirmed red
+  against the pre-fix file per tests/CLAUDE.md rule 6, and `action.yml` joins
+  `[tool.mutmut] also_copy` because that suite now reads it (D-125).
+
+## D-155: janus-mcp names the extra instead of dying with a traceback (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: `mcp_server.py` imports `FastMCP` and `ToolAnnotations` inside
+  `create_server()` rather than at module level, and `main` turns the resulting
+  `ImportError` into a one-line `SystemExit` naming the extra. The module-level
+  `_READ_ONLY` constant becomes a local, since it was the only reason
+  `mcp.types` had to be imported at module scope.
+- Options considered: (a) leave it, since the README says to install `[mcp]`;
+  (b) defer the import into `create_server` and report it from `main`;
+  (c) stop registering the `janus-mcp` console script unless the extra is present
+  (not possible: entry points are static metadata).
+- Why: `pip install janus-datahub` registers `janus-mcp` unconditionally, so
+  typing it on a plain install printed an ImportError traceback quoting a
+  site-packages path. Every other optional extra here (feast, kafka, pet) names
+  itself and the command that installs it. This is also the entry point most
+  likely to be reached by accident, because an MCP client launches it rather
+  than a person, so the traceback lands in that client's log where it reads as
+  a broken server rather than a missing package.
+- Result: `janus-mcp` on a plain install prints
+  `serving over MCP needs the mcp package, which is an optional extra: pip
+  install "janus-datahub[mcp]"`. With the extra installed, a real MCP client
+  over stdio lists the three tools, each annotated `readOnlyHint: true`, and all
+  three return correct results. `tests/test_mcp_server.py` covers it, confirmed
+  red against the pre-fix code per tests/CLAUDE.md rule 6. The test that only
+  inspected the `_READ_ONLY` constant's own value was deleted rather than
+  rewritten: its sibling already checks the property at real registration, which
+  its own docstring names as the stronger check.
+
+## D-154: A classification URN that cannot match anything is refused (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: The four classification variables are read through a new
+  `env.optional_urn_list(name, urn_type)`, which parses every entry with the
+  SDK's own URN class and raises `ConfigError` naming the variable and the entry.
+  `optional_list` is unchanged and still serves `JANUS_LABEL_COLUMN_NAMES`, which
+  takes column names rather than URNs.
+- Options considered: (a) validate the `urn:li:` prefix only; (b) parse with the
+  specific SDK URN class, rejecting a wrong entity type too; (c) check each URN
+  exists in the catalog; (d) leave it, since an unmatched URN is the user's error.
+- Why: `JANUS_SENSITIVE_TERM_URNS=not-a-urn` was accepted in silence, and took a
+  live catalog's guard coverage from 33% to 93% with sensitive source and proxy
+  candidate both reporting 100%. Neither can ever fire: no column carries a term
+  whose URN is `not-a-urn`. So the two detectors ran, compared against nothing,
+  and reported clean, while the headline figure said the estate was guarded. That
+  is the silent pass this project exists to catch, reproduced inside its own
+  configuration, and root CLAUDE.md rule 6a already says a value like this fails
+  loudly naming the variable. (b) over (a) because a tag URN in the term variable
+  is the likelier typo of the two and is equally dead. (c) was rejected: it turns
+  reading configuration into a graph call, and a term legitimately declared after
+  Janus was configured would fail on startup.
+- Result: All three cases (a non-URN, a name like `PII`, a tag URN where a term
+  belongs) now fail loudly and name the variable; a correct term URN is unchanged.
+  Four tests in `tests/test_env.py`.
+
+## D-153: TableResolutionError joins the supported public surface (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: `janus.__init__` re-exports `TableResolutionError` and lists it in
+  `__all__`, alongside `LinkError`.
+- Options considered: (a) leave it in `janus.cli`; (b) re-export it from the
+  package root; (c) move the class into api.py and have cli.py import it back.
+- Why: Running the README's own training-script snippet against a real catalog
+  raised `janus.cli.TableResolutionError` on the first call, because
+  `analytics.customer_features` exists on both dbt and postgres, which is the
+  ordinary state of a warehouse relation and not an edge case. A script that
+  wants to catch it had to import the command line to name it, in a package whose
+  documented surface is "two functions and their result types". `LinkError` was
+  already exported and this is the sibling a caller meets sooner. (c) is the
+  tidier home and was not taken now: api.py already imports resolve_table from
+  cli.py, so the move is a wider refactor than the defect justifies.
+- Result: `from janus import TableResolutionError` works. `tests/test_api.py`
+  pins it in the surface set the other tests already guard.
+
+## D-152: How many checks a model buys is counted, not typed (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: `_print_clean` derives a model's check count from
+  `detect.coverage.MODEL_CHECKS` instead of the literal `2`.
+- Options considered: (a) update the literal to 5; (b) count from MODEL_CHECKS.
+- Why: The literal was correct when target leakage and schema drift were the only
+  model detectors, and stayed 2 after sensitive source, deprecated input and
+  proxy candidate landed. A scan of a model whose only two gaps were the
+  unconfigured classification checks computed `ran = 2 - 2 = 0` and printed
+  "Nothing was evaluated. No check had the metadata it needs." over a leakage
+  check and a drift check that had both just run clean. Found by linking a real
+  unlinked model and rescanning it, which is the exact sequence the tool tells a
+  new user to follow: the reply to doing the recommended thing was that it had
+  changed nothing. (a) was rejected because it would go stale on the next
+  detector; MODEL_CHECKS already has a test pinning it to what a bare model
+  produces, which is the property that makes counting from it safe.
+- Result: The same scan now reads "No finding from the 3 of 5 checks that ran".
+  Two tests in `tests/test_cli.py` cover it, including that a model with every
+  check gapped still gets the honest "Nothing was evaluated".
+
+## D-151: Text nobody here wrote is escaped before rich prints it (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: Every site interpolating an exception into a rich markup string wraps
+  it in `rich.markup.escape` (26 sites across cli.py and the two seed entry
+  points).
+- Options considered: (a) escape at each call site; (b) print these messages with
+  `markup=False`, losing the red; (c) route them through one helper.
+- Why: `janus link --from feast` without the extra installed printed
+  `pip install "janus-datahub"`. The string in adapters/feast.py is correct and
+  says `"janus-datahub[feast]"`; rich parsed `[feast]` as a style tag and dropped
+  it, so the one actionable token in the message was the one token removed, and
+  the advice became the command the user had already run. The same silent
+  deletion applied to `[kafka]` and `[pet]`, and to any exception text from
+  someone else's SDK that happens to contain brackets. (c) was rejected as an
+  indirection over a one-call fix: `escape(...)` at the site is greppable and
+  says what it does, and a helper would hide which text is untrusted.
+- Result: Extras advice survives to the terminal. `tests/test_cli.py` pins it by
+  asserting the bracketed install target is still in the captured output.
+
+## D-150: A confirmation prompt must show the command it will run (2026-08-06)
+- Decided by: Claude (for Ghassen Naouar), from testing the installed wheel as a user
+- Decision: `link` folds the flags the user typed into an inferred proposal
+  before printing it, in `_with_typed_flags`. Two smaller fixes ship with it:
+  `client.py` suppresses the SDK's `IngestionAttributionWarning`, and the
+  missing-`DATAHUB_GMS_URL` message stops assuming the reader has a clone.
+- Options considered: (a) leave the display alone, since the write path already
+  honoured the typed flags; (b) refuse `--infer` together with `--label-column`,
+  as `--infer` and `--from` already refuse each other; (c) merge the typed flags
+  into the proposal before it is printed.
+- Why: `janus link --model M --infer --label-column churned` printed a proposal
+  whose reasons still read "label column: NOT FOUND ... has to be supplied with
+  --label-column", rendered a command with no `--label-column` in it, and then
+  asked "Declare this? [Y/n]". The link written was the right one, so this was
+  never a data defect, but the user was confirming a command that was not the
+  command. `_print_proposal`'s own docstring says a proposal accepted without
+  reading the reasoning is a guess with a confirmation prompt stapled to it, and
+  printing stale reasoning is the same failure one level down. (b) was rejected
+  because combining them is the documented recovery: the tool tells the user to
+  rerun with `--label-column` when nothing in the graph names a label.
+  The warning suppression is the same class of defect: every write is idempotent
+  read-before-write (root rule 5) and rerunning is documented, so the SDK warned,
+  with a site-packages path, on every entity a second run correctly left alone,
+  under a line promising nothing would duplicate.
+- Result: The printed reasons and command now match what runs, with one line per
+  override naming the flag it came from. Verified against a live Quickstart from
+  a wheel installed into a clean venv on Python 3.12. 962 unit tests still pass;
+  `tests/test_cli_link.py` gains coverage of the merge.
+
 ## D-149: The Windows build needs an .ico, and make_icon.py writes it (2026-08-06)
 - Decided by: Claude (for Ghassen Naouar), from the Windows job's first build
 - Decision: `argos/icons/make_icon.py` emits `icon.ico` alongside `icon.png`,

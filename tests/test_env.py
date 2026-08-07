@@ -3,12 +3,14 @@ from __future__ import annotations
 import pathlib
 
 import pytest
+from datahub.metadata.urns import GlossaryTermUrn
 
 from janus import env as env_module
 from janus.env import (
     ConfigError,
     optional_float,
     optional_int,
+    optional_urn_list,
     optional_value,
     required_value,
     scrub,
@@ -171,3 +173,53 @@ def test_no_module_hardcodes_a_vendor_model_id_or_a_provider_key_name():
         offenders += [f"{path.name}:{token}" for token in forbidden if token in code]
 
     assert not offenders, f"vendor-specific configuration is hardcoded: {offenders}"
+
+
+# --------------------------------------------------------------------------
+# A classification URN that cannot match is a typo, not a configuration
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "PII",  # the glossary term's name, the obvious thing to type
+        "not-a-urn",
+        "urn:li:tag:PII",  # right idea, wrong variable: this one takes terms
+    ],
+)
+def test_a_value_that_could_never_match_a_column_is_refused(monkeypatch, value):
+    """These variables switch a detector on. A dead one reads as a clean catalog (D-154).
+
+    Nothing in a catalog carries a term whose URN is "PII", so the detector
+    would run, compare against nothing, and report clean forever, while
+    `janus coverage` counted it as configured. Setting one variable to the
+    string "not-a-urn" took a real catalog from 33% to 93% guarded.
+    """
+    monkeypatch.setenv("JANUS_TEST_TERMS", value)
+
+    with pytest.raises(ConfigError) as caught:
+        optional_urn_list("JANUS_TEST_TERMS", GlossaryTermUrn)
+
+    # Names the variable and quotes the offending entry: these are public
+    # identifiers, so unlike a credential they can be echoed, and a message that
+    # declined to say which entry was wrong would be unfixable in a long list.
+    assert "JANUS_TEST_TERMS" in str(caught.value)
+    assert value in str(caught.value)
+
+
+def test_well_formed_urns_are_returned_as_the_user_wrote_them(monkeypatch):
+    """Validated, not normalised: callers compare these as strings against the graph."""
+    monkeypatch.setenv("JANUS_TEST_TERMS", "urn:li:glossaryTerm:PII, urn:li:glossaryTerm:PHI")
+
+    assert optional_urn_list("JANUS_TEST_TERMS", GlossaryTermUrn) == (
+        "urn:li:glossaryTerm:PII",
+        "urn:li:glossaryTerm:PHI",
+    )
+
+
+def test_unset_stays_unset(monkeypatch):
+    """Unset means the detector reports itself not evaluated, which is not an error."""
+    monkeypatch.delenv("JANUS_TEST_TERMS", raising=False)
+
+    assert optional_urn_list("JANUS_TEST_TERMS", GlossaryTermUrn) == ()

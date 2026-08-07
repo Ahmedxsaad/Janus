@@ -19,7 +19,10 @@ from datahub.metadata.schema_classes import (
     StructuredPropertiesClass,
 )
 from rich.console import Console
+from rich.markup import escape
 
+from janus.adapters import AdapterError
+from janus.agent.pipeline import ScanReport
 from janus.argos.producer import ArgosProducer
 from janus.argos.protocol import Command
 from janus.cli import (
@@ -27,6 +30,7 @@ from janus.cli import (
     TableResolutionError,
     WatchState,
     _declared_link,
+    _print_clean,
     _print_proposal,
     _watch_failure_message,
     _watch_once,
@@ -36,6 +40,12 @@ from janus.cli import (
 )
 from janus.client import ENV_GMS_TOKEN, DataHubConnection
 from janus.config import ScanConfig
+from janus.detect.coverage import (
+    CHECK_PROXY,
+    CHECK_SENSITIVE_SOURCE,
+    MODEL_CHECKS,
+    Unevaluated,
+)
 from janus.writeback.link import LinkError
 from janus.writeback.link_infer import LinkProposal
 from tests.conftest import (
@@ -638,3 +648,106 @@ def test_all_refuses_a_declaration_it_could_only_apply_to_one_model():
 
     assert result.exit_code == 2
     assert "--all" in result.output
+
+
+def test_an_error_message_keeps_the_brackets_it_was_written_with():
+    """The advice in these messages is the bracketed part, and rich ate it (D-151).
+
+    ``console.print(f"[red]{exc}[/red]")`` hands the exception's own text to
+    rich's markup parser, which reads ``[feast]`` as an unknown style tag and
+    drops it. Every message telling somebody to install an optional extra came
+    out as ``pip install "janus-datahub"``, which is the command they already
+    ran. Escaping the interpolated text is what keeps it text.
+    """
+    console = Console(soft_wrap=True, width=200)
+    exc = AdapterError(
+        "reading a Feast repo needs the feast package, which is an optional "
+        'extra: pip install "janus-datahub[feast]"'
+    )
+
+    with console.capture() as captured:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+
+    assert '"janus-datahub[feast]"' in captured.get()
+
+
+def test_a_model_scan_credits_the_checks_that_actually_ran(capsys):
+    """The count of checks a model buys comes from MODEL_CHECKS, never a literal (D-152).
+
+    It used to read 2, for target leakage and schema drift, and stayed 2 after
+    three more model detectors landed. A model whose only gaps were the two
+    unconfigured classification checks then computed ran == 0 and printed
+    "Nothing was evaluated. No check had the metadata it needs." over a leakage
+    and a drift check that had both just run clean. That is the worst possible
+    moment to say it: the reader has usually just declared the link that made
+    those two checks runnable, and is being told it changed nothing.
+    """
+    model_urn = "urn:li:mlModel:(urn:li:dataPlatform:mlflow,telco_churn_1,PROD)"
+    gaps = tuple(
+        Unevaluated(check=check, target_urn=model_urn, reason="unconfigured", remedy="set it")
+        for check in (CHECK_SENSITIVE_SOURCE, CHECK_PROXY)
+    )
+
+    _print_clean(ScanReport(run_id="r", dry_run=True, model_urn=model_urn, not_evaluated=gaps))
+
+    printed = capsys.readouterr().out
+    assert f"{len(MODEL_CHECKS) - len(gaps)} of {len(MODEL_CHECKS)} checks that ran" in printed
+    assert "Nothing was evaluated" not in printed
+
+
+def test_a_model_with_no_metadata_at_all_still_says_nothing_was_evaluated(capsys):
+    """The honest message has to survive the fix: every check gapped means none ran."""
+    model_urn = "urn:li:mlModel:(urn:li:dataPlatform:mlflow,telco_churn_1,PROD)"
+    gaps = tuple(
+        Unevaluated(check=check, target_urn=model_urn, reason="nothing linked", remedy="link it")
+        for check in MODEL_CHECKS
+    )
+
+    _print_clean(ScanReport(run_id="r", dry_run=True, model_urn=model_urn, not_evaluated=gaps))
+
+    assert "Nothing was evaluated" in capsys.readouterr().out
+
+
+def test_every_install_hint_survives_being_printed():
+    """The extra's name is the only actionable token in these lines (D-157).
+
+    Rich reads a bare `[kafka]` as a style tag and deletes it, turning
+    `pip install "janus-datahub[kafka]"` into the command the reader has
+    already run. D-151 escaped the sites that interpolate an *exception*; two
+    sites building the advice inline were missed, which is why this test walks
+    every extra rather than the one that was reported.
+
+    Sourced from pyproject so a new extra with a new hint cannot be added
+    without either escaping it or failing here.
+    """
+    import tomllib
+
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    extras = tomllib.loads(pyproject.read_text())["project"]["optional-dependencies"]
+    assert extras, "no extras found: this test cannot check anything"
+
+    console = Console(soft_wrap=True, width=200)
+    for extra in extras:
+        hint = f'pip install "janus-datahub[{extra}]"'
+        with console.capture() as captured:
+            console.print(f"[red]{escape(hint)}[/red]")
+
+        assert f"[{extra}]" in captured.get(), extra
+
+
+def test_no_install_hint_tells_a_pypi_user_to_install_from_a_clone():
+    """`pip install -e '.[agent]'` only works in a clone of this repository.
+
+    The reader of these messages installed a wheel. Telling them to run an
+    editable install of a directory they do not have is advice that cannot be
+    followed, and it was shipped on the `--review` path (D-157).
+    """
+    package = Path(__file__).resolve().parents[1] / "janus"
+    offenders = [
+        f"{path.relative_to(package.parent)}:{number}"
+        for path in package.rglob("*.py")
+        for number, line in enumerate(path.read_text().splitlines(), start=1)
+        if "pip install -e" in line and not line.lstrip().startswith("#")
+    ]
+
+    assert offenders == [], f"clone-only install advice: {offenders}"

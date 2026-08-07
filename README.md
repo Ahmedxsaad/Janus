@@ -467,6 +467,13 @@ In a workflow, via the bundled action:
     gms-token: ${{ secrets.DATAHUB_GMS_TOKEN }}
 ```
 
+The action reports the same three states to the rest of the workflow, as
+`outcome` (`clean`, `blocked`, `error`) alongside the boolean `blocked`. The
+distinction is the same one the exit codes make and it matters more here: a step
+gated on `blocked == 'true'` must not comment "this model is unsafe" on a pull
+request because DataHub happened to be unreachable, so `blocked` stays false when
+the gate could not tell, and `outcome` is how you catch that case.
+
 The verdict lands on the run's own summary page, not just in the log: findings,
 severities, trust scores, and the checks that could not run, as a table the
 reviewer sees without opening anything. That needs no input and no token, because
@@ -521,8 +528,10 @@ ships that as a CronJob (`link.enabled=true`). And when neither has happened,
 a scan says so specifically ("carries a recorded janus link but declares
 no features") rather than reporting a model it cannot see as healthy.
 
-Two functions and their result types, and deliberately no more: those names are
-the supported surface a script may pin to. They are thin wrappers over exactly
+Two functions, their result types, and the two errors they raise
+(`LinkError`, and `TableResolutionError` for a name matching no dataset or more
+than one, which is what a relation named the way the warehouse names it usually
+does): those names are the supported surface a script may pin to. They are thin wrappers over exactly
 the functions `janus link` and `janus scan` call, so a finding found
 here is found identically at the command line. Both read `.env` the same way the
 CLI does; pass `conn=` to reuse one connection across many models. Everything

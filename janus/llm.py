@@ -162,8 +162,10 @@ def build_chat_model(config: LLMConfig) -> Any:
         module = importlib.import_module(module_name)
     except ImportError as exc:
         raise LLMUnavailableError(
-            f"{ENV_LLM_PROVIDER}={config.provider} needs the {package} package: "
-            f'pip install -e ".[{config.provider}]"'
+            # Names the distribution, not `-e .`: that form only works from a
+            # clone of this repository, and the reader installed a wheel (D-157).
+            f"{ENV_LLM_PROVIDER}={config.provider} needs the {package} package, "
+            f'which is an optional extra: pip install "janus-datahub[{config.provider}]"'
         ) from exc
 
     chat_class = getattr(module, class_name)
