@@ -10,7 +10,7 @@ Five modules, one job each:
 * :mod:`~janus.argos.handler` drives the mid-scan states from the log.
 
 The renderer itself is not Python: it is the Tauri binary built from argos/ in
-the repository root, which reads these events on stdin (docs/plan/08).
+the repository root, which reads these events on stdin (docs/11-argos.md).
 """
 
 from janus.argos.events import from_report, unreachable

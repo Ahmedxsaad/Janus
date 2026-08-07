@@ -1,4 +1,4 @@
-"""How much of a catalog Janus can actually check, as one number (T-15).
+"""How much of a catalog Janus can actually check, as one number.
 
 :mod:`janus.detect.coverage` answers the question per model: which checks
 could not run against *this* model, and what is missing. That answer is the right
@@ -10,7 +10,7 @@ different question:
     8% have a training schema snapshot.
 
 Nothing in the ecosystem produces that figure, and it reframes the adoption cliff
-(F10, F11) from an embarrassment into a roadmap: Janus measures how
+ from an embarrassment into a roadmap: Janus measures how
 observable an ML estate is, then names the single next declaration that would
 raise the number most.
 
@@ -32,9 +32,7 @@ same claim as 100% of two hundred.
 
 Freshness is deliberately not in the figure. It is a check asked of a *table*,
 and folding a table check and five model checks into one percentage would divide
-by two different denominators and call the result one number. 09 section 3.2's
-illustrative sentence included it; that is corrected in place per docs/CLAUDE.md
-rule 1.
+by two different denominators and call the result one number.
 """
 
 from __future__ import annotations

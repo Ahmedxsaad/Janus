@@ -9,7 +9,7 @@ model through its features. On the seeded demo graph those links are there
 because ``janus-seed`` wrote them.
 
 On a real project they are not there, and nothing in the ecosystem writes them.
-Verified end to end (D-074) on an ordinary stack: postgres holding the warehouse,
+Verified end to end on an ordinary stack: postgres holding the warehouse,
 dbt building the feature and label tables, MLflow tracking the training run, and
 DataHub's own postgres, dbt and mlflow ingestion sources run against all three.
 That produces excellent column-level lineage between the *tables*, and an mlModel
@@ -95,7 +95,7 @@ def recorded_link(conn: DataHubConnection, model_urn: str) -> RecordedLink | Non
     """Return what ``link`` was last told about this model, or None.
 
     This is what makes re-linking a one-argument command. An ingestion run
-    rewrites mlModelProperties wholesale and drops the features (D-074), so on a
+    rewrites mlModelProperties wholesale and drops the features, so on a
     real project the link has to be replayed after every ingest; asking somebody
     to keep the original arguments in their head, or in a runbook, is asking for
     the wrong table to be linked six months later.
@@ -123,7 +123,7 @@ def models_with_recorded_link(conn: DataHubConnection) -> tuple[tuple[str, Recor
     because the ingestion run that drops the link is frequently the same one
     that registers a new version and makes this model non-latest. Plain search
     hides it from that moment on, so the replay this command promises would skip
-    exactly the models that most needed it (D-100).
+    exactly the models that most needed it.
     """
     found: list[tuple[str, RecordedLink]] = []
     for urn in search_model_urns(conn):

@@ -7,7 +7,7 @@ picture in a single number, the way a model card summarizes a model's caveats
 sum of the findings a scan produced about a model, plus whether anyone owns it.
 
 Deterministic, like every detector. The score is a fixed function of the
-findings; the LLM never touches it (janus/CLAUDE.md rule 5). The weights are
+findings; the LLM never touches it (docs/02-architecture.md). The weights are
 configuration, so the benchmark can sweep them and a reviewer can read the whole
 contract in :mod:`janus.config`.
 
@@ -158,7 +158,7 @@ def trust_inputs_from_findings(
         if isinstance(finding, ProxyCandidateFinding):
             # Unscored for the same reason the degraded mode below is, and more
             # so: this one does not claim the model is affected at all, only
-            # that a human should check whether it is (T-11). A question that
+            # that a human should check whether it is. A question that
             # moved a trust score would let a tool that cannot answer it decide
             # how much a model is trusted.
             continue

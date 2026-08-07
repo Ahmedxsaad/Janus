@@ -144,7 +144,7 @@ def _downstream_traversal(
 
     Returns:
         The datasets, the features, the at-risk models, and whether the walk
-        was truncated (F1, docs/plan/07): equality against the cap, not `>=`,
+        was truncated (docs/08-evaluation.md): equality against the cap, not `>=`,
         since exactly-the-cap is the only observable signature that a result
         beyond it may exist.
     """
@@ -204,8 +204,8 @@ def upstream_datasets(
 
     The mirror of the traversal above and it lives here for that reason: two
     callers outside this module need it (which tables a freshness incident about
-    this model's inputs could have landed on, T-16; which tables exist only to
-    feed a model, T-18), and a second copy of a hop-capped lineage read is a
+    this model's inputs could have landed on; which tables exist only to
+    feed a model), and a second copy of a hop-capped lineage read is a
     second chance to get the cap wrong.
 
     Filtered by hop count rather than trusted, per rule 3: above two hops

@@ -11,7 +11,7 @@ into the same protocol events `janus watch` sends:
 
 DataHub has no desktop presence today; it is a browser tab people forget to
 open. This is that presence, and Janus is one event source into it rather
-than the whole point (docs/plan/08 section 7).
+than the whole point (docs/11-argos.md).
 
 Read-only, always. Nothing here writes an aspect, so the companion is safe to
 point at a production catalogue with a read-only token.
@@ -41,7 +41,7 @@ from janus.writeback.incidents import attached_incident_urns
 
 logger = logging.getLogger(__name__)
 
-#: Whose assets to watch. An owner identifies an account, so per root CLAUDE.md
+#: Whose assets to watch. An owner identifies an account, so per CONTRIBUTING.md
 #: rule 6a it has no default and no fallback: a companion that guessed would
 #: silently watch somebody else's catalogue, or all of it.
 ENV_OWNER = "JANUS_COMPANION_OWNER"

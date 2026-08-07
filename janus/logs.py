@@ -17,14 +17,14 @@ written twice, so the two renderings cannot drift.
 Selected by ``JANUS_LOG_FORMAT``, which is neither identity nor an
 algorithm parameter but an operational preference of whoever runs the process.
 It defaults to ``text``, because the default reader is a human at a terminal,
-and an unknown value fails loudly rather than quietly picking one (root
-CLAUDE.md rule 6).
+and an unknown value fails loudly rather than quietly picking one
+(CONTRIBUTING.md).
 
 What never appears in a log line
 --------------------------------
 Identifiers and counts only: URNs, hop counts, durations, the numbers a detector
 measured. No aspect content, no narrative prose, and no credential. That rule is
-older than this module (janus/CLAUDE.md rule 4) and JSON does not relax it:
+older than this module (docs/02-architecture.md) and JSON does not relax it:
 a structured field is easier to ship somewhere else, not safer to fill.
 """
 

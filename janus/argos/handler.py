@@ -1,6 +1,6 @@
 """Driving the sprite from the log stream.
 
-Four of the nine states in docs/plan/08 section 3 are phases of a scan rather
+Four of the twelve states in docs/11-argos.md are phases of a scan rather
 than results of one: the lineage walk, the narrator drafting, an aspect landing
 on the graph, an approval waiting. Nothing returns them, because they are things
 happening *inside* a call that has not come back yet.

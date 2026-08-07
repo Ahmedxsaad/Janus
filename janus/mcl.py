@@ -2,9 +2,9 @@
 
 ``janus watch`` polls. That is deliberate and it stays the default: polling
 depends on nothing but GMS, works through a proxy, and cannot silently fall
-behind a Kafka consumer group somebody rebalanced. 03-production-hardening.md
-section C.1 has always named the event-driven upgrade for it, and this is that
-upgrade: a ``MetadataChangeLog`` consumer over the topic GMS already publishes.
+behind a Kafka consumer group somebody rebalanced. The event-driven upgrade has
+always been the named alternative, and this is it: a ``MetadataChangeLog``
+consumer over the topic GMS already publishes.
 
 Why it is worth the dependency
 ------------------------------
@@ -14,8 +14,8 @@ Two things a poll cannot do.
   appears and how hard the catalog is hammered. An event has neither end of that
   trade: nothing is asked until something changed.
 * **Reacting to a change nobody was watching.** This is the one that matters, and
-  it is T-20. ``link``'s join is dropped by *any* ingestion run that upserts
-  ``mlModelProperties``, on *any* model (D-074, F11). A poll only ever notices it
+  ``link``'s join is dropped by *any* ingestion run that upserts
+  ``mlModelProperties``, on *any* model. A poll only ever notices it
   on the target it was pointed at, so the catalog-wide failure needs a
   catalog-wide signal, and the change log is the only one there is.
 
@@ -295,7 +295,7 @@ class ChangeLog:
         caller's handler has returned: an exception escaping the handler leaves
         the offset where it was and the event is re-delivered. At-least-once with
         idempotent handlers is effectively-once, which is the property every
-        write in this project already has (writeback/CLAUDE.md rule 2).
+        write in this project already has (docs/02-architecture.md).
         """
         if self._consumer is None:
             raise RuntimeError("ChangeLog.events() outside its context manager")

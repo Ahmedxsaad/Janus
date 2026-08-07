@@ -4,7 +4,7 @@ Incidents have no Python SDK wrapper in acryl-datahub 1.6.0.13, so the writes go
 through the ``raiseIncident`` and ``updateIncidentStatus`` GraphQL mutations. The
 queries are constants with bound variables: the LLM never composes GraphQL, it
 selects one of these functions and supplies validated arguments
-(writeback/CLAUDE.md rule 1).
+(docs/02-architecture.md).
 
 Idempotency
 -----------
@@ -98,7 +98,7 @@ mutation raiseIncident($input: RaiseIncidentInput!) {
 # The input type is IncidentStatusInput, not UpdateIncidentStatusInput: the name
 # in the plan and in DataHub's own mutation docs does not exist in the schema, and
 # GMS answers a VariableTypeMismatch validation error. Introspected from a live
-# GMS 1.5.0.6; see docs/decision-log.md D-021.
+# GMS 1.5.0.6; see docs/13-design-decisions.md.
 _UPDATE_INCIDENT_STATUS = """
 mutation updateIncidentStatus($urn: String!, $input: IncidentStatusInput!) {
   updateIncidentStatus(urn: $urn, input: $input)
@@ -253,7 +253,7 @@ def raise_incident(
         raise IncidentWriteError(f"raiseIncident returned no URN for {resource_urn}: {response}")
     # The scribble: an aspect actually landed on the graph. Written after the
     # mutation, never before, so the desktop companion depicts a write that
-    # happened rather than one that was attempted (docs/plan/08 section 3).
+    # happened rather than one that was attempted (docs/11-argos.md).
     logger.info(
         "incident raised %s",
         logfmt({"urn": urn, "run_id": run_id}),

@@ -1,11 +1,11 @@
-"""How long Janus's findings stay open, read back out of the graph (T-16).
+"""How long Janus's findings stay open, read back out of the graph.
 
-Janus raises incidents (D-013) and resolves them when the problem goes away
-(D-067, D-069). It has never measured the gap between the two, which is the one
+Janus raises incidents and resolves them when the problem goes away
+. It has never measured the gap between the two, which is the one
 number that says whether the tool changed anything: a leak caught in eleven
 minutes and a leak caught in eleven days are the same detection and completely
 different outcomes. Mean time to resolution per finding type closes the SRE loop
-03-production-hardening.md section C.4 opened, and it costs nothing new to
+the SRE framing opened, and it costs nothing new to
 collect, because every fact it needs is already written.
 
 Where the numbers come from
@@ -69,7 +69,7 @@ from janus.writeback.incidents import attached_incident_urns
 #: Derived rather than authoritative: ``Finding.title`` in models.py is the source
 #: of truth, and a test asserts every concrete finding's title starts with the
 #: prefix registered here. Keyed by :class:`~janus.models.FindingType` for
-#: the reason the AI RMF crosswalk is (T-02): a detector added without a prefix
+#: the reason the AI RMF crosswalk is: a detector added without a prefix
 #: fails a test, rather than quietly contributing nothing to an MTTR figure.
 #:
 #: Prefix and not the whole title, because a title names the columns and tables

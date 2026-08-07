@@ -1,6 +1,6 @@
-"""Re-applying a link an ingestion run has just dropped (T-20, closes F11).
+"""Re-applying a link an ingestion run has just dropped (closes F11).
 
-The failure this exists for, measured on a real stack (D-074): DataHub's mlflow
+The failure this exists for, measured on a real stack: DataHub's mlflow
 source upserts the **whole** ``mlModelProperties`` aspect on every ingest, which
 drops the ``mlFeatures`` that ``janus link`` attached. From that moment the
 model has no join to its columns, so the leakage, sensitive-source and proxy
@@ -87,7 +87,7 @@ def _dropped_the_link(event: MclEvent) -> bool:
         return False
     # Absent and empty are the same fact here: neither leaves a feature for a
     # detector to walk. `mlFeatures` is the field `link` writes and ingestion
-    # overwrites (D-074).
+    # overwrites.
     return not event.aspect.get("mlFeatures")
 
 

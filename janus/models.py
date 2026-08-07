@@ -2,7 +2,7 @@
 
 Detectors return these; the narrator reads them to draft prose; the write-back
 layer turns them into incidents, tags, properties, assertions, and reports.
-Nothing passes dicts across a layer boundary (janus/CLAUDE.md rule 1).
+Nothing passes dicts across a layer boundary (docs/02-architecture.md).
 
 Everything here is a frozen dataclass computed from graph facts. No value in this
 module is ever produced by an LLM: the narrative text an LLM writes is carried
@@ -73,7 +73,7 @@ class FindingType(StrEnum):
     be claiming precision it did not have."""
 
     PROXY_CANDIDATE = "proxy-candidate"
-    """A feature that shares an ancestor with a protected attribute (T-11).
+    """A feature that shares an ancestor with a protected attribute.
 
     Its own type, and deliberately not folded into SENSITIVE_SOURCE, because the
     two make claims of different strength about different things. Sensitive
@@ -89,8 +89,8 @@ class RemedyKind(StrEnum):
 
     Stable identifiers rather than prose, because something other than a human
     reads them: the benchmark keys its appliers on this value so it can perform a
-    remedy against a real graph and check that the finding actually clears
-    (T-03). A remedy nobody can apply mechanically is still a remedy; it simply
+    remedy against a real graph and check that the finding actually clears. A
+    remedy nobody can apply mechanically is still a remedy; it simply
     has no applier registered against its kind.
     """
 
@@ -108,7 +108,7 @@ class RemedyKind(StrEnum):
     RESTORE_SCHEMA = "restore-schema"
     """Put the drifted columns back the way the model was trained to read them."""
     REVIEW = "review"
-    """Answer a question the graph raised but cannot settle (T-11).
+    """Answer a question the graph raised but cannot settle.
 
     The only remedy kind that asks for a judgement rather than a change, and it
     has no applier in the benchmark for exactly that reason: a proxy candidate
@@ -154,7 +154,7 @@ class Counterfactual:
     those makes the next scan silent.
 
     Derived from the same graph facts as the finding it belongs to. Nothing here
-    is generated, ranked, or worded by an LLM (janus/CLAUDE.md rule 5): a
+    is generated, ranked, or worded by an LLM (docs/02-architecture.md): a
     suggested fix that an LLM invented is a suggested fix nobody can verify, and
     the benchmark verifies these by applying them.
     """
@@ -330,7 +330,7 @@ class BlastRadius:
     """At-risk models, most severe first."""
     truncated: bool = False
     """True when the downstream traversal saw exactly the lineage result cap,
-    so a model beyond it may exist and was never checked (F1, docs/plan/07).
+    so a model beyond it may exist and was never checked (docs/08-evaluation.md).
     The staleness finding is certain either way; what is uncertain is whether
     ``models`` names every model this table endangers, which matters most when
     it is empty: a truncated, empty result cannot claim no model consumes this
@@ -362,7 +362,7 @@ class Finding(ABC):
     either of them growing a special case.
 
     ``resource_urn`` is where the incident attaches. It is never an mlModel:
-    DataHub's incident model rejects that entity type (D-017), so a finding
+    DataHub's incident model rejects that entity type, so a finding
     attaches to the data asset that is actually wrong (a dataset, or a column),
     and model-level risk is carried by a tag and structured properties on the
     model instead.
@@ -397,7 +397,7 @@ class Finding(ABC):
         no measurement that drifts between scans, no timestamp, and never any
         LLM output. The dedup key is ``(resource_urn, incident_type, title)``, so
         a title that changes between runs raises a duplicate incident on every
-        run (D-013, D-027).
+        run.
         """
 
     @property
@@ -1005,7 +1005,7 @@ class ProxyCandidateFinding(Finding):
         found; this one is a question, and the honest way to clear a question is
         to answer it. Offering "drop the feature" first would push a team to
         delete a feature they may well be entitled to use, on a tool's
-        suggestion, which is the failure mode 09 section 5.1 warns about.
+        suggestion, which is the failure mode the plan warns about.
         """
         candidate = self.candidate
         return Counterfactual(
@@ -1455,7 +1455,7 @@ class SchemaDriftFinding(Finding):
         same input at different times genuinely disagree about whether it
         drifted. Naming only the dataset collapsed both into one incident, so
         the second model's drift was silently deduplicated away and either
-        model's recovery resolved the other's live incident (D-070).
+        model's recovery resolved the other's live incident.
         """
         return f"Training-serving schema drift in {self.dataset_name} for {self.model.name}"
 
@@ -1529,7 +1529,7 @@ class Deduction:
     "leakage" still has to go and find which leak; a reader told it lost them to
     "applicant_income derives from the label" is already looking at the fix. The
     cause is drawn from the finding that triggered the deduction, so it names a
-    measured fact and never an LLM's sentence (janus/CLAUDE.md rule 5).
+    measured fact and never an LLM's sentence (docs/02-architecture.md).
     """
 
     name: str
@@ -1547,10 +1547,10 @@ class TrustScore:
     Rolls up every risk a scan found about one model into a single number a
     human can act on, in the spirit of a model card (Mitchell et al. 2019). The
     number is deterministic: it is a fixed weighted sum of the findings, and the
-    LLM never touches it (janus/CLAUDE.md rule 5).
+    LLM never touches it (docs/02-architecture.md).
 
     The integer is the least informative part of this object and it is
-    deliberately not the part a renderer leads with (F7). The weights behind it
+    deliberately not the part a renderer leads with. The weights behind it
     are a stated preference ordering, not a calibrated model, so 42 is only
     meaningful next to another 42 computed under the same
     :data:`~janus.config.SCORING_VERSION`. The deductions are what a reader

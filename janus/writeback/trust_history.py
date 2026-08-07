@@ -31,9 +31,9 @@ The deductions are the *names* only, never their point values: the weights are
 configuration and can change between runs, so recording a number that was
 computed under weights nobody kept would be a fact that quietly stops being true.
 
-The trailing scoring version is what makes the trend readable at all (F7). Two
+The trailing scoring version is what makes the trend readable at all. Two
 scores are comparable only when the same function produced them, and this project
-has already changed that function under models it had scored (D-079). An entry
+has already changed that function under models it had scored. An entry
 written before the version existed parses with an empty one, so a graph scanned
 by an older release keeps its history instead of having it silently dropped.
 """
@@ -195,7 +195,7 @@ def rendered(history: Sequence[TrustEntry]) -> list[StructuredPropertyValue]:
 
     Separated from the write so a caller that is already assigning other
     properties to the same model can carry the history in that one call instead
-    of opening a second read-merge-write window on the same aspect (F3).
+    of opening a second read-merge-write window on the same aspect.
     """
     values: list[StructuredPropertyValue] = [item.render() for item in history]
     return values

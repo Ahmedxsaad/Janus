@@ -16,7 +16,7 @@ is present in the ambient environment. Configuration that identifies a vendor,
 an account, or an endpoint has no fallback here. Either all three values are set
 and the LLM is used, or none are and Janus writes deterministic template
 prose. Setting some but not all is a mistake, and it fails loudly rather than
-quietly downgrading (see :mod:`janus.env` and D-029).
+quietly downgrading (see :mod:`janus.env`).
 
 Nothing about detection depends on any of this. The LLM writes prose. See
 :mod:`janus.agent.narrate`.
@@ -66,13 +66,13 @@ MAX_TOKENS = 400
 #: on somebody else's API. In `scan` an unbounded call means a hung terminal;
 #: in `watch` it means a daemon that stops polling and stops reporting while
 #: still looking alive, the specific irony a reliability tool exists to avoid
-#: (F13, docs/plan/07). Deliberately short, since this sits between a detected
+#: (docs/08-evaluation.md). Deliberately short, since this sits between a detected
 #: failure and the incident that reports it. Every provider names its own
 #: field differently (ChatAnthropic's is `default_request_timeout`, ChatOpenAI's
 #: is `request_timeout`, ChatGoogleGenerativeAI's is `timeout`), but all three
 #: accept `timeout` as a constructor keyword, verified against the installed
 #: langchain-anthropic 1.4.8, langchain-openai 1.3.4, langchain-google-genai
-#: 4.2.7 (root CLAUDE.md rule 7), so the call site below stays uniform.
+#: 4.2.7 (CONTRIBUTING.md), so the call site below stays uniform.
 LLM_TIMEOUT_SECONDS = 30.0
 
 #: One attempt, not LangChain's own default retry behaviour, which would
@@ -163,7 +163,7 @@ def build_chat_model(config: LLMConfig) -> Any:
     except ImportError as exc:
         raise LLMUnavailableError(
             # Names the distribution, not `-e .`: that form only works from a
-            # clone of this repository, and the reader installed a wheel (D-157).
+            # clone of this repository, and the reader installed a wheel.
             f"{ENV_LLM_PROVIDER}={config.provider} needs the {package} package, "
             f'which is an optional extra: pip install "janus-datahub[{config.provider}]"'
         ) from exc

@@ -7,7 +7,7 @@ calls a tool here to get a real, measured answer instead of guessing from what i
 already knows about the codebase.
 
 Read-only, and not by convention: by the same design law that governs every other
-entry point (root CLAUDE.md rule 4, D-027). Detection is deterministic Python; an
+entry point (CONTRIBUTING.md). Detection is deterministic Python; an
 LLM never decides whether a finding exists, and here the LLM is not even
 Janus's own narrator, it is whatever model the MCP client is running,
 completely outside this project's control. Handing a tool like that a write
@@ -15,7 +15,7 @@ capability would let a conversation turn into an unreviewed mutation of the
 governance graph. So every tool below wraps ``run_scan`` in dry-run and nothing
 else: the client can ask what is wrong, never fix it. ``scan --write`` and
 ``gate --write`` remain the write paths, invoked by a human who typed the
-command, which is the same boundary ``janus gate`` draws for CI (D-052).
+command, which is the same boundary ``janus gate`` draws for CI.
 
 Every tool is annotated ``readOnlyHint: true`` at registration, so an MCP client
 that surfaces that hint to its own user shows the tool as safe before it is ever
@@ -59,7 +59,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 #: deliberately not at module level: the console script would then die with an
 #: ImportError traceback quoting a site-packages path, where every other
 #: optional extra in this project (feast, kafka, pet) names itself and the
-#: command that installs it (D-155).
+#: command that installs it.
 _MCP_EXTRA = (
     "serving over MCP needs the mcp package, which is an optional extra: "
     'pip install "janus-datahub[mcp]"'

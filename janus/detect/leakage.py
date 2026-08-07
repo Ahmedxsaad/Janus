@@ -50,7 +50,7 @@ from janus.models import LeakageFinding, LeakingFeature, ModelRef
 
 #: Custom property on an MLFeature naming the exact column it derives from.
 #: MLFeatureProperties.sources declares entityTypes [dataset], so a feature can
-#: say which table it came from but not which column. This bridges that (D-012).
+#: say which table it came from but not which column. This bridges that.
 SOURCE_COLUMN_PROPERTY = "janus.source_column"
 
 
@@ -71,7 +71,7 @@ def feature_source_column(conn: DataHubConnection, feature_urn: str) -> str | No
 
     A feature with no recorded source column is not evidence of safety, it is the
     absence of evidence, and this detector fires only on positive evidence. Such a
-    feature is skipped, never cleared (detect/CLAUDE.md rule 5).
+    feature is skipped, never cleared (docs/04-detectors.md).
 
     The property is free text that anything may have written: another ingestion
     job, a human editing the feature by hand, an older URN format. A value that
@@ -113,7 +113,7 @@ def leak_path(
         The label column's URN, the chain of column names walked to reach it,
         and the chains of every other match, or None when the cone reaches no
         declared label. The other chains are what the finding's counterfactual
-        needs: cutting one derivation of two clears nothing (T-03). Silent about
+        needs: cutting one derivation of two clears nothing. Silent about
         truncation: a caller that needs it (coverage.py, deciding whether a
         clean answer here is trustworthy) calls marked_ancestor directly rather
         than through this label-specific wrapper.

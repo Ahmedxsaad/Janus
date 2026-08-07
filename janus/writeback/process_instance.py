@@ -16,7 +16,7 @@ the run closes three concrete gaps:
   reader to grep a log. With the run in the graph, the ``run_id`` is an entity
   they can open, whose inputs say what was examined and whose outputs say what
   was touched.
-- A scan that dies halfway leaves the graph half-written and says nothing (F4).
+- A scan that dies halfway leaves the graph half-written and says nothing.
   A failed run event is the record that something was attempted and did not
   finish, which is the difference between "clean" and "never completed".
 - Janus's own freshness becomes checkable by Janus, using the same
@@ -228,7 +228,7 @@ def agent_flow_urn() -> str:
 
     Derived from the same constants :func:`_flow` builds the entity from, so a
     caller hanging a catalog-level fact off the agent (the guard-coverage trend,
-    T-15) addresses the entity a scan run already created rather than a second
+    addresses the entity a scan run already created rather than a second
     one that happens to look like it.
     """
     return str(_flow().urn)
@@ -342,7 +342,7 @@ def complete_scan_run(
 
     A failed scan writes a FAILURE result rather than nothing. Silence and success
     are indistinguishable to anyone reading the graph, and a scan that crashed
-    mid-write is exactly the case where the difference matters (F4).
+    mid-write is exactly the case where the difference matters.
 
     Args:
         conn: An open connection.

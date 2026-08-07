@@ -1,4 +1,4 @@
-"""A Data Card for one feature, assembled from measured graph facts (T-19).
+"""A Data Card for one feature, assembled from measured graph facts.
 
 ``model_documents.py`` documents a model. This documents a *feature*, and it
 answers the question every data scientist asks about one and nothing today
@@ -18,7 +18,7 @@ What one card carries
 * The **derivation chain** back to a source column, hop by hop, and every other
   chain the walk found. Two derivations of one feature is a fact about the
   warehouse worth seeing, and the leakage detector already had to learn to keep
-  both of them (T-03).
+  both of them.
 * The **transitive tables** the chain crosses, each with its freshness *now*.
   Not at training time: DataHub records no snapshot of that, and this card says
   so rather than substituting a number that answers a different question.
@@ -29,7 +29,7 @@ What one card carries
 * Its **drift**: whether the column's type today differs from the training-time
   snapshot the run recorded.
 * Its **counterfactual**, when a finding names this feature: the changes that
-  would clear it, each sufficient on its own (T-03).
+  would clear it, each sufficient on its own.
 
 What a card is not
 ------------------
@@ -218,7 +218,7 @@ def _types(
     # The snapshot is keyed by input dataset URN and then by field path, so this
     # reads the entry for *this column's own table*. Flattening the datasets
     # together would let a column of the same name in another input answer for
-    # this one, which is exactly the collision D-070 already cost this project
+    # this one, which is exactly the collision that already cost this project
     # once at model granularity.
     properties = conn.graph.get_aspect(model_urn, MLModelPropertiesClass)
     training_type: str | None = None
@@ -526,7 +526,7 @@ def publish_feature_card(
 
     Keyed on the feature's full URN, not its bare name: MlFeatureUrn.name drops
     the owning feature table, so two features named the same in two different
-    tables would otherwise collide on one document (D-096's collision, one
+    tables would otherwise collide on one document (the same collision, one
     level down). There is one card per feature and it is meant to be current,
     so a rerun replaces it rather than adding a second.
 

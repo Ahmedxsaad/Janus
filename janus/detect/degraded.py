@@ -21,7 +21,7 @@ on, all of which DataHub already holds:
 What it cannot say is which feature carries any of that into the model, which is
 the entire value of the column-level mode. So every finding carries the mode, the
 limitation, and the mode's *measured* precision from the benchmark's table-level
-baseline, and its first remedy is to declare the link (09 section 1.3, T-07).
+baseline, and its first remedy is to declare the link .
 
 Where the model's tables come from
 ----------------------------------
@@ -79,7 +79,7 @@ def _upstream_datasets(
     declaration Spark and some ingestion sources emit, not a depth-bounded
     walk, and widening it would start pulling in tables the model does not
     itself train on. ``count`` still comes from config, like every other
-    ``get_lineage`` call in this package (detect/CLAUDE.md rule 3): a model
+    ``get_lineage`` call in this package (docs/04-detectors.md): a model
     with a wide fan-in of declared upstream tables must not have that list
     silently capped at the SDK's own default.
     """
@@ -130,7 +130,7 @@ def _deprecated(conn: DataHubConnection, dataset_urn: str) -> dict[str, str] | N
     """Read the table's deprecation, or return None when it is not deprecated.
 
     ``deprecated=false`` is how DataHub records a *withdrawn* deprecation, so the
-    aspect's presence is never the signal (D-079).
+    aspect's presence is never the signal.
     """
     aspect = conn.graph.get_aspect(dataset_urn, DeprecationClass)
     if aspect is None or not aspect.deprecated:

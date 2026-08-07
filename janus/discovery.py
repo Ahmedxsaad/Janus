@@ -17,17 +17,17 @@ Janus wrote to it.
 That is a silent correctness failure rather than a cosmetic one, because
 Janus reconciles through exactly those sweeps:
 
-* ``link --all`` replays the link an ingestion run dropped (D-074). A model it
+* ``link --all`` replays the link an ingestion run dropped. A model it
   cannot see is a model that silently stops being checked, which is the failure
   that command exists to prevent.
 * An incident raised on a version that later stops being the latest can never
   be resolved, because nothing reaches the model to notice the finding is gone.
-  A finding that cannot be closed is the failure mode D-067 and D-069 were
+  A finding that cannot be closed is the failure mode this project's own
   about, arriving through a new door.
 
 ``SearchFlags.filterNonLatestVersions`` is what turns the hiding off. It is not
 exposed by ``DataHubClient.search``, so the query is issued here directly
-(verified against acryl-datahub 1.6.0.13 and GMS 1.5.0.6; D-100).
+(verified against acryl-datahub 1.6.0.13 and GMS 1.5.0.6).
 
 Scanning every version is deliberate, and it is cheaper than it sounds: the
 detectors only *write* for a model somebody linked, and a linked version is one

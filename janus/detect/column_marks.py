@@ -15,7 +15,7 @@ column. It returns the upstream **dataset**. A detector that compared
 contaminated graph clean, which is the worst way for a detector to be wrong. The
 column truth lives in ``LineageResult.paths``, whose entries carry a schemaField
 ``urn`` and a ``column_name``. This module reads ``paths`` and never ``urn``,
-and that same path is what an incident quotes as its proof (D-031).
+and that same path is what an incident quotes as its proof.
 
 How a column gets marked
 ------------------------
@@ -64,14 +64,13 @@ class WalkResult:
     cap". Reporting the second as the first is a false negative in exactly the
     failure mode this project exists to catch, and it gets worse the wider the
     cone, which is to say worst on the mature warehouses most likely to hold an
-    unnoticed leak (F1, docs/plan/07).
+    unnoticed leak (docs/08-evaluation.md).
 
     Every match is carried, not only the winner. The shortest is still the one
     quoted as proof, and :attr:`hit` is still how a caller asks for it, so no
     output moves. What the rest are for is the counterfactual: a finding reached
     by two derivations is not cleared by cutting one of them, and a remedy that
-    only knew about the winner would confidently tell somebody to do half a fix
-    (T-03).
+    only knew about the winner would confidently tell somebody to do half a fix.
     """
 
     matches: tuple[Match, ...]
@@ -88,7 +87,7 @@ class WalkResult:
     ``JANUS_LINEAGE_RESULT_CAP``); this one means it *saw* an ancestor and
     declined it on distance alone (raise ``JANUS_LEAKAGE_MAX_HOPS``), which
     is a different knob and a different sentence for a coverage gap to print
-    (T-09, F1)."""
+."""
 
     @property
     def hit(self) -> Match | None:
@@ -122,7 +121,7 @@ class ColumnMarkIndex:
 
     A traversal revisits the same dataset for every column it walks, and the
     UI's declarations live in one aspect on that dataset, so the per-dataset read
-    is cached to keep the walk from turning into an N+1 (detect/CLAUDE.md rule 3).
+    is cached to keep the walk from turning into an N+1 (docs/04-detectors.md).
 
     An index with no terms and no tags matches nothing, and callers are expected
     to skip the traversal entirely rather than walk a graph for a mark that can
@@ -236,7 +235,7 @@ def split_paths(steps: Sequence[LineagePath], source_column_urn: str) -> list[li
 
     That matters twice. A walk that stopped at the first mark it met would report
     one derivation and never see the second, which is how a counterfactual ends
-    up telling somebody to cut one edge of two (T-03). And a chain truncated by
+    up telling somebody to cut one edge of two. And a chain truncated by
     index into the flattened list would carry the tail of the *previous*
     derivation into the quoted proof.
 
@@ -313,16 +312,16 @@ def marked_ancestor(
         count=config.lineage_result_cap,
     )
     # Equality, not >=: the cap is a hard limit, so exactly-the-cap is the only
-    # observable signature that a result beyond it may exist (F1, docs/plan/07).
+    # observable signature that a result beyond it may exist (docs/08-evaluation.md).
     truncated = len(results) == config.lineage_result_cap
 
     matches: list[Match] = []
     hop_capped = False
     for result in results:
         # Above two hops DataHub switches to a full-graph search and returns
-        # entities beyond the cap, so the cap is enforced here (D-020). GMS
+        # entities beyond the cap, so the cap is enforced here. GMS
         # handed this one back; the walk saw it and declined it on distance
-        # alone, which is worth telling a reader (T-09, F1) and is not the
+        # alone, which is worth telling a reader and is not the
         # same fact as `truncated` above.
         if result.hops > config.leakage_max_hops:
             hop_capped = True
@@ -358,7 +357,7 @@ def derivation_chains(
     The third question over the same walk. :func:`marked_ancestor` asks whether a
     chain reaches something interesting and returns only the chains that do;
     :func:`related_columns` asks what a column touches and throws the ordering
-    away. A provenance card (T-19) needs neither: it needs the chains themselves,
+    away. A provenance card needs neither: it needs the chains themselves,
     including the ones ending in a column nobody has marked anything, because
     "where does this feature come from" is answered by the whole derivation and
     not by the interesting part of it.
@@ -396,7 +395,7 @@ def derivation_chains(
     chains: dict[tuple[str, ...], tuple[LineagePath, ...]] = {}
     for result in results:
         # Enforced here rather than trusted: above two hops DataHub answers from
-        # a full-graph search and returns entities past the cap (D-020).
+        # a full-graph search and returns entities past the cap.
         if result.hops > max_hops:
             continue
         for path in split_paths(result.paths or [], source_column_urn):
@@ -424,7 +423,7 @@ def related_columns(
 
     The unmarked sibling of :func:`marked_ancestor`: that one answers "does this
     column descend from something interesting", and this one answers "what does
-    this column touch at all". Proxy detection (T-11) needs the second question
+    this column touch at all". Proxy detection needs the second question
     in both directions, because the shape it looks for is not a chain, it is a
     fork: two columns descending from one ancestor, neither descending from the
     other.
@@ -459,7 +458,7 @@ def related_columns(
 
     reached: dict[str, int] = {}
     for result in results:
-        # DataHub answers past the cap above two hops (D-020), so the cap is
+        # DataHub answers past the cap above two hops, so the cap is
         # enforced here rather than trusted from the server.
         if result.hops > max_hops:
             continue

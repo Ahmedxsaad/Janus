@@ -26,7 +26,7 @@ def entity_type(urn: str) -> str:
     """Return an URN's entity type.
 
     Taken from the URN because it is authoritative. ``LineageResult.type`` is a
-    display string and must never be used for this (D-020).
+    display string and must never be used for this.
     """
     return Urn.from_string(urn).entity_type
 
@@ -36,10 +36,10 @@ def live_deployments(conn: DataHubConnection, deployment_urns: tuple[str, ...]) 
 
     A deployment whose properties aspect is missing is treated as not live: we
     escalate severity only on positive evidence that traffic is being served
-    (detect/CLAUDE.md rule 5).
+    (docs/04-detectors.md).
 
     Batched in one call regardless of how many deployments a model has
-    (detect/CLAUDE.md rule 3): a blast-radius scan grades every at-risk model,
+    (docs/04-detectors.md): a blast-radius scan grades every at-risk model,
     and an N+1 read here would turn one scan into one GMS round trip per
     deployment of every model in the radius.
     """
@@ -82,7 +82,7 @@ def model_ref(
     ``DeployedTo`` relationship does not declare ``isLineage``, so a deployment is
     unreachable by a lineage traversal. That read is what decides whether a model
     is scoring live traffic, which is what separates a production incident from a
-    training-time concern (D-020).
+    training-time concern.
 
     Args:
         conn: An open connection.

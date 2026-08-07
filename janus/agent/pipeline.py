@@ -2,7 +2,7 @@
 
 ``scan`` (batch) and, later, ``watch`` (event-driven) differ only in what wakes
 them up. Both call :func:`run_scan`, so a finding is detected, explained, and
-written back identically no matter what triggered it (janus/CLAUDE.md
+written back identically no matter what triggered it (docs/02-architecture.md
 rule 2).
 
 Node order, matching the state machine Phase 3 replaces this with::
@@ -463,7 +463,7 @@ def _persist_trust(
     Score, band and history go in one call rather than three. DataHub has no
     conditional write, so every read-merge-write of ``structuredProperties`` is a
     window in which another writer's change to a *different* property on the same
-    model is read stale and written back over (F3). Batching does not close that
+    model is read stale and written back over. Batching does not close that
     window, and nothing here can; it makes it one window per model per scan
     instead of three, which is the part this code controls.
     """
@@ -519,7 +519,7 @@ def _detect(
                 # Not "no model was tagged" (that claims the walk saw the whole
                 # cone and it was empty): the walk saw exactly the lineage cap,
                 # so a model beyond it may exist and was never checked
-                # (F1, docs/plan/07). Reporting "no model consumes this table"
+                # (docs/08-evaluation.md). Reporting "no model consumes this table"
                 # here would be the false negative this project exists to catch.
                 warnings.append(
                     "the table is stale, but its downstream traversal returned the "
@@ -548,7 +548,7 @@ def _detect(
         findings.extend(deprecated_input_findings(conn, model_urn, config))
         # Last, and it returns nothing at all unless the four above had no column
         # link to read. The degraded mode is what a scan can say instead of
-        # silence, never something it says as well (09 section 1.3, T-07).
+        # silence, never something it says as well .
         findings.extend(table_level_findings(conn, model_urn, config, now_ms=observed_at))
 
     findings.sort(key=lambda finding: severity_rank(finding.severity))
@@ -695,7 +695,7 @@ def _reconcile_stale_findings(
     plain ``scan``, ``watch --once``, can therefore still resolve it. Before
     this, only a single uninterrupted ``watch`` process that both raised and
     later re-observed a finding could ever resolve it; every other path left
-    a fixed problem's incident, tag, and trust score open forever (D-067).
+    a fixed problem's incident, tag, and trust score open forever.
 
     Called only from ``run_scan``'s write path: resolving an incident is a
     write, so a dry run (including ``gate`` without ``--write``) must never
@@ -773,13 +773,13 @@ def _reconcile_stale_findings(
         #
         # The candidates are the model's current features *and* the columns the
         # last scan recorded an open incident on. The second half is what closes
-        # D-069's gap: a leak is most often fixed by deleting the offending
+        # The known gap: a leak is most often fixed by deleting the offending
         # column outright, and a deleted column is in no feature list, so walking
         # only the current features left the incident open forever on a graph
-        # somebody had already fixed. Hit for real on a live dbt project (D-074),
-        # which is the condition D-069 said it would wait for. The record is a
+        # somebody had already fixed. Hit for real on a live dbt project,
+        # which is the condition that fix waited for. The record is a
         # structured property on the model, not the side-channel state store
-        # D-067 rejected: it lives in the graph, it is written by the same scan
+        # rejected earlier: it lives in the graph, it is written by the same scan
         # that raised the incident, and losing it costs a stale incident, never a
         # wrong verdict.
         candidates: dict[str, str | None] = dict.fromkeys(_recorded_leak_columns(conn, model_urn))
@@ -908,7 +908,7 @@ def _reconcile_stale_findings(
     # scan that resolves one resource and re-raises another in the same breath
     # strips the flags and the at-risk tag off a model it just found failing, and
     # overwrites the trust score _persist_trust wrote seconds earlier with a
-    # from-scratch "no findings" score (D-070).
+    # from-scratch "no findings" score.
     current_flags: dict[str, set[str]] = {}
     for finding in findings:
         for at_risk_model in finding.models_at_risk:

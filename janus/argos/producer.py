@@ -13,7 +13,7 @@ the menu.
 
 A window belongs to exactly one process. There is no shared bus, so two
 producers cannot drive one dog: running both commands gives two dogs with no
-shared state, which is honest and cheap (docs/plan/08 section 6).
+shared state, which is honest and cheap (docs/11-argos.md).
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ class ArgosProducer:
             surface = ArgosWindow.open(sink)
             if surface is None:
                 # escape: the non-Linux hint ends in "janus-datahub[pet]", and
-                # rich would read [pet] as a style tag and drop it (D-151).
+                # rich would read [pet] as a style tag and drop it.
                 console.print(f"[dim]argos: no window binary found. {escape(install_hint())}[/dim]")
         if surface is None:
             surface = TerminalArgos(console)
@@ -115,7 +115,7 @@ class ArgosProducer:
 
         An explicit branch per name, no dispatch table keyed by user input and
         nothing that reaches a shell: this is the one channel that flows into
-        the process and it can trigger a write (docs/plan/08 section 6).
+        the process and it can trigger a write (docs/11-argos.md).
         """
         if command.name == "scan_now":
             self.wake.set()

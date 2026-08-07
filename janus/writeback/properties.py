@@ -40,7 +40,7 @@ TRUST_BAND = "janus.trust_band"
 
 #: The scoring function behind the score written alongside it. Written on the
 #: model rather than derived at read time, because the point of it is to describe
-#: the score that is stored now, not the one this release would compute (F7).
+#: the score that is stored now, not the one this release would compute.
 SCORING_VERSION_PROPERTY = "janus.scoring_version"
 RISK_FLAGS = "janus.risk_flags"
 RUN_ID = "janus.run_id"
@@ -48,7 +48,8 @@ RUN_ID = "janus.run_id"
 #: Source columns this model currently has an open leakage incident on. Written
 #: by the scan that raised them and read by the next scan's reconciliation, so a
 #: leak fixed by deleting the column outright, which leaves nothing to walk back
-#: through, still gets its incident closed (D-069's gap, hit for real in D-074).
+#: through, still gets its incident closed (a gap that was hit for real on a
+#: live stack before it was fixed).
 OPEN_LEAK_COLUMNS = "janus.open_leak_columns"
 
 #: One entry per scan that scored a model, oldest first. A trust score on its own
@@ -58,14 +59,14 @@ TRUST_HISTORY = "janus.trust_history"
 
 #: One entry per catalog sweep, oldest first, carried on Janus's own
 #: dataFlow rather than on any asset: guard coverage is a fact about the whole
-#: graph, and there is no model or dataset it belongs to (T-15).
+#: graph, and there is no model or dataset it belongs to.
 COVERAGE_HISTORY = "janus.coverage_history"
 
 #: What ``janus link`` was told, kept on the model so the link can be
-#: replayed after an ingest overwrites ``mlModelProperties`` (D-074). Declared
+#: replayed after an ingest overwrites ``mlModelProperties``. Declared
 #: here rather than beside ``link`` because more than one layer reads them:
 #: ``link`` to replay itself, and ``detect.coverage`` to tell a model that was
-#: never linked apart from one whose link an ingest has since dropped (F11).
+#: never linked apart from one whose link an ingest has since dropped.
 FEATURE_TABLE = "janus.feature_table"
 LABEL_COLUMN = "janus.label_column"
 EXCLUDED_COLUMNS = "janus.excluded_columns"
@@ -203,7 +204,7 @@ def assign_properties(
     Merging in Python is only safe while one writer is active. DataHub exposes no
     conditional write, so a second writer whose read predates this one's emit
     rewrites the whole aspect from stale data and drops whatever landed in
-    between, silently and whichever property each of them touched (F3). Every
+    between, silently and whichever property each of them touched. Every
     caller therefore batches a model's properties into one call, and the
     supported deployment is one writer per graph (charts/janus-watch).
 

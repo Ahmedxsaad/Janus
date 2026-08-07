@@ -4,7 +4,7 @@ The window is a child process, and the transport is its own stdin and stdout.
 No port is bound, no shared secret is invented, there is no CORS configuration
 and no auth path to review, the window cannot be reached by anything else on the
 machine, it dies with its parent, and the DataHub token never leaves this
-process (docs/plan/08 section 6).
+process (docs/11-argos.md).
 
 The one rule that makes stdio safe is here rather than in a comment somewhere:
 the parent reads the child's stdout on its own thread, always. A parent that
@@ -33,12 +33,12 @@ logger = logging.getLogger(__name__)
 
 #: The executable the wheel, the .deb and `cargo install` all install. Not the
 #: bare name "argos": that is taken on PyPI and is far too generic to claim on
-#: somebody's PATH (docs/plan/08 section 6b).
+#: somebody's PATH (docs/11-argos.md).
 BINARY_NAME = "janus-argos"
 
 #: An explicit path to the binary, for a build that is not on PATH. Read here
 #: and nowhere else, through env.py, which is the only module that touches the
-#: environment (root CLAUDE.md rule 6).
+#: environment (CONTRIBUTING.md).
 ENV_BINARY = "JANUS_ARGOS_BIN"
 
 #: How long the child gets to exit on its own before it is killed.

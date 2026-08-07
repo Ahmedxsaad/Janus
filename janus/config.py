@@ -1,7 +1,7 @@
 """Tunable scan parameters, in one place.
 
 Hop caps, thresholds, and label names are configuration, never literals buried in
-a detector (janus/CLAUDE.md rule 3). Keeping them here means the benchmark
+a detector (docs/02-architecture.md). Keeping them here means the benchmark
 can sweep them and a reviewer can see the whole contract at once.
 
 These values *do* have defaults, and that is deliberate. A six hour freshness SLA
@@ -15,7 +15,7 @@ Overrides arrive through ``JANUS_*`` variables, read via
 :mod:`janus.env` so that ``.env`` is loaded first. Reading ``os.environ``
 directly here was a bug: ``scan`` builds its config before it connects, so a
 threshold set in ``.env`` was ignored unless something else had already loaded
-the file (D-029).
+the file.
 """
 
 from __future__ import annotations
@@ -58,22 +58,22 @@ __all__ = [
 #: boundary, or the set of findings that contribute to the score changes.
 #:
 #: A trust score is only comparable to another score computed the same way, and
-#: this project has already broken that comparability once: D-079 added the two
+#: this project has already broken that comparability once: a release added the two
 #: governance detectors, which changed what every previously-scored model would
 #: now score, and nothing recorded it. A trend that drops because a release added
 #: a detector looks exactly like a trend that drops because somebody shipped a
 #: bug. Stamped into every history entry so the first kind reads as a labelled
-#: discontinuity instead (F7 step 1).
+#: discontinuity instead.
 #:
 #: Not a ``ScanConfig`` field: it is a fact about the code, not a knob. Nobody
 #: overrides it from the environment, because a scan that lied about which
 #: function produced its number would corrupt the history it is appended to.
 #:
 #: History: v1 was the original five deductions; v2 added sensitive source and
-#: deprecated input (D-079).
+#: deprecated input.
 SCORING_VERSION = 2
 
-#: The sentence printed wherever a trust score is shown to a human (F7 step 4).
+#: The sentence printed wherever a trust score is shown to a human.
 #:
 #: A composite score with unjustified weights looks far more rigorous than it is,
 #: and this one's weights are the plan's illustrative values. Saying so where the
@@ -148,7 +148,7 @@ class ScanConfig:
 
     A column carrying this term is ground truth: any feature whose upstream column
     lineage reaches it is target leakage. This is a *name*, not a credential or an
-    endpoint, so it has a default (D-029). The default term, though, exists only
+    endpoint, so it has a default. The default term, though, exists only
     in a graph ``janus-seed`` built. Point ``JANUS_LABEL_TERM_URN`` at
     your own term if your organization already has one for labels, and the
     leakage detector will honor that instead.
@@ -207,7 +207,7 @@ class ScanConfig:
     """
 
     protected_attribute_term_urns: tuple[str, ...] = ()
-    """Glossary terms marking a column as a protected attribute (T-11).
+    """Glossary terms marking a column as a protected attribute.
 
     Separate from :attr:`sensitive_term_urns` on purpose, and not a synonym for
     it. "Restricted" is a handling rule: do not learn from this. "Protected
@@ -243,7 +243,7 @@ class ScanConfig:
 
     A JSON object of ``field_path -> native_type`` captured when the model was
     trained, which the schema-drift detector diffs against the input dataset's
-    current schema. A name, not a credential, so it has a default (D-029).
+    current schema. A name, not a credential, so it has a default.
     """
 
     trust_weight_upstream_failure: float = 40.0
@@ -293,7 +293,7 @@ class ScanConfig:
 
     unused_model_days: int = 90
     """How long a model may go untouched, with no live deployment, before the
-    FinOps report calls the pipelines behind it candidates for retirement (T-18).
+    FinOps report calls the pipelines behind it candidates for retirement.
 
     Ninety days is a quarter, which is the period a budget holder already thinks
     in and the shortest window that survives a model retrained seasonally. An
@@ -302,7 +302,7 @@ class ScanConfig:
     and a team with an annual regulatory model will want it much longer.
 
     It never decides anything on its own. A model with no recorded timestamp is
-    reported as undated rather than as unused, because detect/CLAUDE.md rule 5
+    reported as undated rather than as unused, because docs/04-detectors.md
     holds here too: a model nobody instrumented is not a model nobody uses.
     """
 
@@ -337,7 +337,7 @@ class ScanConfig:
             # default term only exists in a graph `janus-seed` built: on a
             # real catalog the organization already has its own term for a label,
             # and without this the detector could only ever look for a term that
-            # is not there (D-074).
+            # is not there.
             label_term_urn=optional_value(ENV_LABEL_TERM_URN) or defaults.label_term_urn,
             # No default, unlike the label term above: see the field docstrings.
             # A guessed classification URN is either dead config or a false
@@ -345,8 +345,7 @@ class ScanConfig:
             # itself as not evaluated.
             # Read through optional_urn_list, not optional_list: a value that is
             # not a URN of the right type switches the detector on and matches
-            # nothing, which reads as a clean catalog rather than as a typo
-            # (D-154).
+            # nothing, which reads as a clean catalog rather than as a typo.
             sensitive_term_urns=optional_urn_list(ENV_SENSITIVE_TERM_URNS, GlossaryTermUrn),
             sensitive_tag_urns=optional_urn_list(ENV_SENSITIVE_TAG_URNS, TagUrn),
             protected_attribute_term_urns=optional_urn_list(

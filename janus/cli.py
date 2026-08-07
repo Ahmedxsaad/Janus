@@ -146,7 +146,7 @@ WATCH_MAX_BACKOFF_SECONDS = 300.0
 #: failure is the expected shape of GMS still starting up (the docstring on
 #: janus-watch.service says so); a run of them in a row is not routine
 #: and a wall of identical yellow lines is exactly the kind of thing an
-#: operator stops reading (F12, docs/plan/07).
+#: operator stops reading (docs/08-evaluation.md).
 WATCH_FAILURE_ESCALATION_THRESHOLD = 3
 #: Consecutive unchanged polls before Argos curls up and sleeps. Low enough that
 #: a quiet catalogue looks quiet within a couple of minutes at the default
@@ -161,7 +161,7 @@ def safe_error(exc: BaseException) -> str:
     variable and never its value, but an exception surfacing from the DataHub
     SDK or from ``requests`` may quote a request, a header, or a URL we handed
     the token to, and ``gate`` in particular prints straight into a CI log that
-    the whole team can read (root CLAUDE.md rule 6d).
+    the whole team can read (CONTRIBUTING.md).
     """
     return scrub(str(exc), gms_token())
 
@@ -238,7 +238,7 @@ def resolve_table(conn: DataHubConnection, table: str) -> str:
         # relation `schema.table` and DataHub names the dataset for it
         # `database.schema.table`, so a declaration importing the first (a dbt
         # semantic model's node_relation, a Feast source's table) matched neither
-        # form and resolved against nothing (T-14, on the ingested real project).
+        # form and resolved against nothing (on the ingested real project).
         # Ambiguity is still an error naming every candidate, so a suffix that
         # means two tables asks rather than picks.
         if name == table or name.endswith(f".{table}"):
@@ -367,7 +367,7 @@ def _print_finding(finding: Finding) -> None:
         console.print(f"  model        {finding.model.name} {serving}")
         # In yellow, and before the remedies, because the sentence is the finding:
         # read without it this looks exactly like the column-level answer, which
-        # is the one way the degraded mode can mislead somebody (T-07).
+        # is the one way the degraded mode can mislead somebody.
         console.print(f"  [yellow]{finding.mode_note}[/yellow]")
 
     # Printed for every finding type, including the two the branches above do not
@@ -423,7 +423,7 @@ def _print_clean(report: ScanReport) -> None:
     # computed ran == 0 and announced "Nothing was evaluated" over a leakage and
     # a drift check that had both just run clean. MODEL_CHECKS is pinned by a
     # test against what a bare model actually produces, so a new detector cannot
-    # make this stale again (D-152).
+    # make this stale again.
     asked = (1 if report.table_urn else 0) + (len(MODEL_CHECKS) if report.model_urn else 0)
     ran = asked - len(report.not_evaluated)
 
@@ -463,7 +463,7 @@ def _print_findings_and_trust(report: ScanReport) -> None:
     if report.trust:
         console.print("\n[bold]Trust scores:[/bold]")
         for trust in report.trust:
-            # The waterfall, not the integer (F7). A reader who sees "45/100"
+            # The waterfall, not the integer. A reader who sees "45/100"
             # first has to go looking for what to do about it; a reader who sees
             # the deductions first is already reading the work list, and the
             # total arrives as their consequence.
@@ -661,7 +661,7 @@ def _watch_failure_message(exc: Exception, *, consecutive_failures: int) -> str:
     failure can quote the request we handed the token to, and the class name
     alone (the previous behaviour) threw away the one detail an operator
     needed to tell an expired token from a network partition from a GMS out
-    of disk (F12, docs/plan/07).
+    of disk (docs/08-evaluation.md).
 
     Escalates to a plain statement that the daemon is not working once
     failures repeat past WATCH_FAILURE_ESCALATION_THRESHOLD: a single failure
@@ -708,7 +708,7 @@ def _watch_once(
     ``argos``, when present, is the desktop companion. It is told what this poll
     found and nothing more: the events are built from the report by
     argos/events.py, so the pet depicts a measured finding and never a guess
-    (docs/plan/08 section 3).
+    (docs/11-argos.md).
     """
     preview = run_scan(
         conn, config, table_urn=table_urn, model_urn=model_urn, llm=llm, dry_run=True
@@ -791,7 +791,7 @@ def _watch_events(
     mcl: MclConfig,
     argos: ArgosProducer | None,
 ) -> None:
-    """Run the watch loop off DataHub's change log instead of a timer (T-20).
+    """Run the watch loop off DataHub's change log instead of a timer.
 
     Two handlers over one subscription, which is what the plan means by "the same
     consumer with a second handler":
@@ -1249,12 +1249,12 @@ def watch(
     Polling is the default, deliberately: it never depends on Kafka timing, which
     is what makes it reliable for a demo and behind a proxy.
 
-    ``--events`` is the upgrade 03-production-hardening.md section C.1 has always
-    named (T-20). It consumes DataHub's own ``MetadataChangeLog``, so a scan
+    ``--events`` is the upgrade the plan has always
+    named. It consumes DataHub's own ``MetadataChangeLog``, so a scan
     happens when the graph changes rather than when a timer fires, and it does one
     thing polling structurally cannot: it re-applies, **catalog-wide**, any
     `janus link` an ingestion run drops. That failure is not about the
-    watched target, so no poll of one target could ever see it (D-074, F11).
+    watched target, so no poll of one target could ever see it.
 
     It replays only what a human already confirmed. A model nobody linked is left
     alone: guessing a training table would write a join indistinguishable from a
@@ -1278,7 +1278,7 @@ def watch(
     # the one entry point that runs unattended, and a library that started a
     # background exporter would be exporting from an application that never asked
     # for it. Unset means off, and a misconfigured endpoint fails now rather than
-    # after a week of exporting nowhere (T-17).
+    # after a week of exporting nowhere.
     try:
         metrics = start_exporter()
     except ConfigError as exc:
@@ -1325,7 +1325,7 @@ def watch(
                 f"{ENV_KAFKA_GROUP_ID}, and install the client: "
                 # escape: the extra's name is the actionable half of this line,
                 # and rich reads a bare [kafka] as a style tag and deletes it,
-                # leaving `pip install "janus-datahub"` (D-151, D-157).
+                # leaving `pip install "janus-datahub"`.
                 + escape('pip install "janus-datahub[kafka]"')
             )
             raise typer.Exit(code=2)
@@ -1381,7 +1381,7 @@ def watch(
                 # operator can find it; safe_error(exc), not str(exc), on the
                 # console, since an SDK failure can quote the request we
                 # handed the token to and this line lands in a terminal the
-                # whole team may be watching (root CLAUDE.md rule 6d).
+                # whole team may be watching (CONTRIBUTING.md).
                 logger.warning(
                     "watch poll failed %s",
                     logfmt(fields),
@@ -1590,7 +1590,7 @@ def gate(
 
     # Said here, where the choice is being made, rather than in documentation
     # nobody reads at the moment they need it. The judgement itself is the
-    # policy's own, so gate.py can be asked about it offline (F7 step 3).
+    # policy's own, so gate.py can be asked about it offline.
     if policy.advisory:
         console.print(f"[yellow]warning:[/yellow] {policy.advisory}")
 
@@ -1811,7 +1811,7 @@ def finops(
 def _print_lifecycle(
     conn: DataHubConnection, config: ScanConfig, model_urns: tuple[str, ...]
 ) -> None:
-    """Print how long Janus's own findings have stayed open (T-16).
+    """Print how long Janus's own findings have stayed open.
 
     Printed after the per-model list rather than before it: the list says what is
     wrong now, and this says whether anything ever gets fixed. Silent when
@@ -2094,7 +2094,7 @@ def _declared_link(
 def _link_all(*, dry_run: bool, named: tuple[object, ...]) -> None:
     """Re-apply every link the graph already records, for the post-ingestion step.
 
-    An ingestion run drops the features `link` wrote (D-074), so on any real
+    An ingestion run drops the features `link` wrote, so on any real
     schedule the links have to be replayed. Replaying them one model at a time is
     a loop somebody has to maintain and keep in step with the models that exist,
     which is how a model quietly stops being checked; this is the same loop, run
@@ -2261,7 +2261,7 @@ def link(
 
     Run it again after every ingestion of the model. DataHub's mlflow source
     upserts the whole ``mlModelProperties`` aspect, which drops the features this
-    command attached (verified live, D-074), and a later scan will say so rather
+    command attached (verified live), and a later scan will say so rather
     than report a model it cannot see as healthy. The arguments are recorded as
     structured properties on the model, which ingestion does not touch, so the
     replay is just ``janus link --model <name>``.
@@ -2290,7 +2290,7 @@ def link(
 
     # Argument-shape checks need no DataHub connection, so they run before
     # _prepare() rather than after: a live GMS being unreachable must never
-    # mask a usage error behind its own, unrelated exit code (D-114).
+    # mask a usage error behind its own, unrelated exit code.
     if from_ is None and (repo is not None or select is not None):
         console.print(
             "[red]--repo and --select say where to read a declaration; --from says "
@@ -2362,7 +2362,7 @@ def link(
         # An explicitly typed flag always wins: a proposal proposes, it never
         # overrules somebody who already knows the answer. Fold those flags in
         # before printing, so the command shown for confirmation is the command
-        # that will run (D-150).
+        # that will run.
         try:
             proposal = _with_typed_flags(
                 conn,

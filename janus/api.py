@@ -31,8 +31,8 @@ Not a second implementation. ``scan_model`` calls
 :func:`~janus.agent.pipeline.run_scan` and ``link_model`` calls
 :func:`~janus.writeback.link.link_model`, which are the same functions
 ``janus scan`` and ``janus link`` call, so a finding found here is
-found identically at the command line (janus/CLAUDE.md rule 2: four
-triggers, one core).
+found identically at the command line: every trigger shares one core
+(docs/02-architecture.md).
 
 Not a place where configuration is invented either. Both connect through
 :func:`~janus.client.connect` and read :class:`~janus.config.ScanConfig`

@@ -22,7 +22,7 @@ a machine-specific value living in tracked code. It turns a missing ``.env`` int
 a silent connection to the wrong place, or a silent call to the wrong vendor's
 API, billed to whoever's key happens to be in the ambient environment. Those
 values have no defaults here: they are either configured or absent, and absent
-fails loudly (see root CLAUDE.md, and D-015 / D-029).
+fails loudly (see CONTRIBUTING.md).
 
 Algorithm parameters are different. A six hour freshness SLA or a three hop cap
 is a documented product decision, reproducible on every machine, and it belongs
@@ -144,7 +144,7 @@ def optional_urn_list(name: str, urn_type: type[_UrnT]) -> tuple[str, ...]:
     any catalog, so the detector runs, compares against nothing, and reports
     clean forever. Worse, coverage counts it as configured: a catalog went from
     33% to 93% guarded by setting one variable to the string ``not-a-urn``,
-    which is exactly the silent pass this project exists to catch (D-154).
+    which is exactly the silent pass this project exists to catch.
 
     A URN of the wrong entity type is rejected for the same reason and is the
     likelier typo of the two, since the term and tag variables sit next to each
@@ -162,7 +162,7 @@ def optional_urn_list(name: str, urn_type: type[_UrnT]) -> tuple[str, ...]:
     Raises:
         ConfigError: An entry is not a URN, or is a URN of another type. The
             message quotes the offending entry: these are public identifiers,
-            never credentials (root CLAUDE.md rule 6d).
+            never credentials (CONTRIBUTING.md).
     """
     # ENTITY_TYPE is declared on the concrete URN classes, not on the Urn base
     # the TypeVar is bound to, so it is read defensively rather than typed.
