@@ -75,7 +75,7 @@ runs:
     - name: Install Janus
       shell: bash
       # The PyPI distribution is janus-datahub, not janus: that exact
-      # name was already taken by an unrelated package (D-055). The installed
+      # name was already taken by an unrelated package. The installed
       # command is still `janus`, which is what every step below runs.
       run: python -m pip install --quiet "janus-datahub${{ inputs.version }}"
 
@@ -117,7 +117,7 @@ runs:
         # blocked stays false on exit 2. The build fails either way, but a
         # downstream step reading this output must not be told the model was
         # blocked by policy when the gate never reached a verdict: exit 2 is
-        # never a finding (janus/CLAUDE.md rule 2), and that rule has to hold
+        # never a finding (docs/02-architecture.md), and that rule has to hold
         # where a workflow consumes the answer, not only in the log text.
         if [ $code -eq 2 ]; then
           echo "blocked=false" >> "$GITHUB_OUTPUT"

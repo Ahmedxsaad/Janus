@@ -1,17 +1,22 @@
 <!--
 Short by design. Everything here is a question a reviewer would otherwise have
-to ask, and the last one exists because six modules once landed with unit tests
-against FakeGraph and nothing else (F8): a fake written by the same people as
-the code cannot fail the way a server does.
+to ask, and the live-DataHub one exists because six modules once landed with
+unit tests against FakeGraph and nothing else: a fake written by the same people
+as the code cannot fail the way a server does.
 -->
 
 ## What this changes
 
-<!-- One or two lines. The decision-log entry is where the reasoning goes. -->
+<!-- One or two lines. -->
 
-## Decision log
+## Why
 
-<!-- The D-0NN entry this lands, or "none: no decision worth recording". -->
+<!-- The reasoning. If it changes a design choice, say which and what it replaces. -->
+
+## Documentation
+
+<!-- Which docs/ page this changes, or "none". A command or flag change also
+     changes site/index.html and README.md in this same commit. -->
 
 ## Evidence
 
@@ -21,4 +26,4 @@ the code cannot fail the way a server does.
 - [ ] Benchmarked, or: this adds or changes no detector
       (`python -m benchmarks.run_bench --out benchmarks/RESULTS.md`)
 - [ ] Every new behaviour has a test that was confirmed red before the fix
-      (tests/CLAUDE.md rule 6)
+      (CONTRIBUTING.md)

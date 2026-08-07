@@ -1,7 +1,7 @@
 /**
  * The blast-radius walk: one screen-hop per graph-hop, across the whole desktop.
  *
- * This is the interaction the project is worth building for (docs/plan/08
+ * This is the interaction the project is worth building for (docs/11-argos.md
  * section 4). The path is not computed here and never could be: it arrives on
  * the event as `path`, straight out of detect/blast_radius.py, which is the
  * column-level traversal the benchmarks measure. This file only animates it.

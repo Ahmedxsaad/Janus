@@ -12,7 +12,7 @@
 # a short-lived, workflow-scoped identity that PyPI verifies against the
 # publisher configured on the project, so there is no long-lived
 # PYPI_API_TOKEN secret in this repository to leak, rotate, or accidentally
-# print. See docs/deploy/pypi-release.md for the one-time PyPI-side setup this
+# print. See docs/12-operations.md for the one-time PyPI-side setup this
 # depends on.
 name: Publish to PyPI
 

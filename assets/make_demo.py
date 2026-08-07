@@ -17,7 +17,7 @@ What this reproduces from the window and what it does not:
 * The **rim** is here, and it has to be. A README renders on white or on
   GitHub's near-black depending on the reader's theme, and on the dark one the
   saddle, the ears and the outline all disappear into the page: the dog loses
-  its back and its head. This is argos/CLAUDE.md rule 7 with a different
+  its back and its head. This is docs/11-argos.md with a different
   background it cannot choose. The window's rim is 30% alpha and this one is
   opaque, because GIF has one transparent index and nothing in between; opaque
   costs nothing here, since a near-white rim on a white page is invisible and on

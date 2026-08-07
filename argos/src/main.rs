@@ -1,6 +1,6 @@
 // A release build must not open a console window on Windows. The parent still
 // hands this process inherited stdin and stdout pipe handles, which is the
-// whole transport (docs/plan/08 section 6).
+// whole transport (docs/11-argos.md).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 //! Argos: the window half of the watchdog.
@@ -9,7 +9,7 @@
 //! events on stdin, forwards each one to the webview, and writes the commands a
 //! user clicked back on stdout. It never talks to DataHub, holds no
 //! credentials, and binds no port: the producer that spawned it does all of
-//! that (docs/plan/08 section 6).
+//! that (docs/11-argos.md).
 //!
 //! Two rules keep the transport honest, and both are load-bearing:
 //!

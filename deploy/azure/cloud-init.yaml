@@ -9,20 +9,20 @@
 # judge's out-of-the-box path, see .env.example), which means an unauthenticated
 # GMS answers arbitrary GraphQL writes to anyone who can reach it. The frontend
 # (port 9002) has its own login and is the only thing this VM's network
-# security group opens publicly; see docs/deploy/azure-vm.md for the NSG rules
+# security group opens publicly; see docs/12-operations.md for the NSG rules
 # and for changing the frontend's default password before judging starts.
 #
 # Untested end to end: no live Azure VM exists in the environment this was
 # written in, so cloud-init's own module directives were checked against
 # their documented shape and the embedded shell logic was checked for syntax,
 # but the full first-boot sequence has not been watched run for real. Do a
-# smoke test after the first provision; docs/deploy/azure-vm.md says so too.
+# smoke test after the first provision; docs/12-operations.md says so too.
 #
 # __GITHUB_CLONE_TOKEN__ below is a placeholder, not a secret: this repo is
 # private, so the git clone needs a credential. Never replace this placeholder
 # with a real token in this tracked file. Substitute it only in the copy of
 # this file's contents you paste into the Azure Portal's Custom Data box (not
-# tracked anywhere), per docs/deploy/azure-vm.md. cloud-init writes runcmd
+# tracked anywhere), per docs/12-operations.md. cloud-init writes runcmd
 # values into /var/log/cloud-init-output.log and its own on-disk state in
 # plaintext, so the token will sit readable-by-root on the VM after boot;
 # scope it to read-only on this one repo and revoke it right after the first
@@ -55,11 +55,11 @@ runcmd:
   # or PID limit (1150 threads against a 62881 host max, 9432 allowed in its own
   # cgroup, both checked on the live VM). It is the JVM failing to allocate a new
   # thread's 1MB native stack during a transient spike, with no swap for the
-  # kernel to fall back on. D-065's restart policy only cleans up after that
-  # outage; swap is what stops it happening (D-071). Costs nothing: the disk has
+  # kernel to fall back on. The restart policy only cleans up after that
+  # outage; swap is what stops it happening. Costs nothing: the disk has
   # over 40GB free.
   #
-  # Started at 4G; doubled to 8G (D-143) as a margin for the judging window's
+  # Started at 4G; doubled to 8G as a margin for the judging window's
   # sustained concurrent access, ahead of any actual second crash: available
   # memory was still comfortable (3Gi) and swap barely touched (57Mi of 4G)
   # when this was raised, so the doubling is precautionary rather than a fix
@@ -125,7 +125,7 @@ runcmd:
   # to. No --no-browser flag: none exists (checked against the installed
   # CLI's own --help rather than assumed), and none is needed. Run this same
   # way repeatedly during this project's own development on a machine with no
-  # browser reachable from the shell (D-052 through D-055 sessions); it never
+  # browser reachable from the shell; it never
   # blocked on one.
   - sudo -u azureuser datahub docker quickstart
 
@@ -134,7 +134,7 @@ runcmd:
   # by hand. Observed for real on the live demo VM: OpenSearch OOM-crashed
   # ("unable to create native thread") under this VM's memory pressure and
   # sat dead for 6 hours while GMS and the frontend kept answering health
-  # checks, making search/browse silently broken the whole time (D-065).
+  # checks, making search/browse silently broken the whole time.
   # unless-stopped self-heals a crash in seconds instead. Matched by name
   # prefix rather than a fixed list, since quickstart's own container names
   # are not this project's to pin down.
@@ -145,7 +145,7 @@ runcmd:
   # Waits for GMS rather than assuming quickstart's own return means it is
   # ready to accept writes: quickstart returns once containers are up, not
   # once GMS has finished extracting its WAR and serving /config (observed
-  # directly in this project's own local environment, D-052/D-054 sessions).
+  # directly in this project's own local environment).
   - >-
     timeout 300 bash -c
     'until curl -sf http://localhost:8080/config >/dev/null; do sleep 5; done'

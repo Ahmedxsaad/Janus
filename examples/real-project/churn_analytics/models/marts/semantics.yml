@@ -4,7 +4,7 @@
 # in doing so they write down exactly the thing `janus link` otherwise asks a
 # human to retype: which columns of this table are features, and which one is the
 # entity key that is not. `janus link --from dbt` reads it out of the compiled
-# manifest (janus/adapters/dbt.py, T-06) instead of asking a second time.
+# manifest (janus/adapters/dbt.py) instead of asking a second time.
 #
 # Dimensions rather than measures throughout: a measure needs an aggregation time
 # dimension, and this table carries no event timestamp. What a column is aggregated
@@ -14,7 +14,7 @@
 # dbt model it is built on lands on the same URN and overwrites it: the feature
 # table then carries the semantic model's entities as its columns and loses the
 # column-level lineage the compiled SQL produced, which is the one thing the leak
-# detector reads. Measured on this stack, 2026-08-04 (T-14, D-115).
+# detector reads. Measured on this stack, 2026-08-04.
 semantic_models:
   - name: customers
     description: One row per customer, the table the churn model trains on.

@@ -10,7 +10,7 @@
 # reports a dependency conflict. Anyone auditing an environment with the SDK
 # installed will therefore still see that advisory, through no choice of this
 # project's, which is why CI reports the audit rather than failing on it
-# (D-051, and filed as feedback for DataHub).
+# (and filed as feedback for DataHub).
 requires = ["setuptools>=83"]
 build-backend = "setuptools.build_meta"
 
@@ -23,7 +23,7 @@ build-backend = "setuptools.build_meta"
 # "janus" because that exact name is already registered on PyPI by an
 # unrelated, apparently abandoned package (checked 2026-07-23: one release,
 # 0.1.0, summary "TODO"); PyPI names are global and are not reclaimed because a
-# package looks unused, so publishing under it is not an option (D-055).
+# package looks unused, so publishing under it is not an option.
 name = "janus-datahub"
 version = "0.1.0"
 description = "A data-to-model reliability agent built on DataHub"
@@ -54,7 +54,7 @@ classifiers = [
 # failure, and capping on it made the package uninstallable on every current
 # distro Python: Ubuntu 24.04 ships 3.12, 25.04 ships 3.13, and neither carries
 # 3.11 in its default repositories, so `pip install janus-datahub` failed
-# outright with "requires a different Python" for the ordinary user (D-074).
+# outright with "requires a different Python" for the ordinary user.
 # Verified on 3.12.3: install, `scan`, `gate`, leakage detection and the trust
 # score all behave identically to 3.11. Development still targets 3.11
 # (see .python-version), which is what CI runs.
@@ -63,13 +63,13 @@ requires-python = ">=3.11,<3.14"
 # janus-datahub is a library on PyPI now, not only an application: an
 # environment that already holds pydantic or rich for something else (FastAPI,
 # LangChain, dbt adapters, most ML tooling) must be able to install this next
-# to it. Exact pins fought the resolver instead (F2, docs/plan/07). The SDK is
+# to it. Exact pins fought the resolver instead. The SDK is
 # the one exception, and stays exact rather than a floor-and-ceiling range: a
 # range here does not solve F2 at all (nobody else in a user's environment also
 # needs this exact SDK, unlike pydantic or rich, which are near-universal), and
 # widening it to `<2` was tried and reverted after it let CI resolve 1.6.0.17,
 # four patches past the one version (1.6.0.13) verified symbol by symbol
-# (D-012), and that patch changed the incident-entity-types schema enough to
+#, and that patch changed the incident-entity-types schema enough to
 # fail tests written against 1.6.0.13's behaviour (INCIDENT_ENTITY_TYPES is
 # read from the installed package, so this is not hypothetical). A bump here
 # is a decision made by running `pytest -m integration` against the new
@@ -129,7 +129,7 @@ agent = [
 mcp = [
     "mcp==1.28.1",
 ]
-# Argos, the desktop watchdog (docs/plan/08-watchdog-mascot.md). The window is a
+# Argos, the desktop watchdog (docs/11-argos.md). The window is a
 # Tauri binary, so unlike every other extra this one is a platform wheel rather
 # than pure Python.
 #
@@ -158,7 +158,7 @@ feast = [
 # (janus/telemetry.py). Deliberately three instruments and no traces: a
 # team that wants spans across the DataHub SDK's HTTP calls installs
 # opentelemetry-instrumentation-requests and gets them, rather than this project
-# shipping a second, worse copy of somebody else's product (09 section 3.3).
+# shipping a second, worse copy of somebody else's product .
 #
 # The HTTP exporter rather than the gRPC one: it carries no grpcio wheel, and a
 # collector accepts OTLP over either. Both packages are pinned together because
@@ -169,7 +169,7 @@ otel = [
 ]
 # `janus watch --events`: consuming DataHub's own MetadataChangeLog so a
 # scan happens when the graph changes, and so a `link` an ingestion run drops is
-# re-applied catalog-wide (janus/mcl.py, T-20).
+# re-applied catalog-wide (janus/mcl.py).
 #
 # confluent-kafka rather than datahub-actions, which would deliver the same
 # records through a plugin system with its own YAML configuration and its own
@@ -262,7 +262,7 @@ markers = [
 addopts = "-m 'not integration'"
 
 [tool.mutmut]
-# T-08 (docs/plan/10-depth-implementation.md): the claim under test is
+# (docs/13-design-decisions.md): the claim under test is
 # detection, so only janus/detect/ is mutated; mutating the whole
 # package would measure something this task never claimed. source_paths still
 # copies all of janus, because a detector's own imports (models, config,
@@ -274,7 +274,7 @@ addopts = "-m 'not integration'"
 # tests/benchmarks/ imports directly, and README.md, which tests/test_docs.py
 # reads. A file the suite opens and this list omits is not a failing test but a
 # collection error inside the copied tree, which mutmut reports as every mutant
-# having no tests: a 0.00 score with nothing to say what went wrong (D-125).
+# having no tests: a 0.00 score with nothing to say what went wrong.
 source_paths = ["janus"]
 only_mutate = ["janus/detect/*"]
 also_copy = ["examples/", "argos/", "site/", "benchmarks/", "README.md", "action.yml"]
@@ -287,7 +287,7 @@ also_copy = ["examples/", "argos/", "site/", "benchmarks/", "README.md", "action
 # mypy strict already refuses to merge (pre-commit), so RESULTS.md's mutation
 # section names it as a class rather than pretending each instance is an
 # undiscovered gap. Revisit if a later mutmut release fixes the crash.
-# Diagnostic-only calls, never a decision or a graph write (janus/CLAUDE.md
+# Diagnostic-only calls, never a decision or a graph write (docs/02-architecture.md
 # rule 2's layer boundary: detect/ is pure). A corrupted log line is invisible
 # to every consumer this project has; see also mutmut's own README example for
 # this exact pattern.
