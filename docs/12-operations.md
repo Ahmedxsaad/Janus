@@ -21,6 +21,16 @@ tag, `janus.trust_score` and `trust_band` properties, and the linked Model Impac
 Report), or `loans_raw` for the data side (the open incident and the guarding
 freshness assertion).
 
+### The judge account is read-only, not by policy alone
+
+Sign-in is a dedicated account (`judge`, credentials in the README), added as a
+second JAAS entry beside the admin login rather than a shared one, so it can be
+revoked or rotated on its own. It carries no role and no explicit grant on an
+instance where every edit and admin privilege requires one (`VIEW_ENTITY_PAGE`
+and search are the only privileges this Quickstart grants to all users by
+default); a write attempt through it returns `403 Unauthorized`, checked
+directly against the instance rather than assumed from the policy JSON.
+
 ### How it is built
 
 `deploy/azure/cloud-init.yaml` provisions it from cold: Docker, the repository,

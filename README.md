@@ -74,10 +74,13 @@ landed, as has the human-approval agent (`scan --review`) and a polling `watch`.
 
 A real DataHub instance with the ML supply chain seeded, a failure planted, and
 `janus watch` running against it continuously, so what you are looking at
-is a graph Janus is actively maintaining rather than a screenshot. Sign-in
-credentials are in the Devpost submission's testing instructions (they are
-deliberately not in this repository, since anything committed here stays in the
-git history forever).
+is a graph Janus is actively maintaining rather than a screenshot.
+
+Sign in with a read-only account made for this: `judge` /
+`Janus-ReadOnly-2026`. It can search and browse everything below; it cannot
+edit, tag, or write anything, verified directly against the instance (an
+edit attempt returns `403 Unauthorized`), so nothing here can be changed by
+someone trying it out.
 
 Once signed in, search `credit_risk_v3` for the model side (its
 `model-at-risk` tag, `janus.trust_score` and `trust_band` properties, and

@@ -47,7 +47,7 @@ def standalone() -> str:
         f'aria-label="Column-level lineage runs from a raw table through a staging '
         f"column into a feature table. DataHub's ML graph holds the model and its "
         f"training run. Nothing joins the two until janus link writes the edge from "
-        f'feature to source column.">{background}{inner}</svg>'
+        f'feature to source column.">{background}{inner}</svg>\n'
     )
 
 
