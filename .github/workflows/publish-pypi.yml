@@ -93,3 +93,24 @@ jobs:
 
       - name: Publish
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  # PyPI is where `pip install` looks, but it is not where a person lands
+  # after clicking the repo's own "Releases" link, and it holds no changelog.
+  # Runs off the same downloaded dist/ the publish job used, not a rebuild,
+  # so the wheel and sdist attached here are byte-identical to what PyPI
+  # received rather than a second build that could drift from it.
+  release:
+    name: create the GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
