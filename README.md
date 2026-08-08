@@ -88,6 +88,13 @@ the linked Model Impact Report), or `loans_raw` for the data side (the open
 incident and the guarding freshness assertion). Nothing needs to be installed
 to see any of it.
 
+<table>
+<tr>
+<td width="50%"><img src="assets/screenshots/datahub-model.png" alt="credit_risk_v3's DataHub page, showing the model-at-risk tag Janus wrote, its training metrics, and the champion alias." /><br><sub>The model side: <code>credit_risk_v3</code>, tagged and scored</sub></td>
+<td width="50%"><img src="assets/screenshots/datahub-lineage.png" alt="loans_raw's Lineage tab in DataHub, with an open incident and one downstream dataset shown in the column-level lineage graph." /><br><sub>The data side: <code>loans_raw</code>'s lineage and open incident</sub></td>
+</tr>
+</table>
+
 Prefer to run it yourself? [Try it](#try-it) below is the same loop against a
 local Quickstart, and it is the path the rest of this README documents.
 
@@ -674,9 +681,19 @@ translucent ghost when it cannot reach DataHub, because a cheerful pet on a
 disconnected watch is the lie that gets ambient status displays switched off. Nothing
 it does is on a timer: every state is an event a detector actually produced.
 
+<p align="center">
+  <img src="assets/screenshots/argos-bubble.png" width="360"
+       alt="Argos barking, with a red collar and a HIGH-severity chip, at the finding 'loans_raw is 14h stale, SLA is 6h', with a ten-segment trust bar reading mostly red." />
+</p>
+
 Double-click a finding and it walks the blast radius across the screen, one hop per
 graph hop, with the column name floating over each jump. That is the column-level
 traversal the benchmark above measures, rendered as motion instead of a paragraph.
+
+<p align="center">
+  <img src="assets/screenshots/argos-walk.png" width="640"
+       alt="Argos mid-walk across the desktop, hopping from loans_raw's income column through customer_features' income_avg_90d feature, with the finding's title banner pinned at the top." />
+</p>
 
 `janus companion` is the half that is not about Janus at all: it runs no
 detector, and sweeps the assets one owner owns for open incidents, failing assertion
