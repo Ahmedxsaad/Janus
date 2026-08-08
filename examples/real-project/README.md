@@ -138,6 +138,9 @@ Or import the join instead of typing it, from either declaration this project
 already carries (`--from` proposes and writes nothing until you confirm):
 
 ```bash
+pip install "feast[postgres]"      # this repo's offline store is postgres;
+                                    # the janus-datahub[feast] extra alone
+                                    # parses a repo, not any particular backend
 janus link --model telco_churn_1 --from feast --repo feature_repo
 janus link --model telco_churn_1 --from dbt --repo churn_analytics \
   --label-table "$LABELS" --label-column churned
