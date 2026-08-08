@@ -1,6 +1,6 @@
 """The Phase 2 gate for schema drift (P3) and the trust score (P4), end to end.
 
-docs/plan/02-implementation-plan.md sections 5.2 and 5.3 state it. After the model
+docs/02-architecture.md state it. After the model
 is trained, its input table's schema drifts from the snapshot captured on the
 training run. ``janus scan --model credit_risk_v3`` must detect the drift,
 raise a DATA_SCHEMA incident on the drifted input dataset, and roll every risk it

@@ -1,6 +1,6 @@
 """The governance detectors, against fixture graphs. Offline: no DataHub.
 
-Two detectors, and the same two obligations for each (tests/CLAUDE.md rule 1): a
+Two detectors, and the same two obligations for each (CONTRIBUTING.md): a
 graph carrying the planted declaration must flag exactly the affected feature or
 input, and a graph without it must flag nothing.
 

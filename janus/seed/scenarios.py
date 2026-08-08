@@ -3,7 +3,7 @@
 A detector is only trustworthy if you can turn the problem on and off. Each
 scenario here writes a fact into the graph that a deterministic detector will
 find, and each one is reversible, so a run can prove both directions: planted ->
-finding, reverted -> no finding (seed/CLAUDE.md rule 5).
+finding, reverted -> no finding (docs/02-architecture.md).
 
 The stale-source scenario
 -------------------------
@@ -60,18 +60,18 @@ SCHEMA_DRIFT = "input-schema-drift"
 
 #: The leakage scenario: the feature table's leaking column-lineage edge, the one
 #: saying ``prior_default_flag`` derives from the label. The seeder always plants
-#: it (D-032), so before this scenario existed the flagship detector had no
+#: it, so before this scenario existed the flagship detector had no
 #: negative control at all: no way to show the graph going clean.
 TARGET_LEAKAGE = "target-leakage"
 
 #: The multi-path scenario: the same feature reaches a declared label by two
 #: independent derivations instead of one. It exists for the counterfactual
-#: (T-03), which is only worth anything if it is right about the case where
+#:, which is only worth anything if it is right about the case where
 #: cutting one edge is not a fix, and that case cannot be asked of a graph that
 #: only ever has one edge to cut.
 SECOND_LEAK_PATH = "second-leak-path"
 
-#: The confusable-negative scenarios (T-09, 09 section 2.2): precision of 1.00
+#: The confusable-negative scenarios : precision of 1.00
 #: is close to vacuous while the negative trials are absent positives rather
 #: than hard negatives. Each of these plants a graph shape that looks like it
 #: could leak and must not fire, which is the case an "always no" detector
@@ -79,7 +79,7 @@ SECOND_LEAK_PATH = "second-leak-path"
 COMMON_ANCESTOR = "common-ancestor-label"
 LABEL_LOOKALIKE = "label-lookalike"
 
-#: The proxy scenario (T-11): the same fork COMMON_ANCESTOR plants, read for the
+#: The proxy scenario: the same fork COMMON_ANCESTOR plants, read for the
 #: opposite purpose. There the sibling is a declared label and the detector must
 #: stay silent; here it is a declared protected attribute and the detector must
 #: raise a candidate for review.
@@ -92,8 +92,8 @@ PROXY_ATTRIBUTE = "proxy-attribute"
 SENSITIVE_SOURCE = "sensitive-source"
 DEPRECATED_INPUT = "deprecated-input"
 
-#: The degraded-mode scenario (T-07): the model stops declaring its features, the
-#: way it does after every mlflow ingest (D-074). Not a fault in the data at all,
+#: The degraded-mode scenario: the model stops declaring its features, the
+#: way it does after every mlflow ingest. Not a fault in the data at all,
 #: which is the point: it is the state a stranger's catalog is in on day one, and
 #: the only one where the table-level mode is allowed to speak.
 DELINKED_MODEL = "delinked-model"
@@ -291,7 +291,7 @@ def _emit_feature_schema(
 
     The scenario marker goes in the dataset's custom properties when planting and
     is cleared on revert, so a reader can tell a planted change from a real one
-    (seed/CLAUDE.md rule 5).
+    (docs/02-architecture.md).
     """
     dataset = Dataset(
         platform=spec.WAREHOUSE_PLATFORM,
@@ -368,7 +368,7 @@ def _set_column_lineage(conn: DataHubConnection, mapping: dict[str, list[str]]) 
 
     Why there is no scenario marker
     -------------------------------
-    seed/CLAUDE.md rule 5 asks every scenario to stamp ``janus.scenario``
+    docs/02-architecture.md asks every scenario to stamp ``janus.scenario``
     somewhere a reader can find it. This one cannot, and the reason is worth
     keeping. ``upstreamLineage`` has no ``customProperties``; the dataset's own
     belong to the schema-drift scenario, which clears them on revert, so sharing
@@ -381,7 +381,7 @@ def _set_column_lineage(conn: DataHubConnection, mapping: dict[str, list[str]]) 
 
     Nothing is lost. Unlike a stale timestamp or a drifted schema, this state is
     not ambiguous: the leaking edge is either in the graph or it is not, and the
-    leak is the *seeded baseline* (D-032) rather than an anomaly planted on top
+    leak is the *seeded baseline* rather than an anomaly planted on top
     of it, so there is no planted-versus-real question to answer.
     """
     edges: list[FineGrainedLineageClass] = parse_cll_mapping(
@@ -533,7 +533,7 @@ def revert_second_leak_path(conn: DataHubConnection) -> LeakageResult:
     order: a glossary term written on a ``schemaField`` outlives the column's
     removal from ``schemaMetadata``, so dropping the column first would leave a
     declared label behind on a column nobody can see. The seeded single-path
-    leak is restored, because that is the baseline the demo expects (D-032).
+    leak is restored, because that is the baseline the demo expects.
     """
     remove_term(conn, str(spec.source_column_urn(BACKUP_LABEL_COLUMN.name)), spec.LABEL_TERM_URN)
     _emit_source_schema(conn, spec.SOURCE_COLUMNS, scenario=None)
@@ -548,7 +548,7 @@ def revert_second_leak_path(conn: DataHubConnection) -> LeakageResult:
 
 
 #: The seeded lineage with the flagship leak's own edge removed: the baseline
-#: T-09's two confusable-negative scenarios build on. Spreading
+#: the two confusable-negative scenarios build on. Spreading
 #: ``spec.COLUMN_LINEAGE`` directly, as :func:`plant_leakage` does, would
 #: silently reintroduce the flagship leak into a graph shape that is supposed
 #: to be about a completely different column, because ``_set_column_lineage``
@@ -565,7 +565,7 @@ _LEAK_FREE_COLUMN_LINEAGE: dict[str, list[str]] = {
 #: own ``applicant_income`` feature already derives from. Neither this column
 #: nor ``applicant_income`` descends from the other; both are the ancestor's
 #: children, which an upstream-only walk must never confuse with an ancestor
-#: relationship (T-09).
+#: relationship.
 COMMON_ANCESTOR_LABEL = spec.Column(
     "income_verified_label",
     "BOOLEAN",
@@ -580,7 +580,7 @@ def plant_common_ancestor_label(conn: DataHubConnection) -> LeakageResult:
     Proves the walk is upstream-only and never mistakes a shared ancestor for
     a derivation between siblings: on a real catalog, a feature and a label
     both computed from one raw column is common and is not leakage, and
-    nothing before this scenario tested that a walk agrees (09 section 2.2).
+    nothing before this scenario tested that a walk agrees .
 
     The flagship leak is cut in the same write: this scenario is about
     applicant_income, and a model whose prior_default_flag still derives from
@@ -616,7 +616,7 @@ def revert_common_ancestor_label(conn: DataHubConnection) -> LeakageResult:
     )
 
 
-#: The tag the proxy scenario applies (T-11). A tag rather than a term, and a
+#: The tag the proxy scenario applies. A tag rather than a term, and a
 #: different one from :data:`SENSITIVE_TAG_URN`, because the two classifications
 #: are different claims: "restricted" is a handling rule, "protected attribute"
 #: is a legal category. A catalog that used one URN for both would report every
@@ -632,7 +632,7 @@ PROTECTED_TAG_DESCRIPTION = (
 
 #: The proxy scenario's column: a protected attribute on the *feature* table,
 #: derived from ``income``, the same column ``applicant_income`` derives from.
-#: The fork T-11 looks for: both descend from one ancestor, neither from the
+#: The fork the proxy detector looks for: both descend from one ancestor, neither from the
 #: other. Deliberately not on the source table, because a protected attribute
 #: upstream of the feature would be plain descent and P5's finding instead.
 PROXY_PROTECTED_COLUMN = spec.Column(
@@ -644,7 +644,7 @@ PROXY_PROTECTED_COLUMN = spec.Column(
 
 
 def plant_proxy_attribute(conn: DataHubConnection) -> GovernanceResult:
-    """Give a protected attribute the same ancestor a model feature has (T-11).
+    """Give a protected attribute the same ancestor a model feature has.
 
     The positive trial for proxy detection. ``applicant_income`` (a model
     feature) and ``income_bracket_demographic`` (classified protected) are both
@@ -674,7 +674,7 @@ def plant_proxy_attribute(conn: DataHubConnection) -> GovernanceResult:
 def cut_proxy_shared_ancestor(conn: DataHubConnection) -> GovernanceResult:
     """Break the fork without touching the classification or the column.
 
-    The counterfactual T-11 offers is "rebuild the feature from a column that
+    The counterfactual it offers is "rebuild the feature from a column that
     does not also feed the protected attribute", and this performs exactly
     that half of it: the protected column stays, its tag stays, and only the
     derivation the two shared is removed. So a finding that clears afterwards
@@ -722,7 +722,7 @@ def revert_proxy_attribute(conn: DataHubConnection) -> GovernanceResult:
 #: The label-lookalike scenario's column: named the way a hasty detector might
 #: match on, declared a label nowhere. It feeds ``applicant_income`` in place
 #: of ``income``, so the only thing that changed from the clean baseline is
-#: the upstream column's name (T-09).
+#: the upstream column's name.
 LOOKALIKE_COLUMN = spec.Column(
     "target_indicator",
     "BOOLEAN",
@@ -737,7 +737,7 @@ def plant_label_lookalike(conn: DataHubConnection) -> LeakageResult:
     Proves detection keys on the declared glossary term, not on a name a
     heuristic might key on instead: a detector doing the latter would flag
     ``applicant_income`` here, and nothing before this scenario tested that it
-    does not (09 section 2.2).
+    does not .
 
     The flagship leak is cut in the same write, for the same reason
     :func:`plant_common_ancestor_label` cuts it: this scenario is about
@@ -874,7 +874,7 @@ def _set_model_features(conn: DataHubConnection, *, declared: bool) -> Governanc
     This is not a failure somebody plants; it is what an ordinary ingestion run
     does. DataHub's mlflow source upserts the whole ``mlModelProperties`` aspect
     and the features ``janus link`` attached are gone with it (verified live,
-    D-074). Reproducing it here is what gives the degraded mode (T-07) a graph to
+    a real stack). Reproducing it here is what gives the degraded mode a graph to
     be measured on: with the features present the column-level detectors answer,
     and with them absent they cannot, which is the exact boundary the mode is
     gated on.

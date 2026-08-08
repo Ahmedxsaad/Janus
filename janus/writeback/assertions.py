@@ -32,7 +32,7 @@ An upstream bug this module works around
 ``timedelta.seconds``, not ``timedelta.total_seconds()``. A lookback of 30 hours
 therefore silently emits an assertion of 6 hours (``timedelta(hours=30).seconds``
 is 21600). Rather than emit a wrong assertion, :func:`build_assertion` rejects an
-SLA of a day or more. Reported upstream; see docs/decision-log.md.
+SLA of a day or more. Reported upstream; see docs/13-design-decisions.md.
 """
 
 from __future__ import annotations

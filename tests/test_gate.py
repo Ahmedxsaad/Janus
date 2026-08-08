@@ -229,7 +229,7 @@ def test_the_trust_floor_is_a_strict_comparison_at_every_value(value: int):
 
 
 class TestAdvisory:
-    """--min-trust is a blunt control and the policy says so (F7 step 3, T-01)."""
+    """--min-trust is a blunt control and the policy says so."""
 
     def test_a_trust_floor_alone_cautions_that_the_scale_is_undefined(self):
         advisory = GatePolicy(min_trust_score=80).advisory

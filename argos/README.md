@@ -31,4 +31,4 @@ line to its stdin:
 ```
 
 Design and the full event contract:
-[docs/plan/08-watchdog-mascot.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/plan/08-watchdog-mascot.md).
+[docs/11-argos.md](https://github.com/Ahmedxsaad/janus/blob/main/docs/11-argos.md).

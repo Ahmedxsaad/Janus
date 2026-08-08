@@ -1,6 +1,6 @@
 """``link --infer`` against a live DataHub: does it propose the hand-written link?
 
-Why a unit test does not settle this (F8): every route the inference takes is a
+Why a unit test does not settle this: every route the inference takes is a
 read of a real aspect through a real index. ``dataProcessInstanceInput`` on a
 training run, ``customProperties`` on that run, ``schemaMetadata.primaryKeys``,
 and a search that resolves a bare table name are four separate places where the

@@ -2,8 +2,8 @@
  * Argos: the state machine, the interactions, and the transport.
  *
  * Everything drawn here depicts an event some producer sent. There is no timer
- * that invents activity to look busy, which is docs/plan/08 section 3 and root
- * CLAUDE.md rule 4 applied to pixels.
+ * that invents activity to look busy, which is docs/11-argos.md: the
+ * deterministic-detection rule applied to pixels.
  *
  * Two kinds of motion are exempt from that rule, and the boundary matters:
  *
@@ -305,7 +305,7 @@ class Argos {
   apply(event) {
     this.event = event;
     // An unknown state renders as patrolling rather than throwing: a newer
-    // producer must never break an older window (docs/plan/08 section 6).
+    // producer must never break an older window (docs/11-argos.md).
     const next = STATES[event.state] ? event.state : DEFAULT_STATE;
     if (next !== this.state) {
       this.state = next;
@@ -677,7 +677,7 @@ class Argos {
   }
 }
 
-/** Wire the interactions from docs/plan/08 section 4. */
+/** Wire the interactions from docs/11-argos.md. */
 function bindInteractions(app) {
   const canvas = document.getElementById("dog");
 

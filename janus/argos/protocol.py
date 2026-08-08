@@ -3,7 +3,7 @@
 One versioned event shape going out, one command shape coming back, both
 newline-delimited JSON. This module is the whole contract: any process that can
 print these events on a pipe drives the dog, which is what makes Argos a general
-DataHub companion rather than a Janus pet (docs/plan/08 section 6).
+DataHub companion rather than a Janus pet (docs/11-argos.md).
 
 Two asymmetries are deliberate.
 
@@ -30,7 +30,7 @@ from typing import Any
 #: sees a version it does not know should ignore the event rather than guess.
 PROTOCOL_VERSION = 1
 
-#: Every state the sprite can be in (docs/plan/08 section 3). A producer may not
+#: Every state the sprite can be in (docs/11-argos.md). A producer may not
 #: invent one: an unknown state renders as patrolling, which would silently look
 #: like health.
 STATES: frozenset[str] = frozenset(

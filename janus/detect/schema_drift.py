@@ -28,7 +28,7 @@ Positive evidence only
 A run with no snapshot is skipped, not cleared: without a baseline there is
 nothing to diff, and absence of a baseline is not absence of drift. An input
 dataset with no current ``schemaMetadata`` is skipped for the same reason
-(detect/CLAUDE.md rule 5).
+(docs/04-detectors.md).
 
 Literature
 ----------
@@ -90,7 +90,7 @@ def _current_schema(conn: DataHubConnection, dataset_urn: str) -> dict[str, str]
     """Return a dataset's current schema as field path to native type, or None.
 
     None when the dataset has no ``schemaMetadata``. A dataset whose schema was
-    never recorded cannot be judged to have drifted (detect/CLAUDE.md rule 5).
+    never recorded cannot be judged to have drifted (docs/04-detectors.md).
     """
     schema = conn.graph.get_aspect(dataset_urn, SchemaMetadataClass)
     if schema is None:

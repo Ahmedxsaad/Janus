@@ -23,14 +23,23 @@ Every column and its native type come from the input dataset's current
 ODCS ``slaProperties`` entry so the contract and the emitted guarding assertion
 declare the same check. Nothing that no detector measures is invented: there is no
 volume or distribution "expectation" here, because Janus does not measure one
-(writeback/CLAUDE.md rule 10). A column's ODCS ``logicalType`` is mapped from its
+(docs/02-architecture.md). A column's ODCS ``logicalType`` is mapped from its
 native type where the mapping is unambiguous and omitted otherwise, rather than
 guessed.
 
 Validation
 ----------
 The emitted YAML validates against datacontract-cli's bundled ODCS 3.1.0 JSON
-Schema (``datacontract lint <file>``). See examples/CLAUDE.md for the command.
+Schema. Regenerate the committed example and lint it with::
+
+    janus scan --model credit_risk_v3 --no-llm --dry-run --contract-out
+        examples/input-data-contract.odcs.yaml
+    datacontract lint examples/input-data-contract.odcs.yaml
+
+``--no-llm`` keeps the committed file reproducible by anyone, with or without an
+API key, and ``--dry-run`` is safe here because rendering a contract is a read.
+``datacontract-cli`` is a validation tool only; install it with
+``pip install datacontract-cli`` if ``datacontract`` is not on PATH.
 """
 
 from __future__ import annotations

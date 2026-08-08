@@ -1,6 +1,6 @@
 """The sensitive-source detector against a live DataHub, both directions.
 
-Why this file exists and a unit test does not replace it (F8): the detector reads
+Why this file exists and a unit test does not replace it: the detector reads
 ``globalTags`` from a ``schemaField`` entity, and nothing has ever confirmed that
 a real GMS serves that aspect from that entity type. ``FakeGraph`` answers
 because it was written by the same people as the detector and to the same mental

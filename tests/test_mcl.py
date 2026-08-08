@@ -1,4 +1,4 @@
-"""Decoding DataHub's change log (T-20). Offline: no broker, no registry.
+"""Decoding DataHub's change log. Offline: no broker, no registry.
 
 The interesting failure modes of ``mcl.py`` are all in the shape of a record,
 not in Kafka: a ``GenericAspect`` whose payload is JSON bytes rather than nested

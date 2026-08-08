@@ -160,7 +160,7 @@ def test_a_clean_owned_model_scores_one_hundred():
 
 
 # --------------------------------------------------------------------------
-# The waterfall: what a reader sees before the integer (F7, T-01)
+# The waterfall: what a reader sees before the integer
 # --------------------------------------------------------------------------
 
 

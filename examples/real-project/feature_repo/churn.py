@@ -3,12 +3,12 @@
 `churn_analytics/` declares which columns are features through the dbt semantic
 layer; this declares it through Feast. Both are ordinary files for the stack they
 belong to, and `janus link --from dbt` and `--from feast` each read one of
-them instead of asking a human to retype it (T-05, T-06).
+them instead of asking a human to retype it.
 
 Two declarations of one join is not duplication for its own sake: this repo is
 how the two adapters get measured against the *ingested* graph rather than
 against a fixture, and either route has to end at the same seven columns of
-`analytics.customer_features` or one of them is wrong (T-14).
+`analytics.customer_features` or one of them is wrong.
 
 Nothing in `ml/train_churn.py` reads this file: that script queries the warehouse
 directly, as it did before any of this existed. Reading the training set through

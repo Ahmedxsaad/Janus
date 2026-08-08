@@ -8,7 +8,7 @@
 {{- fail "Set image.repository. No default is baked in on purpose; see values.yaml." -}}
 {{- end -}}
 {{- if gt (int .Values.replicaCount) 1 -}}
-{{- fail "replicaCount must be 1. Two watchers reaching the same model race on read-merge-write: DataHub has no conditional write, so each rewrites the model's whole structuredProperties aspect from a read that may already be stale, and the loser's trust score or risk flag is dropped silently (F3). Watch a second target with a second release, not with a second replica." -}}
+{{- fail "replicaCount must be 1. Two watchers reaching the same model race on read-merge-write: DataHub has no conditional write, so each rewrites the model's whole structuredProperties aspect from a read that may already be stale, and the loser's trust score or risk flag is dropped silently. Watch a second target with a second release, not with a second replica." -}}
 {{- end -}}
 apiVersion: apps/v1
 kind: Deployment

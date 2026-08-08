@@ -190,7 +190,7 @@ def test_the_headline_never_claims_health_without_a_check(clean: bool):
 
 
 class TestCrosswalk:
-    """The NIST AI RMF crosswalk is generated, so it cannot fall behind (T-02)."""
+    """The NIST AI RMF crosswalk is generated, so it cannot fall behind."""
 
     def test_every_detector_has_a_row(self):
         """Adding a detector without a crosswalk row leaves a hole in a filed document."""
@@ -227,7 +227,7 @@ class TestCrosswalk:
 
 
 def test_the_json_carries_each_finding_counterfactual_with_its_kinds_and_targets():
-    """T-03: a program routing findings into a ticket needs the fix, not only the fault.
+    """A program routing findings into a ticket needs the fix, not only the fault.
 
     The kind and the targets, not just the sentence: a consumer that wanted prose
     already has the assessment, and one that wants to act needs the machine-

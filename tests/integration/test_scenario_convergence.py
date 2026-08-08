@@ -5,7 +5,7 @@ little residue behind turns into a graph that drifts run over run, and into
 numbers nobody can reproduce. One such bug already shipped and was caught here in
 spirit: the leakage scenario briefly stamped ``transformOperation`` on the edge it
 wrote, which is part of what GMS keys a fine-grained edge on, so the seeder then
-added its own unmarked copy alongside and the column lineage grew (D-047). Every
+added its own unmarked copy alongside and the column lineage grew. Every
 offline test passed while that was true.
 
 These are the live-graph checks that would have caught it directly: cycle the
@@ -138,7 +138,7 @@ def test_interleaving_all_three_scenarios_leaves_the_graph_where_it_started(
 def test_no_scenario_writes_a_transform_operation_onto_an_edge(
     conn: DataHubConnection, planted: list[tuple[str, str]]
 ):
-    """Directly guards the field that caused the duplication (D-047)."""
+    """Directly guards the field that caused the duplication."""
     aspect = conn.graph.get_aspect(str(spec.feature_table_dataset_urn()), UpstreamLineageClass)
     assert aspect is not None
 

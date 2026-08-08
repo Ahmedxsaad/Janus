@@ -4,7 +4,7 @@ The behaviour under test is a negative one: a model DataHub has stopped calling
 the latest version must still be found. A test that only checked "some URNs come
 back" would pass against the bug, because the bug returns the newest version
 perfectly well and drops the older one silently, so these assert on the query
-that was sent (tests/CLAUDE.md rule 6).
+that was sent (CONTRIBUTING.md).
 """
 
 from __future__ import annotations

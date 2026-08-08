@@ -1,7 +1,7 @@
 """The protocol, the art, the transport, and the log-driven states.
 
 What CI can check without a display, which is everything except whether the
-window is actually on top of the other windows (docs/plan/08 section 11).
+window is actually on top of the other windows (docs/11-argos.md).
 """
 
 from __future__ import annotations
@@ -437,7 +437,7 @@ def test_the_producer_detaches_its_handler_on_close():
 
 def test_the_environment_is_only_read_through_env_py():
     # The window module resolves a path from the environment; it must do it the
-    # way every other module does (root CLAUDE.md rule 6). This mirrors the
+    # way every other module does (CONTRIBUTING.md). This mirrors the
     # repo-wide check in test_env.py, kept close to the code that could break it.
     source = Path(__file__).resolve().parent.parent / "janus" / "argos"
     for module in source.glob("*.py"):

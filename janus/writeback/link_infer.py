@@ -17,7 +17,7 @@ which a human confirms and :func:`~janus.writeback.link.link_model` then
 executes. It lives beside ``link`` because it is meaningless apart from it.
 
 There is no LLM in it either, and that is a design law rather than a preference
-(root CLAUDE.md rule 4). Every field of a proposal comes from an aspect, and
+(CONTRIBUTING.md). Every field of a proposal comes from an aspect, and
 every one carries the aspect it came from, so a reviewer can check the reasoning
 rather than trust it.
 
@@ -32,7 +32,7 @@ What is inferred, and how confident each step is
   one. (3) A dataset the catalog already declares upstream of the model, which
   Spark and some sources emit. (4) Nothing resolved, so the proposal is
   incomplete and carries a shortlist of tables to choose from. Route 1 alone is
-  what a plain mlflow ingest does *not* produce (D-074), which is why there are
+  what a plain mlflow ingest does *not* produce, which is why there are
   four rather than one. Several tables from any route is a question rather than
   an answer: they become the shortlist instead of one of them being picked.
 * **The label column.** First from a column that already carries the configured
@@ -178,7 +178,7 @@ def _run_inputs(conn: DataHubConnection, properties: MLModelPropertiesClass) -> 
 
     The highest-confidence route by a distance, because the run is *declaring*
     what it read rather than describing it. Also the one a plain mlflow ingest
-    does not produce (D-074), which is why there are three more below it.
+    does not produce, which is why there are three more below it.
     """
     inputs: dict[str, None] = {}
     for run_urn in properties.trainingJobs or []:

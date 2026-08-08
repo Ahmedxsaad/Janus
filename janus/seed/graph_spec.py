@@ -1,7 +1,7 @@
 """Deterministic specification of the ML supply chain Janus seeds.
 
 Every URN and value here is fixed. Seeding twice converges on the same graph
-(seed/CLAUDE.md rule 1), and detectors, scenarios, tests, and the benchmark all
+(docs/02-architecture.md), and detectors, scenarios, tests, and the benchmark all
 resolve the same entities without passing URNs around.
 
 The shape mirrors a real credit-risk stack::

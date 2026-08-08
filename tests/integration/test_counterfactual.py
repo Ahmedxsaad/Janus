@@ -3,7 +3,7 @@
 A remedy printed in an incident is a claim about what would happen if somebody
 did it. Offline tests can only check that the sentence is well formed. This
 module does the thing the sentence says, against a real DataHub, and asks the
-same detector again (T-03).
+same detector again.
 
 Two states are exercised, and the second is the one worth having. A feature
 reaching a declared label by one derivation is cleared by cutting it, which is

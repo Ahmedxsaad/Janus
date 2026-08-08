@@ -37,7 +37,7 @@ wrappers over exactly the functions the CLI calls (:mod:`janus.api`). Everything
 else in this package is importable and documented, but its shape is free to
 change; import a submodule directly when you need more, knowingly.
 
-See docs/plan/architecture.md for the full design.
+See docs/02-architecture.md for the full design.
 """
 
 from janus.api import LinkError, LinkResult, ScanReport, link_model, scan_model

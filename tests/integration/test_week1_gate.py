@@ -1,6 +1,6 @@
 """The Week 1 kill-criterion, as an executable gate.
 
-docs/plan/02-implementation-plan.md section 3 states the gate in prose: by the end
+docs/02-architecture.md states the gate in prose: by the end
 of Week 1 Janus must be able to (a) programmatically read column-level ML
 lineage and (b) write one incident plus one structured property back. If it
 cannot, the project pivots to MigrationCopilot.

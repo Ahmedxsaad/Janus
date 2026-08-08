@@ -30,7 +30,7 @@ from janus.writeback.properties import read_properties
 pytestmark = pytest.mark.integration
 
 #: Lineage reaches the detector through an index, so a planted change needs a
-#: moment before a scan agrees with it (D-048).
+#: moment before a scan agrees with it.
 _INDEX_SETTLE_SECONDS = 10.0
 _POLL_SECONDS = 1.0
 

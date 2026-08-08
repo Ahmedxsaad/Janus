@@ -1,4 +1,4 @@
-"""Guard coverage over time, recorded on Janus's own entity (T-15).
+"""Guard coverage over time, recorded on Janus's own entity.
 
 :mod:`janus.detect.guard_coverage` computes what fraction of a catalog's
 models each check can run against. On its own that figure has the same problem a
@@ -16,7 +16,7 @@ UI without a renderer.
 
 Where it hangs
 --------------
-On Janus's own ``dataFlow``, the entity T-04 already creates and hangs every
+On Janus's own ``dataFlow``, the entity every scan already creates and hangs every
 scan run under. A catalog-level figure is a fact about the whole graph, so there
 is no dataset or model it belongs to, and inventing a synthetic entity to hold it
 would put a made-up asset in somebody's catalog. The agent is already in the

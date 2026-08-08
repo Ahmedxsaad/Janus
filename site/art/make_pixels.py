@@ -3,12 +3,12 @@
 Why this exists
 ---------------
 The page used to read the character straight out of `argos/ui/`, which is the
-one copy of that art and exactly where it should be read from (site/CLAUDE.md
+one copy of that art and exactly where it should be read from (docs/11-argos.md
 rule 1). That works locally, where the server root is the repository root, and
 it silently fails in production: the deployment is served with `site/` as its
 root, so `../argos/` is outside it, the fetch 404s, and the page renders
 perfectly with no dog on it. Nothing errors, which is why it survived a review
-and a deploy (D-139).
+and a deploy.
 
 So the art is inlined here instead, and the guarantee that it cannot go stale
 moves from a rule somebody remembers to a test that fails: `tests/test_site.py`
@@ -40,7 +40,7 @@ HEADER = """/**
  *
  * Three things are bundled here, and the reason they are bundled rather than
  * fetched is that the deployment's root is `site/`, so anything outside this
- * directory is unreachable from the served page (D-139):
+ * directory is unreachable from the served page:
  *
  *   ArgosSprites            the renderer, verbatim from argos/ui/sprites.js
  *   ArgosSprites.ART        the character, verbatim from argos/ui/sprites/argos.txt

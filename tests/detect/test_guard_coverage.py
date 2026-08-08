@@ -1,4 +1,4 @@
-"""The catalog-level fold over per-model coverage gaps (T-15)."""
+"""The catalog-level fold over per-model coverage gaps."""
 
 from __future__ import annotations
 

@@ -7,7 +7,7 @@ model predicts; and a feature service names the exact set one model is trained
 on. That is every argument ``janus link`` asks a human for, already written
 down, already kept correct because the training pipeline reads it.
 
-Offline and read-only, per adapters/CLAUDE.md. ``feast.repo_operations.parse_repo``
+Offline and read-only, per docs/02-architecture.md. ``feast.repo_operations.parse_repo``
 imports the repo's own Python modules and returns the declared objects; it does
 not open the registry, contact an online store, or run ``feast apply``. This
 module is imported only when ``--from feast`` is used, so ``feast`` stays an
@@ -108,7 +108,7 @@ def _source_table(source: Any) -> str:
     ``get_table_query_string``, so an attribute scan alone reports such a repo's
     source table as the source's Feast *name*: a string that resolves against no
     catalog, on the stack this reader is most likely to meet. Found by running
-    the adapter against the ingested real project (T-14).
+    the adapter against the ingested real project.
 
     That method is asked second and its answer is taken only when it is a bare
     relation. A source declared on a query returns a parenthesised SELECT, and a
@@ -120,7 +120,7 @@ def _source_table(source: Any) -> str:
     build, a ``SparkSource`` with neither ``table`` nor ``path`` set answers by
     calling ``SparkSession.builder.getOrCreate()`` and loading a dataframe, a
     live side effect this offline, read-only reader must never trigger
-    (adapters/CLAUDE.md rule 1). Checked by module name rather than imported,
+    (docs/02-architecture.md). Checked by module name rather than imported,
     so this reader never has to import pyspark to stay safe without it.
     """
     for attribute in _TABLE_ATTRIBUTES:

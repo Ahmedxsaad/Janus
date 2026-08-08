@@ -1,4 +1,4 @@
-"""The OTLP metrics export (T-17). Offline: nothing here reaches a collector.
+"""The OTLP metrics export. Offline: nothing here reaches a collector.
 
 The obligations are small because the feature is: it must be off unless
 configured, it must fail loudly rather than exporting nowhere, it must never put

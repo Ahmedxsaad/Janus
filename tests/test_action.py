@@ -5,13 +5,13 @@ five lines of YAML against these inputs and outputs, and nothing in the Python
 suite touches the file. What is pinned here is the one promise a workflow can
 act on wrongly.
 
-`janus gate` answers in three exit codes, and janus/CLAUDE.md rule 2 is explicit
+`janus gate` answers in three exit codes, and docs/02-architecture.md is explicit
 that exit 2 is never a finding: a gate reporting "I could not connect" as a
 violation teaches a team to ignore every red build. The Action used to set
 `blocked=true` for exit 2 as well as exit 1, so a downstream step doing
 `if: steps.gate.outputs.blocked == 'true'` would post "this model is unsafe"
 because DataHub happened to be unreachable. The log text distinguished them; the
-output a workflow reads did not (D-156).
+output a workflow reads did not.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def _action() -> dict:
     """The parsed action.
 
-    Read inside the test rather than at import, per tests/CLAUDE.md: mutmut runs
+    Read inside the test rather than at import, per CONTRIBUTING.md: mutmut runs
     this suite from a copied tree, and a module-level read of a file missing from
     `[tool.mutmut] also_copy` is a collection error rather than one red test.
     """
@@ -78,7 +78,7 @@ def test_the_could_not_tell_branch_does_not_claim_the_model_was_blocked() -> Non
 def test_the_token_never_reaches_a_command_line() -> None:
     """A secret in argv is visible in the process table; the env is the only route.
 
-    Root CLAUDE.md rule 6d, at the one boundary where this project hands a
+    CONTRIBUTING.md, at the one boundary where this project hands a
     credential to somebody else's runner.
     """
     steps = _action()["runs"]["steps"]

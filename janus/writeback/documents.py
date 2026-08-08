@@ -12,7 +12,7 @@ The plan assumed the report could only be written through the MCP server's
 :class:`~datahub.sdk.document.Document` entity, and a local OSS Quickstart (GMS
 1.5.0.6) accepts it, so the report is a real, searchable graph entity linked to
 the model by ``related_assets``. Verified before this module was written; see
-docs/decision-log.md.
+docs/13-design-decisions.md.
 
 Idempotency
 -----------
@@ -644,7 +644,7 @@ def render_counterfactual(finding: Finding) -> str:
     beside the proof: the section above says what the graph shows, and this one
     says what the graph would have to show instead. Rendered as a fenced block so
     the remedies read as a list of alternatives rather than as steps to perform
-    in order, which is the one way this could be misread (T-03).
+    in order, which is the one way this could be misread.
     """
     return "\n".join(
         [
@@ -727,7 +727,7 @@ def render_trust_trend(history: Sequence[TrustEntry]) -> str:
 
     # A version change is a discontinuity in the function, not a change in the
     # model. Saying so is the whole reason the version is recorded: without this
-    # line a release that added a detector reads exactly like a regression (F7).
+    # line a release that added a detector reads exactly like a regression.
     versions = {entry.scoring_version for entry in history}
     if len(versions) > 1:
         lines += [

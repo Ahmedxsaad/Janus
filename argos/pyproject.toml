@@ -13,7 +13,7 @@
 # Linux is published on GitHub Releases rather than PyPI, and that is policy,
 # not effort: the binary links the system webkit2gtk, which no manylinux tag
 # permits, so PyPI will not accept the wheel. `cargo tauri build` produces the
-# .deb and .AppImage for that route (docs/plan/08 section 6b).
+# .deb and .AppImage for that route (docs/11-argos.md).
 [build-system]
 requires = ["maturin>=1.7,<2"]
 build-backend = "maturin"
@@ -22,7 +22,7 @@ build-backend = "maturin"
 name = "janus-argos"
 description = "Argos, the DataHub watchdog: the desktop window for janus-datahub"
 # Must resolve inside this directory: maturin refuses a readme that escapes the
-# metadata root, so this cannot point straight at docs/plan/08 and links there.
+# metadata root, so this cannot point straight at docs/11-argos.md and links there.
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{ name = "Janus Contributors" }]

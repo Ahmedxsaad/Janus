@@ -1,4 +1,4 @@
-"""T-19: the per-feature Data Card. Offline: the renderer is pure.
+"""The per-feature Data Card. Offline: the renderer is pure.
 
 Two obligations, and they are the ones every generated document in this project
 carries. The card must never report a check it could not run as a check that
@@ -96,7 +96,7 @@ def facts(**overrides: object) -> FeatureFacts:
 def test_the_freshness_table_says_the_number_is_now_and_not_at_training_time():
     """Substituting today's lag for training-time lag answers a different question.
 
-    The evidence pack (T-13) already refuses to make that substitution. A card
+    The evidence pack already refuses to make that substitution. A card
     that quietly made it would contradict the pack about the same model.
     """
     card = render_feature_card(facts())
@@ -122,7 +122,7 @@ def test_a_table_with_no_operation_aspect_is_not_evaluated_rather_than_fresh():
 
 
 def test_a_second_derivation_is_named_and_the_reader_is_told_one_fix_is_not_enough():
-    """A feature reached two ways is not fixed by cutting one of them (T-03)."""
+    """A feature reached two ways is not fixed by cutting one of them."""
     card = render_feature_card(
         facts(
             chains=(
@@ -271,7 +271,7 @@ def test_gather_reads_the_snapshot_for_this_columns_own_table_only():
     """A same-named column of another input must not answer for this one.
 
     The snapshot is keyed by dataset URN and then by field path. Flattening the
-    datasets together is the collision D-070 already cost this project once at
+    datasets together is the collision that already cost this project once at
     model granularity, arriving one level down.
     """
     graph = traced_graph()

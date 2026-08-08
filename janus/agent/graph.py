@@ -12,7 +12,7 @@ Nothing about detection or write-back changes. Every node here delegates to the
 same deterministic functions the pipeline uses (``_detect``, ``_write_back``,
 ``_persist_trust``, ``_trust_scores``) and to the same narrator, so a finding is
 detected, explained, and written back byte-for-byte the way ``scan`` already does
-it (janus/agent/CLAUDE.md). The graph adds orchestration, not capability: the
+it (docs/02-architecture.md). The graph adds orchestration, not capability: the
 approval interrupt and a process-local checkpointer for the synchronous approval
 exchange. Cross-process resume requires a durable run store outside this CLI path.
 
@@ -154,7 +154,7 @@ def build_scan_graph(
     except ImportError as exc:  # pragma: no cover - exercised via the CLI's lazy import
         raise AgentUnavailableError(
             # Names the distribution, not `-e .`: that form only works from a
-            # clone, and the reader here installed a wheel from PyPI (D-157).
+            # clone, and the reader here installed a wheel from PyPI.
             "the human-approval agent needs LangGraph, which is an optional "
             'extra: pip install "janus-datahub[agent]"'
         ) from exc
@@ -213,7 +213,7 @@ def build_scan_graph(
         artifacts.preview = _preview()
         # The sleeve tug: a write is waiting on a person. Logged before the
         # interrupt suspends the graph, which is the only moment anything gets
-        # to say so (docs/plan/08 section 3).
+        # to say so (docs/11-argos.md).
         logger.info(
             "approval pending %s",
             logfmt({"run_id": run_id, "findings": len(artifacts.findings)}),
@@ -229,7 +229,7 @@ def build_scan_graph(
         agent is a different trigger for the same core, not a different core. It
         is reached with no findings too, which is the recovery case, a target
         whose problem is fixed still has an incident, a tag, and a trust score to
-        clear (D-070).
+        clear.
 
         The process instance is opened here rather than at the start of the graph,
         because on this path nothing before approval writes anything: a declined
@@ -311,8 +311,8 @@ def build_scan_graph(
     # a no-op: it is how a recovery is written, resolving the incident and
     # clearing the tag and score of a target whose problem is now fixed. Routing
     # it straight to decline is what left the agent path unable to resolve
-    # anything (D-070), and reconciliation is a mutation, so it goes through the
-    # same approval gate as every other write (agent/CLAUDE.md rule 2).
+    # anything, and reconciliation is a mutation, so it goes through the
+    # same approval gate as every other write (docs/02-architecture.md).
     graph.add_edge("reason", "approval")
     graph.add_conditional_edges(
         "approval", _after_approval, {"write": "write", "decline": "decline"}
@@ -346,7 +346,7 @@ def run_agent(
     left behind, and that is a mutation like any other, so it is gated like any
     other. The preview reports what was found, not what will be resolved: seeing
     the pending recoveries first would mean splitting reconciliation into a read
-    phase and an apply phase, which is the upgrade path if it matters (D-070).
+    phase and an apply phase, which is the upgrade path if it matters.
 
     Args:
         conn: An open connection.

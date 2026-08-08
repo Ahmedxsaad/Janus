@@ -195,7 +195,7 @@ def test_a_provider_error_that_echoes_the_key_is_redacted_before_logging(monkeyp
     assert SECRET not in logged, "the API key was written to the log"
     assert "[redacted]" in logged
     # The operator still learns what went wrong, but never which vendor: the
-    # narrator names no vendor, even in a failure log (agent/CLAUDE.md rule 3).
+    # narrator names no vendor, even in a failure log (docs/02-architecture.md).
     assert "RuntimeError" in logged
     assert "anthropic" not in logged
 
@@ -359,7 +359,7 @@ def test_the_removal_is_visible_rather_than_silent():
 
 
 def test_the_incident_body_says_how_to_clear_the_finding_above_the_prose():
-    """T-03: the way out is worth as much as the facts, so it sits with them.
+    """The way out is worth as much as the facts, so it sits with them.
 
     Above the assessment on purpose. The facts and the counterfactual are both
     derived from the graph; the assessment may be an LLM's sentence, and a reader

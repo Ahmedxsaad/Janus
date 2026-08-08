@@ -11,7 +11,7 @@ The detectors could be scored against in-memory fixtures in a fraction of the
 time, and the resulting numbers would be worth nothing: they would measure the
 fixtures. Every trial here plants a real fact in a real DataHub, waits for the
 graph to show it, and asks the shipped detector, through the same read path a
-user's scan takes (benchmarks/CLAUDE.md rule 4).
+user's scan takes (docs/08-evaluation.md).
 
 What is measured, and how each is isolated
 ------------------------------------------
@@ -27,7 +27,7 @@ What is measured, and how each is isolated
   DataHub rather than trusting the report the scan returned.
 
 Numbers land as measured. If a detector misses its target the table says so; this
-module has no path that retries a trial until it passes (benchmarks/CLAUDE.md
+module has no path that retries a trial until it passes (docs/08-evaluation.md
 rule 4).
 """
 
@@ -335,14 +335,14 @@ _DETECTOR_LABELS = {
     FindingType.INPUT_SCHEMA_DRIFT: "Input schema drift (P3)",
     FindingType.SENSITIVE_SOURCE: "Sensitive source (P5)",
     FindingType.DEPRECATED_INPUT: "Deprecated input (P6)",
-    FindingType.TABLE_LEVEL_RISK: "Table-level risk (degraded mode, T-07)",
-    FindingType.PROXY_CANDIDATE: "Proxy candidate (T-11, for human review)",
+    FindingType.TABLE_LEVEL_RISK: "Table-level risk (degraded mode)",
+    FindingType.PROXY_CANDIDATE: "Proxy candidate (for human review)",
 }
 
 
 #: Per detector, the one-line mutation that a boundary trial in that family would
 #: catch. Prose, not a number: the renderer may explain, it may never state a
-#: measurement the run did not produce (benchmarks/CLAUDE.md rule 4). Whether a
+#: measurement the run did not produce (docs/08-evaluation.md). Whether a
 #: row gets to claim it *could* have failed is decided by the trials, below.
 _BOUNDARY_MUTATIONS = {
     FindingType.UPSTREAM_FRESHNESS: "`>` to `>=` fails the trial at exactly the SLA",
@@ -370,7 +370,7 @@ def _falsifiability(family: FindingType, outcomes: Sequence[TrialOutcome]) -> tu
     have gone the wrong way went the right way, or no trial could have gone the
     wrong way at all. The second is a construction proof wearing the shape of a
     measurement, and it is the first thing a sceptical reader should be able to
-    check without reading the injector (F6).
+    check without reading the injector.
     """
     boundary = sum(1 for outcome in outcomes if outcome.trial.boundary)
     if not boundary:
@@ -492,7 +492,7 @@ def _degraded_precision_lines(approaches: Sequence[ApproachScore]) -> list[str]:
         "### The number the degraded mode quotes about itself",
         "",
         "`janus scan` offers this same table-level reading for a model nobody has",
-        "linked yet (T-07), and prints its measured precision beside every such finding,",
+        "linked yet, and prints its measured precision beside every such finding,",
         "so the answer arrives with the odds it is wrong. That figure is the table-level",
         "row above.",
         "",
@@ -516,7 +516,7 @@ def measure_faithfulness(
     config: ScanConfig,
     trials: Sequence[Trial],
 ) -> FaithfulnessReport:
-    """Narrate a real finding from every detector, and check the prose (T-10).
+    """Narrate a real finding from every detector, and check the prose.
 
     Each family's *positive* trial is planted, waited for, and narrated, rather
     than narrating whatever the matrix happened to leave behind. The first
@@ -525,7 +525,7 @@ def measure_faithfulness(
     to say about. A faithfulness rate over one narrative is not a rate.
 
     Findings come from the live graph rather than a fixture, like every other
-    measurement here (benchmarks/CLAUDE.md rule 6): the point is prose about
+    measurement here (docs/08-evaluation.md): the point is prose about
     facts a real GMS served.
 
     Only the template narrator is exercised unless an LLM is configured, and
@@ -557,10 +557,10 @@ def measure_faithfulness(
 
 
 def _faithfulness_lines(faithfulness: FaithfulnessReport | None) -> list[str]:
-    """Report whether the generated prose said only what the facts support (T-10).
+    """Report whether the generated prose said only what the facts support.
 
     Distinct from quality, which is still not scored and should not be: a rubric
-    is soft evidence that varies by provider (09 section 2.4). This is a
+    is soft evidence that varies by provider . This is a
     property, checked the same way for every provider and for the template.
     """
     if faithfulness is None or faithfulness.rate is None:
@@ -569,7 +569,7 @@ def _faithfulness_lines(faithfulness: FaithfulnessReport | None) -> list[str]:
     per_provider = faithfulness.by_provider()
     lines = [
         "",
-        "## Narrative faithfulness (T-10)",
+        "## Narrative faithfulness",
         "",
         "Not narrative *quality*, which stays unscored: a readability rubric is soft",
         "evidence that varies by provider, and it would sit badly beside a project whose",
@@ -611,7 +611,7 @@ def _faithfulness_lines(faithfulness: FaithfulnessReport | None) -> list[str]:
 
 
 def measure_lifecycle(conn: DataHubConnection, config: ScanConfig) -> tuple[TypeLifecycle, ...]:
-    """Read back how long every Janus incident on this graph stayed open (T-16).
+    """Read back how long every Janus incident on this graph stayed open.
 
     Measured, not planted: this reads the incidents the run above just raised and
     then resolved, plus whatever earlier runs left behind. Nothing here writes,
@@ -638,8 +638,8 @@ def _lifecycle_lines(rows: Sequence[TypeLifecycle]) -> list[str]:
         "",
         "**These are not production MTTRs, and the distinction matters.** Every number",
         "below is read straight out of the graph, from `incidentInfo.created` and the",
-        "resolution stamp GMS wrote, for incidents carrying Janus's own run footer",
-        "(T-16). But the graph they are read from is the benchmark's: a trial plants a",
+        "resolution stamp GMS wrote, for incidents carrying Janus's own run footer.",
+        "But the graph they are read from is the benchmark's: a trial plants a",
         "failure, the detector raises, and the next trial reverts the cause, so most of",
         "these durations are the seconds between a plant and its restore. What they do",
         "measure is that the raise-and-resolve loop closes at all, per detector, and",
@@ -691,7 +691,7 @@ def _ingested_lines(score: IngestedScore | None) -> list[str]:
         "registry, ingested by DataHub's **own** postgres, dbt and mlflow sources. The",
         "leak is written into the dbt model rather than planted by a seeding call, and",
         "the column lineage the walk follows is what DataHub's SQL parser produced from",
-        "the compiled query (T-14).",
+        "the compiled query.",
         "",
     ]
     if score is None:
@@ -714,8 +714,7 @@ def _ingested_lines(score: IngestedScore | None) -> list[str]:
         f"- Findings raised: **{score.unlinked_findings}** "
         f"({'correct: nothing was knowable' if score.unlinked_findings == 0 else '**wrong**'})",
         f"- Checks reported as not evaluated: {', '.join(score.unlinked_not_evaluated) or 'none'}",
-        f"- Tables the degraded table-level mode (T-07) could read: "
-        f"{score.unlinked_training_tables}",
+        f"- Tables the degraded table-level mode could read: {score.unlinked_training_tables}",
         "",
         "That last line is the one to read twice. On the seeded graph the degraded mode",
         "has a table to fall back to; here it has none, because DataHub's mlflow source",
@@ -724,7 +723,7 @@ def _ingested_lines(score: IngestedScore | None) -> list[str]:
         "ingested graph, and the honest report is the one above: nothing was checked, and",
         "here is what each check was missing.",
         "",
-        "### Importing the link from a declaration (T-05, T-06)",
+        "### Importing the link from a declaration",
         "",
         "The same join, declared twice in the stack's own files: a Feast feature service",
         "and a dbt semantic model. Each is read by its adapter and checked against the",
@@ -812,7 +811,7 @@ def render_results(
         "# Janus-Bench results",
         "",
         "Generated by `python -m benchmarks.run_bench`. Every number here is measured,",
-        "never hand-edited (benchmarks/CLAUDE.md rule 4). Rerunning on the seeded graph",
+        "never hand-edited (docs/08-evaluation.md). Rerunning on the seeded graph",
         "reproduces it.",
         "",
         f"- Run at: {generated_at.strftime('%Y-%m-%d %H:%M:%S %Z')}",
@@ -821,8 +820,8 @@ def render_results(
         f"- Sensitive classifications under test: "
         f"{', '.join(config.sensitive_tag_urns + config.sensitive_term_urns) or 'none'}",
         # Reported beside the sensitive one rather than folded into it: the two
-        # are different taxonomies on purpose (T-11), and a reader checking which
-        # detector was actually switched on needs to see both (D-133).
+        # are different taxonomies on purpose, and a reader checking which
+        # detector was actually switched on needs to see both.
         f"- Protected attributes under test: {protected or 'none'}",
         f"- Trials: {len(outcomes)} ({len(errors)} unscoreable)",
         "",
@@ -862,7 +861,7 @@ def render_results(
     overall = metrics.confusion([(o.trial.expected, o.observed) for o in outcomes if not o.errored])
     lines += [
         "",
-        "Against the targets in `docs/plan/03-production-hardening.md` section A.2,",
+        "Against the targets in `docs/08-evaluation.md`,",
         "taken over every scoreable trial:",
         "",
         f"- Recall {metrics.format_rate(overall.recall)} "
@@ -882,8 +881,8 @@ def render_results(
         "It can: changing the detector's comparison from `>` to `>=`, a one-character",
         "off-by-one, is caught by the trial at exactly the SLA and shows up as a fallen",
         "precision and a false-positive rate above target. That mutation is recorded in",
-        "docs/decision-log.md; the check that a suite goes red for a real fault before",
-        "its green is trusted is tests/CLAUDE.md rule 6, applied here to the benchmark",
+        "docs/13-design-decisions.md; the check that a suite goes red for a real fault before",
+        "its green is trusted is CONTRIBUTING.md, applied here to the benchmark",
         "itself.",
         "",
         "| Lag | Should fire | Did fire | |",
@@ -1100,7 +1099,7 @@ def render_results(
         "- No Great Expectations, Deequ, Evidently or NannyML *process* was run. The",
         "  approaches compared above are implementations written here, so the table",
         "  measures what an approach can see, never a named product's behaviour.",
-        "- Narrative *quality* is not scored, deliberately (09 section 2.4). Narrative",
+        "- Narrative *quality* is not scored, deliberately . Narrative",
         "  *faithfulness* is, in its own section above: whether the prose quotes only",
         "  figures the narrator was actually shown. Detection is LLM-free by design, so",
         "  the detection numbers are unchanged with or without a model configured.",
@@ -1148,16 +1147,16 @@ def main() -> None:
 
     # Both governance detectors are configuration-gated by design: with no
     # classification named neither runs, and a scan reports each as not
-    # evaluated (D-079, D-117). That is the right default for a user and the
+    # evaluated. That is the right default for a user and the
     # wrong one for a benchmark, which would score a detector it never let run,
     # so the classifications the scenarios plant are supplied here explicitly.
     # The report says so, and every other value still comes from the environment.
     #
     # The protected-attribute list was missing here until Phase 7 and the proxy
     # row was scoreable only on a machine that happened to export the variable,
-    # which is benchmarks/CLAUDE.md rule 1's same-run-same-numbers failing
+    # which is docs/08-evaluation.md's same-run-same-numbers failing
     # silently: on a clean checkout `proxy-planted` reported WRONG for a
-    # detector that had never been switched on (D-133).
+    # detector that had never been switched on.
     config = replace(
         ScanConfig.from_env(),
         sensitive_tag_urns=(scenarios.SENSITIVE_TAG_URN,),
@@ -1239,7 +1238,7 @@ def main() -> None:
         ingested=ingested,
         lifecycle=lifecycle,
     )
-    # The mutation section (T-08) is written by benchmarks/mutation_report.py on
+    # The mutation section is written by benchmarks/mutation_report.py on
     # its own schedule, and this function rewrites the whole file, so without
     # this the section silently disappeared every time the benchmark ran. Its CI
     # job then re-added it and reported the file as stale, which is a job wearing

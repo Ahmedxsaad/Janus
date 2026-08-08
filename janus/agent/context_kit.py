@@ -13,7 +13,7 @@ using its read-only toolset (``build_langchain_tools`` defaults
 optional dependency: without it installed every function here returns ``None``
 and a scan is unchanged.
 
-Where this sits relative to the design law (docs/plan/architecture.md section 2):
+Where this sits relative to the design law (docs/02-architecture.md):
 
 * Detection never sees any of this. It runs, and finishes, before this is read.
 * Nothing here can create, suppress, or re-rank a finding. It is fetched for a

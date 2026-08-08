@@ -328,7 +328,7 @@ def test_a_stale_table_with_no_model_downstream_warns_and_tags_nothing():
 
 
 def test_a_truncated_downstream_walk_with_nothing_found_does_not_claim_no_model():
-    """F1, docs/plan/07: a capped, empty walk is uncertain, not a clean answer."""
+    """docs/08-evaluation.md: a capped, empty walk is uncertain, not a clean answer."""
     graph = _graph(30.0)
     graph.graphql_response = {"raiseIncident": "urn:li:incident:abc"}
     # One result at a cap of one: the walk saw exactly the cap, so a model
@@ -345,7 +345,8 @@ def test_a_truncated_downstream_walk_with_nothing_found_does_not_claim_no_model(
     )
 
     # The old, confident phrasing ("no model consumes it within N hops") must
-    # not appear: that is exactly the false negative F1 exists to prevent.
+    # not appear: that is exactly the false negative the truncation flag exists
+    # to prevent.
     assert not any("consumes it within" in warning for warning in report.warnings)
     assert any("does not mean no model consumes it" in warning for warning in report.warnings)
 
@@ -405,7 +406,7 @@ def _dual_target_scan(*, lag_hours: float = 30.0) -> tuple[FakeGraph, FakeClient
         ),
     )
     # raise_incident resolves a schemaField target through the parent dataset's
-    # schemaMetadata, never through graph.exists() (D-017).
+    # schemaMetadata, never through graph.exists().
     graph.set_aspect(
         FEATURE_TABLE_URN,
         SchemaMetadataClass(
@@ -597,7 +598,7 @@ def test_a_leakage_only_scan_never_claims_a_freshness_assertion_was_written():
 
 # --------------------------------------------------------------------------
 # Reconciling a stale incident: graph-driven, not a diff against a process's
-# own prior report (D-067). Every test below calls run_scan exactly once,
+# own prior report. Every test below calls run_scan exactly once,
 # with no earlier call and no carried-over state, on a graph state where the
 # incident was raised by something else entirely, proving reconciliation does
 # not depend on this process having been the one that raised it.
@@ -695,10 +696,10 @@ def test_a_leak_fixed_by_deleting_the_column_still_gets_its_incident_closed():
     """The way a leak is actually fixed: the column stops existing.
 
     Nothing then lists it as a feature, so the walk over the model's current
-    features never reaches it, and before D-074 the incident stayed open forever
+    features never reaches it, and before that fix the incident stayed open forever
     on a graph somebody had already fixed. The scan that raised it recorded the
     column on the model, and that record is what this walks instead. Observed on
-    a real dbt project, which is the condition D-069 said it would wait for.
+    a real dbt project, which is the condition that fix waited for.
     """
     graph = _graph(lag_hours=1.0)
     # The model declares no features at all: the leaking column was dropped from
@@ -831,7 +832,7 @@ def test_one_feature_recovering_does_not_clear_a_model_another_still_endangers()
     is re-raised this very run, the other's leak is gone and its incident is
     resolved. Subtracting the recovered type wholesale left the model with no
     risk flags, no at-risk tag, and a from-scratch "no findings" trust score,
-    overwriting the score the same run had just written (D-070).
+    overwriting the score the same run had just written.
     """
     graph, client = _dual_target_scan(lag_hours=1.0)  # fresh table: leakage only
     graph.set_aspect(
@@ -904,7 +905,7 @@ def test_a_drift_incident_raised_for_another_model_is_left_alone():
     Two models trained on the same input at different times genuinely disagree
     about whether it drifted. When the incident title named only the dataset,
     scanning the model that no longer drifts resolved the incident belonging to
-    the model that still does (D-070).
+    the model that still does.
     """
     import json
 
@@ -988,7 +989,7 @@ def test_a_recovered_table_records_the_passing_assertion_run():
     The guarding assertion's latest run event is the FAILURE written when the
     table went stale. A recovery that never writes a SUCCESS leaves the table
     reading, in the DataHub UI, as permanently breaching the very assertion
-    Janus wrote to guard it (D-070).
+    Janus wrote to guard it.
     """
     graph = _graph(lag_hours=1.0)
     client = _client()

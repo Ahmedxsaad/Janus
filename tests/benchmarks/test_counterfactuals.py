@@ -68,7 +68,7 @@ def test_every_detector_is_reachable_through_findings_for():
     call, so a detector missing from it would be scored as one that never
     fires: a perfect false-negative rate, published as a measurement. It
     raises instead, which is how the proxy detector's absence was caught on
-    the first live run after it landed (D-117).
+    the first live run after it landed.
     """
     for family in FindingType:
         try:

@@ -9,7 +9,7 @@
 # * OS bundles (`cargo tauri build`), which is the only route on Linux. That is
 #   policy rather than effort: the binary links the system webkit2gtk, which no
 #   manylinux tag permits, so PyPI will not accept a Linux wheel
-#   (docs/plan/08-watchdog-mascot.md section 6b).
+#   (docs/11-argos.md).
 #
 # Windows is the one platform this repository cannot test from a developer
 # machine, and it is where the transport is least certain: a release build sets

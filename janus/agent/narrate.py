@@ -697,7 +697,7 @@ def grounding_facts(finding: Finding, context: str | None = None) -> str:
     correctly-quoted hop count as a hallucination.
 
     Public because ``benchmarks/faithfulness.py`` measures the narrator against
-    exactly this text (T-10). Deriving the grounding set separately there would
+    exactly this text. Deriving the grounding set separately there would
     be a second copy of the answer, free to drift from the prompt the model
     actually saw, and the measurement would then be of the copy.
 
@@ -814,7 +814,7 @@ def incident_description(finding: Finding, narrative: Narrative) -> str:
     numbers, and they are identical whether or not an LLM was involved. The
     counterfactual sits directly under them, above the assessment, for the same
     reason: it is derived from the same graph facts, so it is worth exactly as
-    much as they are, and it is what the reader came to find out (T-03).
+    much as they are, and it is what the reader came to find out.
     """
     counterfactual = "\n".join(finding.counterfactual.lines())
     return f"{fact_block(finding)}\n\n{counterfactual}\n\nAssessment:\n{narrative.assessment}"

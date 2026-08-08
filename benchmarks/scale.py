@@ -20,7 +20,7 @@ Two numbers per size, and the second is the one that explains the first:
 
 Nothing here is scored against a target. There is no published number for how
 fast a metadata sweep should be, and inventing one to pass it would be worse than
-reporting the measurement plainly (benchmarks/CLAUDE.md rule 2 lists what is
+reporting the measurement plainly (docs/08-evaluation.md lists what is
 scored; this is not on it).
 
 Cleaning up
@@ -49,7 +49,7 @@ from janus.seed import graph_spec as spec
 
 #: Catalog sizes the sweep is measured at. Fixed, like every other constant in
 #: this package: a run that cannot be re-derived by reading the file is a run
-#: whose numbers nobody can check (benchmarks/CLAUDE.md rule 1).
+#: whose numbers nobody can check (docs/08-evaluation.md).
 SWEEP_SIZES: tuple[int, ...] = (1, 10, 50)
 
 #: Model id prefix for the replicas. Distinctive enough that anything left behind

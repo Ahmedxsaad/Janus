@@ -1,6 +1,6 @@
-"""T-10: does the generated prose say only what the facts support?
+"""Does the generated prose say only what the facts support?
 
-RESULTS.md states that narrative quality is not scored, and 09 section 2.4
+RESULTS.md states that narrative quality is not scored, and the plan
 argues it should stay that way: an LLM-as-judge rubric is soft evidence, it
 varies by provider, and it sits badly next to a project whose whole posture is
 that the decisions are deterministic. **Faithfulness** is a different question,
@@ -256,7 +256,7 @@ def check_template_narratives(
     """Check the deterministic template over every finding given.
 
     The template is the path a scan takes with no API key, which is every CI
-    run and every offline test, so this is the half of T-10 that is always
+    run and every offline test, so this is the half of the check that is always
     measured rather than measured when a credential happens to be present. It
     is also the stricter half to fail: template prose is written here, so a
     violation is this project quoting a figure it never measured.

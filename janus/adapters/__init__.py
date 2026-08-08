@@ -3,7 +3,7 @@
 Why this package exists
 -----------------------
 Every detector in Janus reads the join between a model and the warehouse
-columns it trained on, and nothing in the ecosystem writes that join (D-074).
+columns it trained on, and nothing in the ecosystem writes that join.
 ``janus link`` is the bridge, and it asks a human to type the arguments.
 
 For a large class of real ML stacks nobody has to: the mapping is already
@@ -14,7 +14,7 @@ and measures against a model's columns. Where that is true, ``link`` should
 import the declaration rather than ask for it a second time, in a second
 notation, with a second chance to get it wrong.
 
-The local rules (adapters/CLAUDE.md) are the whole design: an adapter parses a
+The layer boundary (docs/02-architecture.md) is the whole design: an adapter parses a
 declaration on disk, offline, read-only, and returns exactly what ``link``
 takes. It never connects to a vendor's service, never writes to DataHub, and
 never decides anything the declaration does not say. What it could not read is

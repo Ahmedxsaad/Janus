@@ -2,7 +2,7 @@
 
 Why a script rather than hand-typed grids
 -----------------------------------------
-The same reason `argos/ui/sprites/make_sprites.py` exists (argos/CLAUDE.md rule
+The same reason `argos/ui/sprites/make_sprites.py` exists (docs/11-argos.md rule
 6): a temple front, a column and an arch are symmetrical, and symmetry typed by
 hand is symmetry that is one pixel out on the third try. Here a shape is drawn
 on the left half and mirrored, so it is exact by construction, and the dark
@@ -17,7 +17,7 @@ a preview sheet for looking at the art rather than reading it:
 
 `ornaments.txt` is the committed artifact. `site/ornaments.js` reads it as an
 inlined string, because the deployed site is served with `site/` as its root
-and anything outside that directory is unreachable (D-139).
+and anything outside that directory is unreachable.
 """
 
 from __future__ import annotations
@@ -166,7 +166,7 @@ def outline(grid: Grid, ch: str = "k") -> None:
 # a beard mass) turned into a comb or a blob. The arch is the better answer
 # anyway and it is not a consolation prize: Janus is the god of doorways and
 # gates before he is a face, the Arch of Janus is a real monument, and a good
-# arch says more than a bad portrait (D-139).
+# arch says more than a bad portrait.
 # --------------------------------------------------------------------------
 
 

@@ -3,7 +3,7 @@
 The datapacks are warehouse and BI centric: they contain no MLModel, MLFeature,
 training run, or deployment entities. Without those, there is no data-to-model
 boundary to reason about, so this seeder is the project's de-risker (see
-docs/plan/02-implementation-plan.md section 3).
+docs/02-architecture.md).
 
 It writes, idempotently:
 
@@ -15,7 +15,7 @@ It writes, idempotently:
 5. The model group, the model, and a live deployment.
 
 Running it twice converges: fixed URNs, a fixed timestamp, and UPSERT semantics
-throughout (seed/CLAUDE.md rule 1).
+throughout (docs/02-architecture.md).
 
 SDK notes, verified against acryl-datahub 1.6.0.13
 --------------------------------------------------

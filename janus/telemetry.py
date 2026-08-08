@@ -1,11 +1,10 @@
-"""OpenTelemetry metrics for the one process that runs unattended (T-17).
+"""OpenTelemetry metrics for the one process that runs unattended.
 
 ``janus watch`` already emits one line per completed scan carrying every
 number an SLO is built from: how many findings, how many writes, how long
-detection took, how long the whole scan took (03-production-hardening.md section
-C.3, D-073). A team running it as a daemon wants those numbers in the same place
-the rest of their platform's numbers are, and hand-parsing a log format is not
-that place.
+detection took, how long the whole scan took (docs/02-architecture.md). A team
+running it as a daemon wants those numbers in the same place the rest of their
+platform's numbers are, and hand-parsing a log format is not that place.
 
 So this exports them, and it exports *only* them. There is no second source of
 truth here: the exporter is a logging handler that reads the very fields
@@ -17,7 +16,7 @@ and two renderings of it.
 Deliberately small
 ------------------
 Three instruments, no traces, no spans, no auto-instrumentation of the DataHub
-SDK's HTTP calls. 09 section 3.3 says to do it, keep it small, and not to oversell
+SDK's HTTP calls. The plan says to do it, keep it small, and not to oversell
 it, and the reason is that everything past this point is somebody else's product:
 a team that wants distributed traces of GMS calls installs
 ``opentelemetry-instrumentation-requests`` and gets them, without this project

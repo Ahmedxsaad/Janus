@@ -3,14 +3,14 @@
 ``documents.py`` writes one report per *finding*: what went wrong, and what to
 do. These two are per *model*, and neither reports a problem:
 
-* **The model card** (T-12, 09 section 5.3). Mitchell et al. 2019 proposed
+* **The model card** . Mitchell et al. 2019 proposed
   model cards as documentation that travels with a model; ``trust_score.py``
   has cited that paper since Phase 2 without producing the artifact. This
   generates it from graph facts: intended use where somebody declared it,
   where the training data came from, the trust score with its waterfall, the
   findings open against it, and the checks that could not run.
 
-* **The EU AI Act Article 10 evidence pack** (T-13, 09 section 5.2). Article 10
+* **The EU AI Act Article 10 evidence pack** . Article 10
   requires documented training-data provenance, governance and examination for
   bias for high-risk systems; Article 12 requires record-keeping. Janus
   already computes most of that evidence as a side effect of detection, so
@@ -21,7 +21,7 @@ What both of these are not
 Neither is a certification, and the evidence pack says so in its own first
 paragraph rather than in a footnote. A generated document that implied
 conformity would be the single most damaging thing this project could ship
-(09 section 5.2's wording, and it is not an exaggeration: these land in a
+(the plan's wording, and it is not an exaggeration: these land in a
 catalog, under a compliance-sounding title, where somebody may cite them).
 
 So both artifacts inherit ``coverage.py``'s discipline and push it further:
@@ -262,7 +262,7 @@ def _gaps_section(facts: ModelFacts) -> list[str]:
 
 
 def render_model_card(facts: ModelFacts) -> str:
-    """Render the model card (T-12). Pure: every fact comes from ``facts``.
+    """Render the model card. Pure: every fact comes from ``facts``.
 
     Follows Mitchell et al. 2019's structure where the graph can fill it in, and
     says so where it cannot. Intended use is the section most often empty: it is
@@ -359,7 +359,7 @@ def render_model_card(facts: ModelFacts) -> str:
 
 
 def render_evidence_pack(facts: ModelFacts) -> str:
-    """Render the EU AI Act Article 10 evidence pack (T-13).
+    """Render the EU AI Act Article 10 evidence pack.
 
     The first paragraph is the load-bearing part and is deliberately the first
     thing a reader meets: this assembles measured facts, it does not certify
@@ -476,7 +476,7 @@ def render_evidence_pack(facts: ModelFacts) -> str:
         *[f"  - `{run}`" for run in facts.training_runs],
         "- Every Janus scan emits a `dataProcessInstance` carrying its own "
         "`run_id`, so each write in this catalog is traceable to the run that made "
-        "it (T-04). That covers Janus's own activity, and nothing else's.",
+        "it. That covers Janus's own activity, and nothing else's.",
         "",
         "## Ownership",
         "",

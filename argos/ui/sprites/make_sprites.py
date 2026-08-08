@@ -9,7 +9,7 @@ tail and legs, and each part is authored once.
 
 The fills are authored; the outline is not. Every frame gets its dark edge
 computed from the shape, which keeps the silhouette even and is the method
-D-099 settled on: author the colour, let the script find the border.
+the redesign settled on: author the colour, let the script find the border.
 
 Run it from anywhere; it rewrites argos.txt beside itself:
 

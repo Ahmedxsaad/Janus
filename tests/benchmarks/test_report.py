@@ -56,7 +56,7 @@ def _report(outcomes: list[TrialOutcome]) -> str:
 
 
 def _lifecycle_report(*, lifecycle: tuple[TypeLifecycle, ...]) -> str:
-    """A report carrying only the incident-lifecycle section's inputs (T-16)."""
+    """A report carrying only the incident-lifecycle section's inputs."""
     return render_results([], BLAST, WRITEBACK, CONFIG, generated_at=WHEN, lifecycle=lifecycle)
 
 
@@ -270,8 +270,7 @@ def test_every_detector_has_a_row_label_so_none_is_silently_dropped():
     The report would then be short one detector with nothing saying so.
 
     Exactly what happened when the proxy detector first ran: 31 trials
-    executed, four of them proxy trials, and the table printed six rows
-    (D-117).
+    executed, four of them proxy trials, and the table printed six rows.
     """
     from benchmarks.run_bench import _DETECTOR_LABELS
 
@@ -298,7 +297,7 @@ def _row(
 
 
 def test_the_lifecycle_section_says_these_are_not_production_mttrs():
-    """The caveat is the section (T-16), and it goes above the table.
+    """The caveat is the section, and it goes above the table.
 
     Almost every duration on a benchmark graph is the gap between a planted
     failure and the next trial's restore. Publishing the table without saying so

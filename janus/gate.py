@@ -83,7 +83,7 @@ class GatePolicy:
         """A caution about how this policy is written, or ``""`` when it is fine.
 
         A trust threshold on its own gates on a composite score whose units
-        nobody defined: a team that picks 80 has calibrated nothing (F7 step 3).
+        nobody defined: a team that picks 80 has calibrated nothing.
         A severity is a defined thing a detector decided, so the advice is to
         gate on that and keep the score as the blunt secondary control it is.
 

@@ -1,5 +1,5 @@
 # Runs the checks a reviewer would otherwise have to run by hand, on every push
-# and every pull request (docs/plan/04-improvements.md P2-1).
+# and every pull request (docs/13-design-decisions.md).
 #
 # What is deliberately NOT here: the integration suite. Those 39 tests need a live
 # DataHub Quickstart, which is a multi-container stack (GMS, MySQL, Kafka,
@@ -63,8 +63,8 @@ jobs:
       matrix:
         # pyproject's classifiers and requires-python (>=3.11,<3.14) advertise
         # all three; until this matrix landed only 3.11 (.python-version) ever
-        # actually ran (F9, docs/plan/07). 3.12 and 3.13 are what current
-        # distributions ship (Ubuntu 24.04 and 25.04 respectively, D-074), so
+        # actually ran. 3.12 and 3.13 are what current
+        # distributions ship (Ubuntu 24.04 and 25.04 respectively), so
         # they are the versions most real users are on, not the one almost
         # nobody has by default.
         python: ["3.11", "3.12", "3.13"]
@@ -87,7 +87,7 @@ jobs:
 
   mutation:
     name: mutation score (janus/detect/)
-    # Advisory only (T-08, docs/plan/10-depth-implementation.md): a run over
+    # Advisory only (docs/13-design-decisions.md): a run over
     # ~1500 mutants is the slow job the top-of-file note already warns about,
     # so it stays off the PR hot path the same way the integration suite does,
     # running after a merge to main and on demand rather than on every push.
@@ -149,7 +149,7 @@ jobs:
       # the SDK can satisfy both, so this is not a finding this project can act
       # on. It is not reachable either: the flaw is in *building* an sdist, and
       # nothing here builds or publishes one. Reported upstream as finding 13 in
-      # docs/most-valuable-feedback.md.
+      # docs/16-most-valuable-feedback.md.
       #
       # Scoped to that one id on purpose. Any other advisory, including a future
       # one against setuptools, still fails this job. Delete the flag the moment
@@ -158,7 +158,7 @@ jobs:
         run: pip-audit --progress-spinner off --ignore-vuln PYSEC-2026-3447
 
   install-alongside:
-    name: installs alongside a different pydantic (F2, docs/plan/07)
+    name: installs alongside a different pydantic
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -169,7 +169,7 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      # The regression test for the whole class of problem F2 fixed: an exact
+      # The regression test for the whole class of problem the pin change fixed: an exact
       # `==` pin here would refuse to coexist with a pydantic version another
       # already-installed package brought into the environment. Installing a
       # deliberately different, but still-supported, pydantic first is what an
@@ -269,7 +269,7 @@ jobs:
     runs-on: ubuntu-latest
     # No live Azure VM to test against, same reasoning as the docker and helm
     # jobs above: this proves the files are well-formed, not that a real VM
-    # provisions correctly from them. docs/deploy/azure-vm.md says so too.
+    # provisions correctly from them. docs/12-operations.md says so too.
     steps:
       - uses: actions/checkout@v5
 

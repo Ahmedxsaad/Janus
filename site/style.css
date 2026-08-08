@@ -65,7 +65,13 @@
   /* A reading measure, in the low sixties of characters. Anything wider and
      the eye loses the line return on a serif this size. */
   --measure: 33rem;
-  --max: 76rem;
+  /* The grid's two fixed side columns plus their gaps are 29.8rem
+     (page/.toc/.relic below), so the flexible middle column still clears
+     --measure with room at 68rem: 68 - 29.8 = 38.2rem. Kept short of 76rem
+     on purpose, because the colonnade breakpoint below is --max plus its own
+     width on each side, and every rem added here pushes that breakpoint
+     further out of reach on a real screen. */
+  --max: 68rem;
 
   /* The corner Argos occupies. The page reserves this much room on its right
      so that nothing is ever laid out underneath him: a speech bubble is opaque,
@@ -790,12 +796,23 @@ pre:hover .copy,
  * The outer margins, which no content ever reaches on a wide screen. A single
  * column repeated down each side, turned on only once the viewport is wide
  * enough that the strips cannot touch the text.
+ *
+ * The centred content column tops out at --max (68rem); a 6rem colonnade on
+ * each side needs 80rem to clear it with zero margin. This used to be gated
+ * at 104rem (1664px), then 90rem: both read as "the pillars are broken" on
+ * a real screen, because page zoom divides the reported CSS viewport width
+ * (120% zoom on a 1728px display reports 1440px), and OS display scaling
+ * (125%/150%, extremely common on Windows) divides it again before that.
+ * 82rem (1312px) is close to the 80rem floor on purpose: every rem of
+ * buffer here is a rem this breakpoint has to claw back from a zoomed-in
+ * browser to ever show the pillars at all, and --max already gave up 8rem
+ * (see above) to make this floor lower in the first place.
  */
 .colonnade {
   display: none;
 }
 
-@media (min-width: 104rem) {
+@media (min-width: 82rem) {
   .colonnade {
     display: block;
     position: fixed;
@@ -847,10 +864,36 @@ pre:hover .copy,
   pointer-events: none;
 }
 
+/*
+ * `height: 100%` used to sit here instead of `aspect-ratio`, and it was a
+ * silent bug rather than a working rule: this grid has no explicit row
+ * track, `align-items: end` means the row does not stretch to the
+ * container's own height, and a canvas with no other sizing information
+ * has a browser-default intrinsic height (150px) that a percentage against
+ * an auto-sized row can fall back to instead of the intended 15rem. The
+ * result was `paintPiece()` in ornaments.js (site/style.css cannot see it,
+ * but it is what measures this box) fitting the art into a box shorter
+ * than it looked like it should be, at a smaller whole-number scale than
+ * the column's width alone would allow.
+ *
+ * `aspect-ratio`, set per piece to its own art's native grid size (temple
+ * 46x52, arch 44x62 in make_ornaments.py), makes the box's height a fixed
+ * function of its width instead, so it is never indefinite: the canvas
+ * fills its full grid column and paintPiece() finds no wasted margin to
+ * scale down for.
+ */
 .hero .standing canvas {
   display: block;
   width: 100%;
-  height: 100%;
+  height: auto;
+}
+
+.hero .standing canvas[data-piece="temple"] {
+  aspect-ratio: 46 / 52;
+}
+
+.hero .standing canvas[data-piece="arch"] {
+  aspect-ratio: 44 / 62;
 }
 
 @media (max-width: 62rem) {
@@ -962,8 +1005,29 @@ footer {
  * Above the breakpoint the page is laid out inside `body`'s content box, which
  * stops short of the corner, so the bubble has somewhere to be that is not on
  * top of a paragraph. Below it, reserving a sixth of a narrow window would cost
- * the document more than the companion is worth, so he goes rather than the
- * text: the script also stops animating once the canvas has no box.
+ * the document more than the companion is worth, so the corner box shrinks
+ * instead of hiding: `argos-guide.js`'s `measure()` reads the canvas's actual
+ * CSS size on every resize and already has a smaller sprite scale below 240px
+ * of box width, so a smaller box is all shrinking the corner here has to do.
+ * He floats over the corner of whatever is scrolled underneath at this width
+ * rather than never appearing at all; `pointer-events: none` on `.companion`
+ * means nothing under him is unclickable for it.
+ *
+ * Width and height diverge here, where above the breakpoint they are both
+ * `--corner`, and both had to move: an earlier pass grew height alone
+ * (8rem x 13rem) on the theory that vertical room was the only thing
+ * `layout()`'s size-stepping loop was short of, and it was wrong. `wrap()`
+ * budgets a line in font *cells*, not characters (most glyphs are 3 cells
+ * wide plus 1 of spacing), so an 8rem box's ~108px of room is only about 7
+ * cells' worth of characters per line at text scale 3 and not much more at
+ * scale 2 either: every real message on the page, simulated against the
+ * exact algorithm below, still bottomed out at scale 1 (a 5px-tall glyph)
+ * regardless of how much height was on offer, because there was nowhere
+ * near enough width for a line worth wrapping at 2 or 3. 12rem x 14rem is
+ * the smallest size, checked the same way, that gets every message on the
+ * page to scale 2 (10px), which is what a 240px-wide desktop companion
+ * itself falls back to on its two longest messages: this is parity with
+ * desktop's own floor, not a mobile compromise on top of it.
  */
 @media (min-width: 70rem) {
   body {
@@ -977,7 +1041,8 @@ footer {
 
 @media (max-width: 70rem) {
   .companion {
-    display: none;
+    width: 12rem;
+    height: 14rem;
   }
 }
 

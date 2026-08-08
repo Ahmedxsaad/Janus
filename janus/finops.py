@@ -1,4 +1,4 @@
-"""Which pipelines exist only to feed a model nobody uses (T-18).
+"""Which pipelines exist only to feed a model nobody uses.
 
 Every other module here answers a question an engineer has. This one answers a
 question a budget holder has, from facts already walked:
@@ -19,11 +19,11 @@ no ``FindingType`` here, no incident, no severity and no trust-score deduction:
 
 What "unused" means, and what it deliberately does not
 ------------------------------------------------------
-Two facts together, and both have to be positive evidence (detect/CLAUDE.md
+Two facts together, and both have to be positive evidence (docs/04-detectors.md
 rule 5, which is not a detector rule so much as this project's whole posture):
 
 1. The model has no deployment in service. That read already exists, because it
-   is what separates a production incident from a training-time concern (D-020).
+   is what separates a production incident from a training-time concern.
 2. Something recorded a timestamp on the model, and it is older than
    ``unused_model_days``.
 
@@ -39,7 +39,7 @@ intersection is over the model set and never over one model at a time.
 
 The model set comes from :mod:`janus.discovery`
 ----------------------------------------------------
-Not from search. GMS hides non-latest versions of a versioned model (D-100), and
+Not from search. GMS hides non-latest versions of a versioned model, and
 a hidden version is exactly the live consumer that would make this report
 recommend deleting a table something still reads. The one place that would be
 catastrophic rather than merely wrong is here.

@@ -1,4 +1,4 @@
-"""Janus's own scan, as the process run the graph holds it in (T-04).
+"""Janus's own scan, as the process run the graph holds it in.
 
 Driven through ``run_scan`` rather than by calling the emitter directly. What the
 task promises is not that the module can build a ``dataProcessInstance``, it is

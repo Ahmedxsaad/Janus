@@ -97,7 +97,8 @@ def test_the_drift_report_lists_the_changed_columns_and_cites_breck():
 def test_every_finding_type_can_be_reported_on():
     """The gap a live scan fell into: two detectors shipped with no report at all.
 
-    `report_subject` and `_report_body` are singledispatch tables, and D-079
+    `report_subject` and `_report_body` are singledispatch tables, and the
+    governance detectors
     registered the two governance findings in narrate.py's four tables and not in
     these two. Nothing offline noticed, because no unit test rendered a report
     for them; the first sensitive-source scan against a real graph raised
@@ -220,7 +221,7 @@ def test_the_published_body_is_the_rendered_report():
 
 
 # --------------------------------------------------------------------------
-# The trust trend section (D-081)
+# The trust trend section
 # --------------------------------------------------------------------------
 
 
@@ -297,7 +298,7 @@ def test_the_impact_report_carries_the_trend_when_there_is_one():
 
 
 # --------------------------------------------------------------------------
-# The trust waterfall, and the version step that is not a regression (T-01)
+# The trust waterfall, and the version step that is not a regression
 # --------------------------------------------------------------------------
 
 
@@ -349,7 +350,7 @@ def test_one_scoring_version_throughout_says_nothing_about_versions():
 
 
 def test_every_report_says_how_to_clear_the_finding():
-    """T-03: the report carries the counterfactual beside the proof.
+    """The report carries the counterfactual beside the proof.
 
     Inside the body rather than appended after it, because "what would have to be
     different" belongs next to "what the graph shows", not below the trust trend.

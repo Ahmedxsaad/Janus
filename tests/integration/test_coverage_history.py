@@ -1,4 +1,4 @@
-"""Guard coverage against a live DataHub (T-15).
+"""Guard coverage against a live DataHub.
 
 Why a unit test cannot cover this: the trend hangs on a ``dataFlow``, and until
 this file ran no structured property had ever been assigned to one on a real GMS.
@@ -108,8 +108,8 @@ def test_the_figure_counts_every_model_the_graph_holds_including_hidden_versions
 ) -> None:
     """The denominator comes from discovery, so a hidden version is not omitted.
 
-    A model GMS hides from search is one that silently stops being checked
-    (D-100). Leaving it out of the denominator would report coverage over the
+    A model GMS hides from search is one that silently stops being checked.
+    Leaving it out of the denominator would report coverage over the
     models Janus happens to see rather than over the models that exist,
     which is the flattering error.
     """

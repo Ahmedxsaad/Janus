@@ -1,4 +1,4 @@
-"""Tables that exist only to feed unused models (T-18). Offline: no DataHub.
+"""Tables that exist only to feed unused models. Offline: no DataHub.
 
 This is the one report in the project whose recommended action is to delete
 something, so every test here is about a way it could be wrong in that
@@ -130,7 +130,7 @@ def test_a_model_left_out_of_the_sweep_cannot_hide_a_live_consumer():
     Handed only the unused model, the same graph reports its shared input as an
     orphan. That is the correct output for the input given, and it is why
     passing a filtered list is documented as the one way to make this report
-    dangerous: GMS hides non-latest versions from search (D-100), and a hidden
+    dangerous: GMS hides non-latest versions from search, and a hidden
     version is exactly the live consumer that would be missed.
     """
     graph = FakeGraph()

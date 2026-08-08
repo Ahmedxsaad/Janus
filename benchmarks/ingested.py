@@ -1,10 +1,10 @@
-"""Score the detectors on a graph this project did not build (T-14).
+"""Score the detectors on a graph this project did not build.
 
 Every other measurement in this package runs against the graph
 ``janus-seed`` wrote. That graph is exactly the one where the links the
 detectors read already exist, which is precisely the assumption a real project
 breaks, so a perfect score on it is a claim about the seeder as much as about
-the detectors (benchmarks/CLAUDE.md rule 8, and F6 in docs/plan/07).
+the detectors (docs/08-evaluation.md).
 
 This module removes the seeder. It measures against ``examples/real-project/``:
 postgres holding a public dataset, dbt building the feature and label tables,
@@ -27,12 +27,12 @@ Why it restores the model first
 -------------------------------
 The interesting half of a foreign graph is the state it arrives in: an mlModel
 with no features, no run inputs, and no link to a single column, where the only
-honest answer is that nothing could be checked (D-074). Janus's own ``link``
+honest answer is that nothing could be checked. Janus's own ``link``
 then destroys that state, so a second run of this benchmark would measure a
 different graph from the first. :func:`restore_ingested_state` puts the model
 back to what ingestion produced by clearing exactly the two aspects ``link``
 writes, which is also what re-ingesting the mlflow source does to it in real life
-(D-074 point 4). It plants nothing: every fact scored below is one an ingestion
+It plants nothing: every fact scored below is one an ingestion
 source wrote.
 """
 
@@ -144,7 +144,7 @@ class IngestedScore:
     unlinked_not_evaluated: tuple[str, ...]
     """What the scan said it could not check, in that state."""
     unlinked_training_tables: int
-    """Tables the degraded mode (T-07) could read about the unlinked model. Zero
+    """Tables the degraded mode could read about the unlinked model. Zero
     means even the table-level answer had nothing to stand on, which is the state
     DataHub's mlflow source leaves a model in: it records no run inputs, and it
     emits no lineage from the model to the table it trained on."""
@@ -213,7 +213,8 @@ def _table_columns(conn: DataHubConnection, dataset_urn: str) -> tuple[str, ...]
 def read_routes(conn: DataHubConnection) -> tuple[tuple[Route, ...], DeclaredLink | None]:
     """Read every adapter's declaration and check it against the ingested table.
 
-    This is T-05 and T-06 re-verified against a graph neither was developed on:
+    This is the Feast and dbt import re-verified against a graph neither was
+    developed on:
     the columns each declaration names have to be columns the ingested table
     actually has, and the two declarations have to agree with each other.
 

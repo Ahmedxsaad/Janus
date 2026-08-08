@@ -67,7 +67,7 @@ class OutputFormat(StrEnum):
 
 #: GitHub Actions sets this to a file every step may append markdown to, which is
 #: then rendered on the run's summary page. Read through :mod:`janus.env`
-#: like every other environment value (janus/CLAUDE.md, env.py boundary).
+#: like every other environment value (docs/02-architecture.md, env.py boundary).
 ENV_STEP_SUMMARY = "GITHUB_STEP_SUMMARY"
 
 #: How many findings the job summary lists before it stops and says how many are
@@ -102,7 +102,7 @@ def _finding_dict(write: FindingWrites) -> dict[str, Any]:
         # a ticket wants the remedy's kind and its targets, and the sentence is
         # the part it is least likely to want. `paths` is here because a consumer
         # that shows only the first remedy would otherwise be showing half a fix
-        # with nothing to warn it (T-03).
+        # with nothing to warn it.
         "counterfactual": {
             "paths": finding.counterfactual.paths,
             "remedies": [
@@ -153,7 +153,7 @@ def report_dict(report: ScanReport, verdict: GateVerdict | None = None) -> dict[
                 "previous_score": trust.previous_score,
                 # An array and not an object, because the order is information:
                 # worst deduction first, which is the waterfall a human reads in
-                # the terminal (F7). A consumer that wants a lookup can build one;
+                # the terminal. A consumer that wants a lookup can build one;
                 # one that gets an object cannot recover the ordering.
                 "deductions": [
                     {
@@ -245,7 +245,7 @@ def job_summary_markdown(report: ScanReport, verdict: GateVerdict | None = None)
         lines.append("")
 
     if report.trust:
-        # What is wrong before what it scored (F7). The band is a judgement about
+        # What is wrong before what it scored. The band is a judgement about
         # the model; the integer is a weighted sum whose units nobody defined, so
         # it goes last and the reasons that a reader can act on go first.
         lines.append("| Model | Band | What cost it | Score |")
@@ -303,7 +303,7 @@ def write_job_summary(markdown: str) -> Path | None:
 
 
 # --------------------------------------------------------------------------
-# The NIST AI RMF crosswalk (T-02)
+# The NIST AI RMF crosswalk
 # --------------------------------------------------------------------------
 
 #: The subcategories this crosswalk cites, quoted verbatim from the NIST AI RMF
@@ -381,7 +381,7 @@ class CrosswalkRow:
 
 #: Every detector, keyed by the finding type it raises. Keyed by the enum rather
 #: than listed, so adding a detector without a row here is a failing test and not
-#: a quiet gap in a compliance artifact (T-02).
+#: a quiet gap in a compliance artifact.
 CROSSWALK: dict[FindingType, CrosswalkRow] = {
     FindingType.UPSTREAM_FRESHNESS: CrosswalkRow(
         detector="Freshness and blast radius",

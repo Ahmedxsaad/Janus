@@ -17,7 +17,7 @@
  * It is inlined rather than fetched because the deployment is served with
  * `site/` as its root: `../argos/` is outside it, the fetch 404s, and the page
  * renders perfectly with no dog on it, which is how it shipped that way
- * (D-139). Inlining also means the page needs no server at all now, so opening
+ *. Inlining also means the page needs no server at all now, so opening
  * `index.html` from disk works.
  *
  * The bubble text is drawn on the canvas rather than laid out in HTML on
@@ -313,7 +313,14 @@
       // three pixels of tail hanging under it, clears his head. The smallest
       // size is a floor rather than a failure: more lines is always better than
       // a sentence cut off at the top of the canvas.
-      for (let scale = this.scale - 1; scale >= 1; scale -= 1) {
+      //
+      // The starting size is fixed at 3, not derived from this.scale (the
+      // sprite's own scale): on the narrow-screen corner box this.scale is 3
+      // (measure()'s width < 240 step), and this.scale - 1 capped every
+      // mobile bubble at 2, a 6px-wide letter, regardless of how much vertical
+      // room layout() actually had to work with. Desktop is unaffected: there
+      // this.scale is 4, so this.scale - 1 was already 3.
+      for (let scale = 3; scale >= 1; scale -= 1) {
         const columns = Math.max(18, Math.floor(room / scale) - 6);
         const lines = wrap(this.message, columns);
         const longest = lines.reduce((most, line) => Math.max(most, textWidth(line)), 0);
@@ -408,7 +415,7 @@
     // `#argos-dog`, not `#argos`: the section documenting Argos owns that id
     // for the contents to link to, and a duplicate id meant querySelector
     // handed back the section instead of the canvas, so the dog never drew
-    // at all, on any host (D-139).
+    // at all, on any host.
     const canvas = document.querySelector("#argos-dog");
     const stops = Array.from(document.querySelectorAll("[data-say]"));
     if (!canvas || !stops.length || !window.ArgosSprites?.ART) {

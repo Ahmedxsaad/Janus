@@ -1,6 +1,6 @@
 """The trust history against a live DataHub: a MULTIPLE structured property, read back.
 
-Why a unit test does not cover this (F8): ``janus.trust_history`` is a
+Why a unit test does not cover this: ``janus.trust_history`` is a
 structured property with MULTIPLE cardinality holding up to twenty pipe-delimited
 strings, and until this file ran, no such property had ever been written to a real
 GMS and read back. ``FakeGraph`` stores whatever it is handed; a server validates
@@ -97,7 +97,7 @@ def test_three_scans_leave_three_entries_a_live_gms_serves_back(
 def test_rerunning_one_scan_replaces_its_row_rather_than_appending(
     conn: DataHubConnection, seeded: SeedResult, config: ScanConfig
 ) -> None:
-    """Idempotency for a list-valued property: the run id is the key (D-081)."""
+    """Idempotency for a list-valued property: the run id is the key."""
     run_id = f"history-{uuid.uuid4().hex[:8]}"
     run_scan(conn, config, model_urn=seeded.model, run_id=run_id, llm=None)
     after_first = read_history(conn, seeded.model)
@@ -145,7 +145,7 @@ def test_a_score_that_moves_is_visible_as_a_trend_not_only_a_number(
     # operation is a timeseries aspect, served from the index rather than the
     # primary store, so the planted lag is awaited rather than assumed. Waiting
     # on the *lag*, never on a finding: waiting for the answer would manufacture
-    # it (benchmarks/CLAUDE.md rule 7, which applies just as well here).
+    # it (docs/08-evaluation.md, which applies just as well here).
     _eventually(
         lambda: (
             (signal := freshness_signal(conn, table_urn, config)) is not None

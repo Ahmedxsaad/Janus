@@ -1,6 +1,6 @@
 """Turning what a scan found into what the dog does.
 
-The rule this module exists to keep is docs/plan/08 section 3: no animation
+The rule this module exists to keep is docs/11-argos.md: no animation
 without a real event behind it. Every event built here is a pure function of a
 detector's own output, so the sprite depicts something that was measured and
 never something that was inferred to look busy.
@@ -8,7 +8,7 @@ never something that was inferred to look busy.
 The speech-bubble sentence comes from a finding's ``title``, which is a pure
 function of stable graph facts (models.py), not from a log line and not from the
 narrator: the log channel is forbidden to carry prose (janus/logs.py), and
-LLM output must never reach a key or a state (janus/CLAUDE.md rule 5). It
+LLM output must never reach a key or a state (docs/02-architecture.md). It
 is fine in a bubble, but the title is the honest, stable thing to show.
 """
 

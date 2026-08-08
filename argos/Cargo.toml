@@ -16,7 +16,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # macos-private-api is what makes a transparent window possible on macOS. It is
 # a private API, so the app can never ship on the Mac App Store; it ships
-# through pip and GitHub Releases, neither of which cares (docs/plan/08).
+# through pip and GitHub Releases, neither of which cares (docs/11-argos.md).
 tauri = { version = "2", features = ["macos-private-api"] }
 serde_json = "1"
 

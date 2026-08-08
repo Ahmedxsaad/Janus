@@ -1,4 +1,4 @@
-"""Render T-08's mutation-score section of RESULTS.md from mutmut's own output.
+"""Render the mutation-score section of RESULTS.md from mutmut's own output.
 
 Detection is the claim this project makes, so this only ever scopes
 `janus/detect/` (pyproject.toml's `[tool.mutmut]` `only_mutate`). Counts
@@ -9,7 +9,7 @@ per-mutant detail, so it cannot drive the survivor table below).
 What is hand-written is the verdict text in VERDICTS: mutation testing can say
 a mutant survived, never why that is acceptable or what test would kill it.
 A survivor with no entry here fails the render loudly rather than being
-silently dropped from the report (10-depth-implementation.md T-08: "a
+silently dropped from the report: "a
 survivor list of zero with no explanation is not publishable").
 """
 
@@ -79,7 +79,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "The traversal's own source argument (`failing_table_urn`) swapped for "
         "`None` survives: no fixture asserts which URN `_downstream_traversal` "
         "was actually called with, only that its canned return value flows "
-        "through (tests/CLAUDE.md rule 6, applied to a caller rather than a "
+        "through (CONTRIBUTING.md, applied to a caller rather than a "
         "graph write).",
     ),
     Verdict(
@@ -98,19 +98,19 @@ VERDICTS: tuple[Verdict, ...] = (
     Verdict(
         "janus.detect.column_marks.x_marked_ancestor",
         "gap",
-        "T-09 (D-115) killed two of the original six survivors here: the "
+        "A later phase killed two of the original six survivors here: the "
         "boundary trial this group already named (the `>` in `result.hops "
         "> config.leakage_max_hops` mutated to `>=`), and, once a second "
         "test ordered its hop-capped fixture result before the real hit "
         "instead of after, the `continue` in that same branch mutated to "
         "`break` -- a `break` there would have skipped the hit entirely, "
         "which is a stronger kill than the single-item-fixture blind spot "
-        "T-08 named this pattern for elsewhere. Four remain, all the same "
+        "named elsewhere in this table. Four remain, all the same "
         "class: `get_lineage`'s own `max_hops`/`count` keyword arguments "
         "swap for `None` or drop entirely and survive, because the fixture "
         "answers a column-level query with a canned result regardless of "
         "which arguments reached it. Live-GMS-only to close: the server "
-        "does its own hop-cap search past two hops per D-020, so only a "
+        "does its own hop-cap search past two hops, so only a "
         "real GMS call could tell a wrong argument from a right one here.",
     ),
     Verdict(
@@ -144,7 +144,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "Prose-content mutations (case, XX-wrapping) in the `reason`/`remedy` "
         "strings this Unevaluated carries are the majority of this group's "
         "survivors; exact wording is not a contract the offline suite pins, "
-        "by the same design principle tests/CLAUDE.md rule 4 states for "
+        "by the same design principle CONTRIBUTING.md states for "
         "generated text. The minority worth a trial: `target_urn=model_urn` "
         "swapped for `None`, unasserted.",
     ),
@@ -182,7 +182,7 @@ VERDICTS: tuple[Verdict, ...] = (
     Verdict(
         "janus.detect.coverage.x__cap_reason",
         "gap",
-        "T-09's own helper (D-115), landed after the run T-08's verdicts were "
+        "A later phase's own helper, landed after the run these verdicts were "
         "written against. Two patterns: prose content in the reason/remedy "
         "sentences it builds, the same class as the `_gap` functions above; "
         "and the feature counts themselves are unasserted (`sum(1 ...)` "
@@ -194,7 +194,7 @@ VERDICTS: tuple[Verdict, ...] = (
     Verdict(
         "janus.detect.column_marks.x_related_columns",
         "gap",
-        "T-11's own walk (D-117), landed after the run these verdicts were first "
+        "The proxy detector's own walk, landed after the run these verdicts were first "
         "written against. `get_lineage`'s `max_hops`/`count` arguments swap for "
         "`None` or drop and survive, the same argument-not-asserted case as "
         "x_marked_ancestor above and closeable the same way: only a live GMS "
@@ -204,7 +204,7 @@ VERDICTS: tuple[Verdict, ...] = (
     Verdict(
         "janus.detect.column_marks.x_derivation_chains",
         "equivalent",
-        "T-19's walk (D-130). One survivor, and it is provably equivalent: the "
+        "The derivation-chain walk. One survivor, and it is provably equivalent: the "
         'sort tiebreaker\'s fallback constant, `step.column_name or ""`, '
         "mutated to any other string. The fallback exists so `sorted` never "
         "compares None to str on a step GMS returned with no column name; which "
@@ -218,7 +218,7 @@ VERDICTS: tuple[Verdict, ...] = (
     Verdict(
         "janus.detect.governance.x_proxy_candidate_findings",
         "gap",
-        "T-11 (D-117). Two patterns, both already named elsewhere in this table: "
+        "The proxy detector. Two patterns, both already named elsewhere in this table: "
         "the `properties is None or not properties.mlFeatures` guard mutated to "
         "`and` survives because no trial reaches that line with `properties` "
         "None, and several arguments threaded into the walk swap for `None` "
@@ -231,14 +231,14 @@ VERDICTS: tuple[Verdict, ...] = (
     Verdict(
         "janus.detect.governance.x__proxy_finding",
         "gap",
-        "T-11 (D-117). The built `ProxyCandidate`'s identifying fields swap for "
+        "The proxy detector. The built `ProxyCandidate`'s identifying fields swap for "
         "`None` and survive, the single biggest class in this whole table: a "
         "trial checks that a candidate exists without checking what it says.",
     ),
     Verdict(
         "janus.detect.governance.x__first_per_pair",
         "gap",
-        "T-11 (D-117). `current is None or _distance(...) < _distance(...)` "
+        "The proxy detector. `current is None or _distance(...) < _distance(...)` "
         "mutated to `and` survives: with `current` None the `and` short-circuits "
         "before the comparison, so both forms keep the first finding for a pair "
         "seen once. Only a pair reached through three or more generations, where "
@@ -248,7 +248,7 @@ VERDICTS: tuple[Verdict, ...] = (
     Verdict(
         "janus.detect.coverage.x__proxy_gap",
         "gap",
-        "T-11 (D-117), and the largest single group here. Prose content in the "
+        "The proxy detector, and the largest single group here. Prose content in the "
         "reason and remedy sentences, the same class as the five `_gap` "
         "functions above and unpinned for the same reason: exact wording is not "
         "a contract the offline suite holds. The minority worth a trial is the "
@@ -426,7 +426,7 @@ VERDICTS: tuple[Verdict, ...] = (
         "` and the deprecated-input deduction's weight both swap for `None` "
         "and survive: the trials assert which deductions exist, not the "
         "point value each one carries. A weight silently zeroed would ship "
-        "unnoticed; this is the T-01 waterfall's own scoring arithmetic.",
+        "unnoticed; this is the trust waterfall's own scoring arithmetic.",
     ),
 )
 
@@ -478,13 +478,13 @@ def _verify_coverage(
     if unexplained:
         raise SystemExit(
             "mutation_report: the following survivors have no verdict in "
-            "VERDICTS and cannot be published (T-08):\n  " + "\n  ".join(sorted(unexplained))
+            "VERDICTS and cannot be published:\n  " + "\n  ".join(sorted(unexplained))
         )
     return by_verdict
 
 
 def render_mutation_section(results_text: str, *, verdicts: tuple[Verdict, ...] = VERDICTS) -> str:
-    """Pure: every count comes from `results_text` (benchmarks/CLAUDE.md rule 4)."""
+    """Pure: every count comes from `results_text` (docs/08-evaluation.md)."""
     counts, survivors = _parse(results_text)
     by_verdict = _verify_coverage(survivors, verdicts=verdicts)
 
@@ -496,7 +496,7 @@ def render_mutation_section(results_text: str, *, verdicts: tuple[Verdict, ...] 
 
     lines = [
         START_MARKER,
-        "## Mutation score (T-08)",
+        "## Mutation score",
         "",
         "Generated by `python -m benchmarks.mutation_report` from `mutmut "
         "results --all=true`, after `mutmut run` (pyproject.toml's "
@@ -540,8 +540,7 @@ def render_mutation_section(results_text: str, *, verdicts: tuple[Verdict, ...] 
     equiv_total = sum(len(by_verdict[v.prefix]) for v in verdicts if v.kind == "equivalent")
     lines += [
         "",
-        f"Of {survived} survivors: {gap_total} are real gaps (T-09 is where "
-        f"the trials that close them get written), {equiv_total} are "
+        f"Of {survived} survivors: {gap_total} are real gaps, {equiv_total} are "
         "provably equivalent mutations, not gaps.",
         "",
         END_MARKER,
@@ -563,7 +562,7 @@ def _splice(results_md: Path, section: str) -> str:
     # (no markers yet) left three newlines where replacing leaves two, and
     # replacing left a growing run of blank lines at the end of the file. The
     # job then reported RESULTS.md stale forever over whitespace, which is the
-    # permanently red advisory job ci.yml warns about (D-124).
+    # permanently red advisory job ci.yml warns about.
     head = before.rstrip("\n") + "\n\n" if before.strip() else ""
     tail = "\n" + after.lstrip("\n") if after.strip() else ""
     return head + section + tail

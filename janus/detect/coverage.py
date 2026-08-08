@@ -49,7 +49,7 @@ from janus.writeback.properties import FEATURE_TABLE, read_properties
 #: The checks, named as a user knows them. Constants rather than literals at each
 #: construction site because :mod:`janus.detect.guard_coverage` aggregates
 #: gaps *by* these names: a typo in one gap function would silently open a sixth
-#: category in a catalog figure that is supposed to have five (T-15).
+#: category in a catalog figure that is supposed to have five.
 CHECK_FRESHNESS = "freshness"
 CHECK_LEAKAGE = "target leakage"
 CHECK_SCHEMA_DRIFT = "schema drift"
@@ -60,8 +60,7 @@ CHECK_DEPRECATED_INPUT = "deprecated input"
 #: Every check :func:`coverage_gaps` can report against a *model*, in the order a
 #: report lists them. Freshness is not here: it is asked of a table, and a
 #: catalog-level model figure that quietly counted a table check would be
-#: comparing two different denominators (T-15, and 09 section 3.2 corrected in
-#: place per docs/CLAUDE.md rule 1).
+#: comparing two different denominators.
 #:
 #: A test asserts this tuple equals what a model with nothing set up actually
 #: produces, so a seventh detector cannot be added without appearing here.
@@ -99,7 +98,7 @@ class Unevaluated:
 #: Separate from "never linked", because the two look identical on the model
 #: (mlFeatures is empty either way) and have nothing else in common: one is a
 #: model nobody has set up, the other is a model that *was* set up and whose
-#: checks stopped silently the night an ingest ran (D-074, F11). Only the second
+#: checks stopped silently the night an ingest ran. Only the second
 #: one is fixed by replaying a command the graph already holds the arguments for.
 _DELINKED = (
     "this model carries a recorded janus link but declares no features, "
@@ -212,7 +211,7 @@ def _leakage_gap(
     # which is why this function is being asked at all (module docstring): a
     # finding is proof the check ran. What it cannot tell on its own is whether
     # that "no leak" was a real answer or a cap cutting a walk short before it
-    # reached a label (F1, docs/plan/07). Re-walking here is bounded by this
+    # reached a label (docs/08-evaluation.md). Re-walking here is bounded by this
     # one model's own feature count, not the catalog, and only happens on the
     # already-uncommon path where a scan found nothing to report. Walked once
     # per column, not twice, so the two caps below share the same read.
@@ -230,7 +229,7 @@ def _cap_reason(
 ) -> tuple[str, str] | None:
     """(reason, remedy) if a re-walk of a clean model's features saw either cap bind.
 
-    The two caps have different remedies (T-09, F1): ``truncated`` means the
+    The two caps have different remedies: ``truncated`` means the
     walk may not have *seen* everything past ``JANUS_LINEAGE_RESULT_CAP``
     results, ``hop_capped`` means it *saw* an ancestor and declined it for
     lying beyond ``JANUS_LEAKAGE_MAX_HOPS`` hops. A model that hit both
@@ -373,8 +372,8 @@ def _sensitive_gap(
     # Same reasoning as _leakage_gap above: sensitive_source_findings() already
     # walked every one of these, over the union of both classification groups
     # (classification_index), and "no exposure found" cannot be told apart from
-    # "the exposed ancestor was past a cap" without re-checking WalkResult (F1,
-    # docs/plan/07). Walked once per column, shared by both caps below.
+    # "the exposed ancestor was past a cap" without re-checking WalkResult
+    # (docs/08-evaluation.md). Walked once per column, shared by both caps below.
     index = classification_index(conn, config)
     walks = [marked_ancestor(conn, column, index, config) for column in source_columns]
     cap = _cap_reason(walks, config, len(source_columns), noun="an exposure")
@@ -394,7 +393,7 @@ def _proxy_gap(
 
     Unset is the common case and it is reported, never passed over: a model
     nobody checked for proxying reads exactly like one that was checked and
-    found clean, and of the two only the second is worth anything (T-11, and
+    found clean, and of the two only the second is worth anything (and
     the same posture the sensitive-source gap takes).
     """
 

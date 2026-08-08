@@ -4,12 +4,12 @@ Everything else in this repository is measured against a graph
 `janus-seed` built. A seeded graph is exactly the one where the links the
 detectors read already exist, which is precisely the assumption a real project
 breaks. So this is the same product run against an ordinary stack that knows
-nothing about it, and a record of what that found (D-074, 2026-08-01).
+nothing about it, and a record of what that found (2026-08-01).
 
 It is also a benchmark target now, not only a validation exercise: Janus-Bench
 scores the detectors against the graph **this** stack's ingestion produced, in its
-own section of `benchmarks/RESULTS.md`, never merged with the seeded numbers
-(D-121, T-14). Stand the stack up as below and `python -m benchmarks.run_bench`
+own section of `benchmarks/RESULTS.md`, never merged with the seeded numbers.
+Stand the stack up as below and `python -m benchmarks.run_bench`
 fills that section in; leave it down and the section says it was not run.
 
 Nothing here is a fixture. It is a public dataset, four dbt models, one
@@ -61,17 +61,17 @@ Verified live on the demo VM, 2026-08-01, against DataHub GMS 1.5.0.6 with
    `contract_renewed_flag <- churn`. `janus gate` exits 1 on it.
 3. **Fixing it closes the incident.** Delete the column, rebuild with dbt,
    re-ingest, re-link, rescan: the finding is gone and the incident resolves
-   itself. Closing that loop needed a fix (D-069's known gap: a leak fixed by
+   itself. Closing that loop needed a fix (a known gap: a leak fixed by
    deleting the column left the incident open forever, because reconciliation
    walked only the model's current features and a deleted column is in none).
 4. **Re-ingestion un-links every model.** DataHub's mlflow source upserts the
    whole `mlModelProperties` aspect, dropping the features `link` wrote. Filed
-   as [feedback #14](../../docs/most-valuable-feedback.md). Janus records
+   as [feedback #14](../../docs/16-most-valuable-feedback.md). Janus records
    what `link` was told as structured properties, an aspect ingestion does not
    touch, so replaying it is `janus link --all`: no arguments, every linked
    model, safe on a schedule.
 
-## What the second run found (2026-08-04, D-121, T-14)
+## What the second run found (2026-08-04)
 
 Promoting this from a validation exercise to a benchmark target meant adding the
 two declarations and running the whole stack again. Three things fell out of
@@ -86,13 +86,13 @@ that, each measured rather than reasoned about:
    which is the one thing the leak detector reads. The scan went quiet on a
    graph that still held the leak. The semantic model here is named `customers`
    for that reason, and the collision is filed as
-   [feedback #15](../../docs/most-valuable-feedback.md).
+   [feedback #15](../../docs/16-most-valuable-feedback.md).
 6. **A declared relation names two datasets.** The dbt source emits a
    dbt-platform dataset beside the warehouse one, both named after the same
    relation, so `--features analytics.customer_features` matches two. `link`
    refuses and prints both, which is right; pass the warehouse URN, which is the
    table the training script queried.
-7. **The table-level degraded mode has nothing to stand on here.** T-07 falls
+7. **The table-level degraded mode has nothing to stand on here.** It falls
    back to the tables a model trains on, and this model has none: the mlflow
    source records no inputs on the training run and emits no lineage from the
    model to a dataset. So on an ingested graph the honest report is the one in
@@ -138,6 +138,9 @@ Or import the join instead of typing it, from either declaration this project
 already carries (`--from` proposes and writes nothing until you confirm):
 
 ```bash
+pip install "feast[postgres]"      # this repo's offline store is postgres;
+                                    # the janus-datahub[feast] extra alone
+                                    # parses a repo, not any particular backend
 janus link --model telco_churn_1 --from feast --repo feature_repo
 janus link --model telco_churn_1 --from dbt --repo churn_analytics \
   --label-table "$LABELS" --label-column churned

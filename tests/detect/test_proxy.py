@@ -1,4 +1,4 @@
-"""T-11: proxy-attribute candidates. Offline: no DataHub, no network.
+"""Proxy-attribute candidates. Offline: no DataHub, no network.
 
 The shape under test is a fork rather than a chain, and the tests are mostly
 about the three ways it can be mistaken for something else:
@@ -161,7 +161,7 @@ class TestTheFork:
         assert "income" in evidence["shared_path"]
 
     def test_the_finding_says_in_its_own_evidence_that_it_is_not_a_determination(self):
-        """09 section 5.1: this is the whole feature, built in from the start."""
+        """This is the whole feature, built in from the start."""
         findings = _findings(_graph(), _client())
 
         assert "human review" in findings[0].evidence["finding_is"]
@@ -356,7 +356,7 @@ class TestOnePerPair:
 
 class TestReadOnly:
     def test_the_detector_writes_nothing(self):
-        """detect/CLAUDE.md rule 1: detectors are pure functions of the graph."""
+        """docs/04-detectors.md: detectors are pure functions of the graph."""
         graph = _graph()
 
         _findings(graph, _client())

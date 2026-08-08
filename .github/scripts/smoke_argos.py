@@ -3,7 +3,7 @@
 The transport is the part of this that a compile cannot prove and that differs
 most between platforms: a Windows release build has no console, so the whole
 thing rests on the parent's inherited pipe handles reaching a GUI-subsystem
-process (docs/plan/08-watchdog-mascot.md section 6).
+process (docs/11-argos.md).
 
 This is not a rendering test. CI has no display, so the window may well fail to
 open; what must hold is that the process accepts an event without dying on it.

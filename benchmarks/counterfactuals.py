@@ -6,7 +6,7 @@ exactly how a tool ends up shipping remedies nobody ever performed. So this
 module performs them. It plants a failure, reads the counterfactual the shipped
 detector attached to the finding, applies one of its remedies against the live
 graph, and asks the same detector again. A remedy that does not clear its own
-finding is a bug (T-03).
+finding is a bug.
 
 What is applied, and what is not
 --------------------------------
@@ -17,7 +17,7 @@ migrating onto a successor table, dropping a feature from a model somebody else
 owns. Those are reported by name as *not mechanically applicable* rather than
 counted as passes, because a remedy that was never applied has not been verified
 and a table that implied otherwise would be the same fabrication this file
-exists to prevent (benchmarks/CLAUDE.md rules 4 and 8).
+exists to prevent (docs/08-evaluation.md).
 
 The multi-path case is the one worth running
 --------------------------------------------
@@ -78,7 +78,7 @@ APPLIERS: dict[tuple[FindingType, RemedyKind], Callable[[DataHubConnection], obj
     (FindingType.TABLE_LEVEL_RISK, RemedyKind.DECLARE_LINK): scenarios.revert_delinked_model,
     # The proxy candidate's *first* remedy is REVIEW, and it deliberately has no
     # applier: it asks a human to decide, and a benchmark that could perform that
-    # decision would be making it (T-11). What is mechanically checkable is the
+    # decision would be making it. What is mechanically checkable is the
     # second remedy, cutting the shared ancestry, and this applier performs
     # exactly that: the classified column and its tag stay, only the derivation
     # the two shared is removed. A finding that clears afterwards clears because

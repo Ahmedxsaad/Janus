@@ -34,19 +34,19 @@ def test_the_shipped_declarations_parse_and_cover_the_planned_properties():
         RISK_FLAGS,
         RUN_ID,
         # The columns a model currently leaks through, so a scan after the leak
-        # was deleted outright can still close its incident (D-069, D-074).
+        # was deleted outright can still close its incident.
         "janus.open_leak_columns",
         # One capped entry per scan that scored the model, so the score has a
-        # direction: 82 means nothing without the 95 it was last week (D-081).
+        # direction: 82 means nothing without the 95 it was last week.
         "janus.trust_history",
         # The scoring function behind the stored score, so a step in the trend
-        # across a release reads as a discontinuity and not a regression (F7).
+        # across a release reads as a discontinuity and not a regression.
         "janus.scoring_version",
         # The only one that is not about a guarded asset: how much of the whole
-        # catalog Janus can check, carried on the agent's own flow (T-15).
+        # catalog Janus can check, carried on the agent's own flow.
         "janus.coverage_history",
         # What `janus link` was told, kept so it can be replayed after an
-        # ingestion run overwrites the model's own aspect (D-074).
+        # ingestion run overwrites the model's own aspect.
         "janus.feature_table",
         "janus.label_column",
         "janus.excluded_columns",

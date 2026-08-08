@@ -55,7 +55,7 @@ def _gaps(
 
     A default, empty ``FakeClient`` rather than ``make_connection``'s own
     ``None``: the leakage and sensitive-source gap checks re-walk lineage to
-    tell a real "no leak" from a truncated one (F1, docs/plan/07), so they
+    tell a real "no leak" from a truncated one (docs/08-evaluation.md), so they
     need a working ``conn.client.lineage`` even on the already-clean path.
     """
     gaps = coverage_gaps(
@@ -204,7 +204,7 @@ def test_a_truncated_leakage_walk_is_reported_as_a_gap_not_clean():
     leakage_findings() already ran and found nothing, which is why this gap
     check is even asked, but "nothing found" and "nothing found because the
     cap cut the walk short" read identically to a caller unless this checks
-    WalkResult.truncated itself (F1, docs/plan/07).
+    WalkResult.truncated itself (docs/08-evaluation.md).
     """
     graph = FakeGraph(
         aspects={
@@ -277,7 +277,7 @@ def _leaking_model_graph() -> FakeGraph:
 def test_a_hop_capped_leakage_walk_is_reported_with_the_hop_cap_remedy_not_the_result_cap_one():
     """A reader who raises the wrong cap gets no closer to seeing the leak.
 
-    The two caps' remedies must not blur (T-09, F1).
+    The two caps' remedies must not blur.
     """
     client = FakeClient(
         lineage_by_column={
@@ -342,7 +342,7 @@ def test_a_walk_hitting_both_caps_names_both_remedies():
 
 
 def test_model_checks_names_exactly_what_a_bare_model_reports_as_unevaluated():
-    """MODEL_CHECKS is the catalog figure's row set, so it may not drift (T-15).
+    """MODEL_CHECKS is the catalog figure's row set, so it may not drift.
 
     A model with nothing set up produces one gap per model-level check, which
     makes this the one place a seventh detector's check name shows up without

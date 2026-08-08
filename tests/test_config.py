@@ -51,14 +51,14 @@ def test_a_non_positive_or_fractional_hop_cap_is_refused(monkeypatch, value: str
 
 
 # --------------------------------------------------------------------------
-# The scoring contract, and the bump that has to accompany a change to it (F7)
+# The scoring contract, and the bump that has to accompany a change to it
 # --------------------------------------------------------------------------
 
 #: The scoring contract as it stands at SCORING_VERSION, fingerprinted.
 #:
-#: This is the mechanical half of F7 step 1. A trust score is comparable only to
+#: The mechanical half of versioning the score. A trust score is comparable only to
 #: another score computed the same way, and this project already changed the
-#: function under models it had scored without recording it (D-079). Changing a
+#: function under models it had scored without recording it. Changing a
 #: weight, a band boundary, or the set of contributing findings makes this test
 #: fail; the fix is to bump SCORING_VERSION and paste the new digest here, which
 #: is exactly the moment the change becomes deliberate.

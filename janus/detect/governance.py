@@ -137,7 +137,7 @@ def proxy_candidate_findings(
     Both descend from one column, and neither descends from the other. That is
     how a proxy variable arises without anyone choosing it: postcode and race
     are not derived from each other, they are both derived from the person
-    (Barocas and Selbst 2016, docs/plan/resources.md).
+    (Barocas and Selbst 2016, docs/15-references.md).
 
     Direct descent through either classification (see :func:`classification_index`)
     is deliberately excluded and left to :func:`sensitive_source_findings`, which
@@ -184,7 +184,7 @@ def proxy_candidate_findings(
     # Downstream walks are shared across features: two features of one model
     # very often derive from the same handful of raw columns, and re-walking a
     # shared ancestor once per feature would turn a fork into an N+1
-    # (detect/CLAUDE.md rule 3).
+    # (docs/04-detectors.md).
     descendants: dict[str, dict[str, int]] = {}
 
     findings: list[ProxyCandidateFinding] = []

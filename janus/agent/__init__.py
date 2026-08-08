@@ -8,7 +8,9 @@ janus.detect. The reason_and_score node is the only place the LLM runs,
 and it only explains, ranks, and drafts text. A LangGraph interrupt() pauses
 before any mutation; --auto-approve exists solely for the recorded demo.
 
-Planned modules (see docs/plan/02-implementation-plan.md section 7):
-    graph  the LangGraph StateGraph definition
-    tools  DataHub Agent Context Kit toolset plus custom write tools
+The modules (docs/02-architecture.md):
+    pipeline     run_scan, the detect-reason-write core every trigger shares
+    graph        the LangGraph StateGraph behind ``scan --review``
+    narrate      the only place the LLM runs, and it writes prose only
+    context_kit  the DataHub Agent Context Kit reads, where it is installable
 """

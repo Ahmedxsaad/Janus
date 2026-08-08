@@ -80,7 +80,7 @@ properties:
   # The only property that does not describe somebody else's asset. It describes
   # this agent's reach across the whole catalog, so it hangs on Janus's own
   # dataFlow, the entity every scan run already belongs to. A dataFlow carrying a
-  # structured property is verified against a live GMS, not assumed (T-15).
+  # structured property is verified against a live GMS, not assumed.
   - qualified_name: janus.coverage_history
     display_name: Janus Guard Coverage History
     description: >-
@@ -98,7 +98,7 @@ properties:
   # structuredProperties rather than in mlModelProperties precisely because they
   # have to survive the next ingestion run: DataHub's mlflow source upserts the
   # whole mlModelProperties aspect, which drops the mlFeatures link writes
-  # (observed live, D-074). Structured properties are a separate aspect that
+  # (observed live). Structured properties are a separate aspect that
   # ingestion does not touch, so the declaration outlives it and can be replayed.
   - qualified_name: janus.feature_table
     display_name: Janus Feature Table

@@ -1,7 +1,7 @@
 """The single factory for DataHub connections.
 
 Every other module in the package receives a :class:`DataHubConnection`; nothing
-else reads connection environment variables (see janus/CLAUDE.md).
+else reads connection environment variables (see docs/02-architecture.md).
 
 Two handles are needed because the SDK splits the surface:
 
@@ -42,7 +42,7 @@ from janus.env import optional_value
 # the URN and the site-packages path of the calling line. For an ingestion source
 # that is a real signal: it means two sources are fighting over one entity. For
 # Janus it is the designed behaviour. Every write is idempotent read-before-write
-# (root CLAUDE.md rule 5) and re-running a scan is a documented, supported path,
+# (CONTRIBUTING.md) and re-running a scan is a documented, supported path,
 # so the second run warns on every entity it correctly left alone. Suppressed
 # here, in the one module every writing code path imports to get a connection,
 # rather than at each of the nine upsert call sites.
