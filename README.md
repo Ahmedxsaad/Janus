@@ -24,6 +24,7 @@ subject to the same lineage it guards.
 <p align="center">
   <b><a href="https://docs.ahmedxsaad.me/">Documentation</a></b> &nbsp;·&nbsp;
   <b><a href="https://janus.ahmedxsaad.me">Live demo</a></b> &nbsp;·&nbsp;
+  <b><a href="https://www.youtube.com/watch?v=1biXxbzZLfk">Demo video</a></b> &nbsp;·&nbsp;
   <b><a href="docs/">Engineering docs</a></b> &nbsp;·&nbsp;
   <b><a href="benchmarks/RESULTS.md">Measured results</a></b>
 </p>
